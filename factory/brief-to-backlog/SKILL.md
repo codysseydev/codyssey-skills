@@ -99,10 +99,38 @@ Write the file given to `--dry-run`. The caller may have put its own header (tit
 2. For each repo, create the label if missing: `gh label create factory --repo <repo> --description "Picked up by the software factory" --color 0E8A16`. Create `needs-decision` the same way when any issue needs it.
 3. Create issues in dependency order so `Depends on:` holds real numbers. For each: `gh issue create --repo <repo> --title ... --body-file <tmp> --label factory`. Replace draft IDs with the numbers `gh` returned before creating dependents. Paired issues in one feature get each other's number after both exist (`gh issue edit`).
 4. Write the issue numbers back into the brief next to each feature ID: `F1.2 (api #14, web #15)`.
-5. Report the table: draft ID, issue URL, repo, depends on.
+5. Write the brain's `Phases/Backlog.md`. The brain is the vault that holds the brief, normally `Product/Brief.md`, so the note is at `<brain root>/Phases/Backlog.md`. If the brief is not inside a brain (no `Phases/` folder next to its `Product/` folder), skip this step and say so in the Return. Rewrite the whole note on each run:
+
+   ```markdown
+   # Backlog
+   #type/reference #status/active
+
+   The backlog is the GitHub issues labeled `factory`. This note points to them and does not copy their status.
+
+   ## Issue lists
+
+   - [<owner/name> factory issues](https://github.com/<owner/name>/issues?q=is%3Aissue+label%3Afactory)
+
+   ## Issues by feature (updated YYYY-MM-DD)
+
+   | Feature | Issue | Repo |
+   |---|---|---|
+   | F1.2 | [#14](https://github.com/<owner/name>/issues/14) | api |
+   ```
+
+   - One line under "Issue lists" per target repo.
+   - One table row per issue, ordered as created. The Repo column holds the bare repo name.
+   - No status column: the issues own status.
+   - Plain markdown links, not wikilinks.
+   - The date goes in the heading, per the brain's index-notes rule.
+   - If the brain has `.claude/skills/vault-structure/scripts/check-structure.py`, run it after writing. Fix only errors in this note and report the result in the Return.
+   - If the brain has its own `factory-log` skill, follow it: a Build Log row in the brain, then commit and push the brain.
+6. Report the table: draft ID, issue URL, repo, depends on.
+
+The dry run never writes `Phases/Backlog.md`.
 
 If a `gh` call fails midway, stop, report which issues exist, and do not retry blindly: duplicates are worse than a gap.
 
 ## Return
 
-The file or issue list, the coverage table, issues labeled `needs-decision` and why, and anything the checks flagged.
+The file or issue list, the coverage table, issues labeled `needs-decision` and why, anything the checks flagged, and in real mode whether `Phases/Backlog.md` was written (or skipped because the brief is not in a brain) with the structure checker's result.
