@@ -112,7 +112,8 @@ export function makeGh(run = defaultRun) {
     authorAssociation: i.author_association,
   });
   const list = (repo, labels, state) =>
-    JSON.parse(run(['api', `repos/${repo}/issues?labels=${labels}&state=${state}&per_page=100`]) || '[]')
+    JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/issues?labels=${labels}&state=${state}&per_page=100`]) || '[]')
+      .flat()
       .filter((i) => !i.pull_request)
       .map(normalize);
   return {

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, cmdRelease, parseArgs, UsageError, lockName,
+  SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
 } from './pick-up.mjs';
 
 const R = 'o/r';
@@ -232,4 +232,21 @@ test('parseArgs rejects bad usage', () => {
   assert.throws(() => parseArgs(['claim', '--repo', 'bad', '--run-id', 'x']), UsageError);
   assert.throws(() => parseArgs(['release', '--repo', 'o/r', '--run-id', 'x']), UsageError);
   assert.equal(parseArgs(['claim', '--repo', 'o/r', '--run-id', 'x', '--only', 'o/r#4', '--dry-run']).only.issue, 4);
+});
+
+test('makeGh flattens paginated REST pages and drops pull requests', () => {
+  const rest = (n, extra = {}) => ({
+    number: n, title: `t${n}`, state: 'open', labels: [{ name: 'factory' }], body: '',
+    user: { login: 'owner' }, author_association: 'OWNER', ...extra,
+  });
+  const seen = [];
+  const gh = makeGh((args) => {
+    seen.push(args);
+    return JSON.stringify([[rest(1), rest(2)], [rest(3), rest(4, { pull_request: {} })]]);
+  });
+  const out = gh.listOpen(R);
+  assert.deepEqual(out.map((i) => i.number), [1, 2, 3]);
+  assert.equal(out[0].state, 'OPEN');
+  assert.equal(out[0].authorAssociation, 'OWNER');
+  assert.ok(seen[0].includes('--paginate') && seen[0].includes('--slurp'));
 });
