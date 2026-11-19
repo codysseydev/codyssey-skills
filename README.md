@@ -1,14 +1,16 @@
 # Codyssey skills
 
-Reusable Claude Code skills for building Laravel applications that last. None of them
-is tied to one project: copy a folder into your own Laravel app and use it.
+Reusable Claude Code skills. Most are for building Laravel applications that last; the
+`planning/` skills work on any project. None of them is tied to one project: copy a
+folder into your own project and use it.
 
-Two folders, two different jobs:
+Three folders, three different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
 | `kanon/` | A fixed Laravel doctrine (`laravel-kanon`) and the audit that checks code against it (`laravel-kanon-audit`) | Any Laravel project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
+| `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
 
 ## kanon/
 
@@ -36,6 +38,15 @@ folders must sit next to each other.
   ending with a comparison of the error tracker against a baseline taken at the start.
   Fill in `references/environment.md` with your URLs and test accounts before the first
   run. Credentials stay out of the files.
+
+## planning/
+
+- `review-plan-against-repos`: checks every factual claim in a plan or proposal note
+  against the repositories, docs and services it names, reports each finding with a quote
+  and `file:line`, and asks which findings to fix before it edits the note.
+- `adopt-ideas-from-repo`: reads a reference repository through `gh api` without cloning
+  it, checks its license (no license means ideas only, never code), maps its mechanisms
+  onto the decisions your plan already made, and asks which ideas to adopt.
 
 ## Install
 
