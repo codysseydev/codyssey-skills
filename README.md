@@ -10,7 +10,7 @@ Three folders, three different jobs:
 |---|---|---|
 | `kanon/` | A fixed Laravel doctrine (`laravel-kanon`) and the audit that checks code against it (`laravel-kanon-audit`) | Any Laravel project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
-| `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, and a GitHub backlog from the approved brief | Any product, any stack |
+| `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, and Event Model whiteboards from journey files | Any product, any stack |
 
 ## kanon/
 
@@ -49,8 +49,13 @@ folders must sit next to each other.
 - `brief-to-backlog`: turns an approved brief into GitHub issues labeled `factory`, one
   per feature per repo, with acceptance criteria and a parseable `Depends on:` line. It
   has a dry run that writes the drafts to a file and makes no GitHub calls.
+- `event-model`: draws a product's journeys as Event Model frames and Event Storming walls
+  on claude.ai Whiteboard artifacts, generated from journey files kept in the product's
+  brain vault. Per product it draws every journey; per feature it extends the journey file
+  and syncs the feature's two boards before the plan stop. It ships Python scripts
+  (`check`, `plan`, `commit`) and a sample product to copy.
 
-Install both together. The second reads what the first writes.
+Install `brief-writer` and `brief-to-backlog` together. The second reads what the first writes.
 
 ## Install
 
