@@ -64,6 +64,10 @@ class BootstrapTest(unittest.TestCase):
         product = open(os.path.join(self.root, "acme-app-docs", "Architecture", "event-model-generator", "product.py")).read()
         self.assertIn("'name': 'Acme App'", product)
         self.assertNotIn("Bike", product)
+        j01 = open(os.path.join(self.root, "acme-app-docs", "Architecture", "event-model-generator", "j01.py")).read()
+        self.assertIn("lanes=[], slices=[]", j01)
+        self.assertIn("Acme App", j01)
+        self.assertNotIn("bike", j01.lower())
         log = subprocess.run(["git", "log", "--oneline"], cwd=os.path.join(self.root, "acme-app-docs"),
                              capture_output=True, text=True).stdout
         self.assertIn("event model journey setup", log)

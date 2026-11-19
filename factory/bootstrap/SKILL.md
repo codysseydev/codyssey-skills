@@ -32,11 +32,11 @@ The script refuses if `<root>/<slug>-docs` or `<root>/<slug>` exists and is not 
 ## What it does
 
 1. Brain: runs the brain template's `scripts/new-brain.py` into `<root>/<slug>-docs`. The brain has its own `CLAUDE.md`, structure checker and skills.
-2. Event model setup: copies `examples/sample-product/` from the `event-model` skill into `Architecture/event-model-generator/` in the brain, sets the product name in `product.py`, adds `.wb/` to the brain's `.gitignore`, runs `wb.py --product <dir> check` (must pass), reruns the brain's own checker, and commits in the brain.
+2. Event model setup: copies `product.py` and `wb_state.json` from the `event-model` skill's `examples/sample-product/` into `Architecture/event-model-generator/` in the brain and sets the product name. It writes an empty `j01.py` named after the product (`lanes=[]`, `slices=[]`, no hot spots). It adds `.wb/` to the brain's `.gitignore`, runs `wb.py --product <dir> check` and `plan` (both must pass; `plan` skips boards that have no URL yet), reruns the brain's own checker, and commits in the brain.
 3. Code repo: runs the pack's `scripts/new-repo.py --name --slug --pitch --target [--modules] [--date]` into `<root>/<slug>`. Packs are pluggable: a Symfony pack is planned with the same `new-repo.py` contract.
 4. Recipe: runs `factory-onboard`'s `prove-recipe.py` on the new repo, from a clean clone. The Laravel pack writes `.factory/recipe.yml`, and this step proves it.
 
-The sample journey `j01.py` is the bike shop example from the `event-model` skill. It only proves the setup works. Replace it with the product's own journeys during domain design.
+The journey is empty on purpose. Domain design adds the product's lanes, slices and further journeys, and the first feature fills `j01.py` at its plan stage. Its boards are placeholders until then.
 
 ## Dry run
 

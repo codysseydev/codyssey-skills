@@ -62,8 +62,14 @@ def setup_event_model(brain, name):
     wb = sibling_or_installed("event-model", os.path.join("scripts", "wb.py"))
     dest = os.path.join(brain, JOURNEY_DIR)
     os.makedirs(dest, exist_ok=True)
-    for f in ("product.py", "j01.py", "wb_state.json"):
+    for f in ("product.py", "wb_state.json"):
         shutil.copy2(os.path.join(em_sample, f), os.path.join(dest, f))
+    title = f"01 \u00b7 {name}"
+    story = f"Story: to be written in domain design. The first feature in {name} adds the slices."
+    with open(os.path.join(dest, "j01.py"), "w", encoding="utf-8") as f:
+        f.write('"""Journey 01 of ' + name.replace('"', "'") + '. Empty on purpose: the first feature adds lanes and slices."""\n'
+                f"J01 = dict(\n    key='01', title={title!r},\n    story={story!r},\n"
+                "    lanes=[], slices=[], hotspots=[],\n)\n")
     path = os.path.join(dest, "product.py")
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -82,6 +88,7 @@ def setup_event_model(brain, name):
         with open(gi, "a", encoding="utf-8") as f:
             f.write(("" if existing.endswith("\n") or not existing else "\n") + ".wb/\n")
     run([sys.executable, wb, "--product", dest, "check"], what="event-model check")
+    run([sys.executable, wb, "--product", dest, "plan"], what="event-model plan")  # writes .wb/ (gitignored); boards without a URL are skipped
 
 
 def prove(repo, out):
