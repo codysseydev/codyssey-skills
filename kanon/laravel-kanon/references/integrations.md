@@ -1,7 +1,7 @@
 # Third-Party Integrations
 
 Applies to: payment providers, outbound HTTP, vendor SDKs, external APIs of any
-kind.
+kind, decoded external payloads, classes that consume config values.
 
 ## Anti-corruption layer
 
@@ -15,6 +15,14 @@ kind.
 - The gateway **SHOULD** be fronted by an interface when more than one module
   consumes it or when tests need a fake; the consumer defines that interface (see
   `isolation.md`).
+
+## Inbound data
+
+- Decoded external payloads (webhooks, queue messages, API responses) **MUST** be
+  turned into a typed DTO once, at the edge, before any other code reads them. See
+  the typed request/response rule in Connectors, the rule that an orchestrator
+  **MAY** parse inbound payloads in `orchestration-di.md`, and the webhook rules in
+  `http-api.md`.
 
 ## Connectors
 
@@ -43,6 +51,10 @@ kind.
   NOT** be called outside config files.
 - A config default **SHOULD** point at the real production host, not a stale or
   placeholder URL.
+- Classes that need config values **SHOULD** receive them as typed constructor
+  parameters bound in a service provider; injecting the config Repository stays
+  allowed (see `orchestration-di.md`). Why: missing config then fails when the
+  class is first resolved, not deep inside a request.
 
 ## Runtime behavior
 

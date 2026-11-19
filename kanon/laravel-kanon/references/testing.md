@@ -5,9 +5,14 @@ them).
 
 ## Framework and shape
 
-- Tests **MUST** use PHPUnit with the `#[Test]` attribute, extending the project's
-  `Tests\TestCase`. Pest **MUST NOT** be used; a Pest-style `it(...)`/`test(...)`
-  closure is a violation, not a preference.
+- Tests **MUST** use PHPUnit with the `#[Test]` attribute. Every test that boots
+  the application **MUST** extend the project's `Tests\TestCase`. Pest **MUST NOT**
+  be used; a Pest-style `it(...)`/`test(...)` closure is a violation, not a
+  preference.
+- Tests of pure domain code (value objects, model methods with no query, rules on
+  plain values) **SHOULD** live in a Unit suite and extend
+  `PHPUnit\Framework\TestCase`, so they run without booting the framework or the
+  database.
 - Test method names **MUST** be descriptive with the `it_` prefix, stating the
   behavior (`it_signs_up_a_member_successfully`,
   `it_returns_404_when_course_not_found`), never generic (`test_course`).
