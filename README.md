@@ -4,7 +4,7 @@ Reusable Claude Code skills for building applications that last. None of them
 is tied to one project: copy a folder into your own project and use it. Most are for Laravel;
 the `factory/` and `planning/` skills work with any stack.
 
-Four folders, four different jobs:
+Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
@@ -12,6 +12,7 @@ Four folders, four different jobs:
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
+| `playbooks/` | The factory's per-issue playbook for PStack, plus one product's setup notes and a script that reports stages to the dashboard | Any GitHub issue labelled `factory` |
 
 ## kanon/
 
@@ -80,12 +81,31 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   it, checks its license (no license means ideas only, never code), maps its mechanisms
   onto the decisions your plan already made, and asks which ideas to adopt.
 
+## playbooks/
+
+- `factory.md`: the per-issue playbook for a software factory run, taking one GitHub issue
+  labelled `factory` from pick-up to merged code. It extends PStack 0.9.143's `feature`,
+  `bug-fix`, `opening-a-pr` and `babysit` playbooks, so it only lists the changes to their
+  steps plus its own: the five human stops, the labels, the stage reports, evidence at the
+  head commit, and cleanup of only what the run started.
+- `references/codyssey.md`: the Codyssey backend's gates, scaffolding and local Docker
+  setup. It holds one product's specifics, so the playbook stays stack-agnostic. It is not a
+  playbook, and PStack's checker does not read it.
+- `scripts/send-stage.mjs`: reports a stage to the factory dashboard over stdio until
+  `report_stage` is registered in Claude Code. Set `FACTORY_DASHBOARD_REPO` to the
+  dashboard checkout.
+
 ## Install
 
 Copy a skill folder into `.claude/skills/` in your project, or into `~/.claude/skills/`
 to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
 side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
 files from `laravel-kanon`'s `references/` folder.
+
+For the playbook, copy the contents of `playbooks/` into `~/.agents/playbooks/` (or a
+repository's `.agents/playbooks/`). After each PStack upgrade, run PStack's
+`check-playbooks.mjs` from the repository root. It fails when an upgrade rewrote a step the
+playbook quotes.
 
 ## License
 
