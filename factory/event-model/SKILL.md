@@ -30,6 +30,7 @@ python3 ~/.claude/skills/event-model/scripts/wb.py --product <dir> <command>
 2. Edit `product.py`: set `name`, `default_actor` and the legend wording. List your journeys in `FRAMES`, in the order they should appear on board 00.
 3. Write one journey file per journey, following `j01.py` and the format reference. Take the wording from the product's domain language, and put class, route and exception names on the last line of each rule card.
 4. Run `check` until it passes. It builds every board and writes nothing. It fails on an unknown slice type or column key, a `from` ref that does not resolve, a hot spot that names no slice or card, a board over 780 elements, or an arrow through a card.
+5. A brain may start with an empty journey (`lanes=[]`, `slices=[]`). Its two boards are placeholders: the journey title, the story and the note "No slices yet. The first feature in this journey adds them." Create and link them on day one, then add slices at the plan stage of the first feature.
 
 ## Create the boards
 
@@ -64,6 +65,7 @@ Never rebuild a board from scratch and never delete one without asking its owner
 
 ## Rules
 
+- Run the engine tests with `python3 -m unittest discover -s factory/event-model/tests` from the skills repository root.
 - Hot spots are for real gaps found while drawing, not for decoration. Each one names the slice and the card it is about.
 - Use the product's own words for events and commands. Past tense for events.
 - Do not edit `wb_state.json` by hand. `set-url` and `commit` write it.

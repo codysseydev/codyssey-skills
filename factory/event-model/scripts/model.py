@@ -282,7 +282,28 @@ def resolve(r, k, cols, lanes):
     return ck, 'ev', part[1]
 
 
+NO_SLICES = 'No slices yet. The first feature in this journey adds them.'
+EMPTY_W = 1200
+
+
+def placeholder(frame, view):
+    """A journey with no slices: its title, its story and a note, so the board can be created and linked on day one."""
+    key = frame['key']
+    b = Builder(key, view, frame['title'])
+    label = f'{key} · {frame["title"].split(" · ", 1)[1]}'
+    b.text('title', ('ES ' if view == 'es' else '') + label, 24, 0, 2400, 'title', INK, True)
+    y = 76
+    b.text('story', frame['story'], 24, y, EMPTY_W - 48, 'body', BODY)
+    y += lines(frame['story'], EMPTY_W - 48, 0) * 24 + 24
+    b.text('noslices', NO_SLICES, 24, y, EMPTY_W - 48, 'body', MUTED)
+    y += 24
+    b.f.update(w=EMPTY_W, h=y + 40)
+    return b.f
+
+
 def em(frame):
+    if not frame['slices']:
+        return placeholder(frame, 'em')
     lanes = frame['lanes']
     key = frame['key']
     b = Builder(key, 'em', frame['title'])
@@ -581,6 +602,8 @@ def policy_text(c, k, cols, lanes):
 
 
 def es(frame):
+    if not frame['slices']:
+        return placeholder(frame, 'es')
     lanes = frame['lanes']
     key = frame['key']
     b = Builder(key, 'es', frame['title'])
@@ -791,7 +814,7 @@ def modules(frames, key='99'):
     per = 2
     head_w = per * SPITCH - 24
     heads = {ctx: f'{ctx} · {len(evs)} event' + ('' if len(evs) == 1 else 's') for ctx, evs in by_ctx.items()}
-    head_h = max(lines(h, head_w / 2, 0) for h in heads.values()) * 36 + 20
+    head_h = max((lines(h, head_w / 2, 0) for h in heads.values()), default=0) * 36 + 20
     x, y0, tallest = 24, 76 + lines(intro, 1800, 0) * 24 + 40 + head_h, 0
     for ctx in sorted(by_ctx, key=lambda n: -len(by_ctx[n])):
         evs = by_ctx[ctx]
@@ -804,7 +827,7 @@ def modules(frames, key='99'):
             yy[col] += hs[i] + 16
         tallest = max(tallest, max(yy) - y0)
         x += per * SPITCH + 64
-    b.f.update(w=x, h=y0 + tallest + 40)
+    b.f.update(w=x if by_ctx else EMPTY_W, h=y0 + tallest + 40)
     return b.f
 
 
