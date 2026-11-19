@@ -10,7 +10,7 @@ Four folders, four different jobs:
 |---|---|---|
 | `kanon/` | A fixed Laravel doctrine (`laravel-kanon`) and the audit that checks code against it (`laravel-kanon-audit`) | Any Laravel project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
-| `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, and Event Model whiteboards from journey files | Any product, any stack |
+| `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
 
 ## kanon/
@@ -56,7 +56,16 @@ folders must sit next to each other.
   and syncs the feature's two boards before the plan stop. It ships Python scripts
   (`check`, `plan`, `commit`) and a sample product to copy.
 
+- `bootstrap`: creates a product's brain vault and code repository from templates, sets up
+  the event model journey folder in the brain, and proves the repo's recipe from a clean
+  clone. Local only: it never creates GitHub repositories or pushes. Needs a brain template
+  and a stack pack (Laravel today).
+- `factory-onboard`: writes or updates a repository's `.factory/recipe.yml` (setup, checks,
+  teardown) from its CI config and docs, proves it from a clean clone with
+  `prove-recipe.py`, and opens a PR with the evidence. Works on any repo.
+
 Install `brief-writer` and `brief-to-backlog` together. The second reads what the first writes.
+Install `bootstrap` with `factory-onboard` and `event-model`: the script calls both.
 
 ## planning/
 
