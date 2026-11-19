@@ -11,9 +11,21 @@ This playbook applies only to an issue that carries the `factory` label. Ignore 
 
 #### Mode
 
-- Unattended (a scheduled run): between the stops, do not ask. Go ahead on reversible work and report it (never block on the human). At a stop, or when you cannot write an acceptance check from the issue text alone, post ONE comment on the issue with 2 or 3 concrete options, add `needs-decision` (or the stop's own label), report a `waiting` stage with the question, and stop.
+- Unattended (a scheduled run, started by the `factory-pickup` scheduled task, see Scheduled pick-up): between the stops, do not ask. Go ahead on reversible work and report it (never block on the human). At a stop, or when you cannot write an acceptance check from the issue text alone, post ONE comment on the issue with 2 or 3 concrete options, add `needs-decision` (or the stop's own label), report a `waiting` stage with the question, and stop.
 - Interactive (hand-started): every decision goes through AskUserQuestion with the recommendation first, as the owner's global instructions say.
 - Both modes count every ask (see Counting the owner).
+
+#### Scheduled pick-up
+
+A Claude Desktop scheduled task `factory-pickup` runs hourly in Auto permission mode and calls `node ~/.agents/playbooks/scripts/pick-up.mjs claim --repo codysseydev/codyssey --run-id <session id>`. It does nothing unless `~/.factory/armed` exists.
+
+- Watched repos are the `--repo` flags in the task prompt. Add a repo only once it has `.factory/playbook.md`.
+- Claim is the atomic lock dir in `~/.factory/locks/` plus the `factory-running` label and one comment.
+- A run works the one issue it claimed, starting at the action the script returns (`plan`, `implement`, `archive`), until the next stop or the end. Then it runs `pick-up.mjs release` with the same run id, also when it fails or gives up.
+- One run at a time: Desktop skips a tick while another scheduled run is still going.
+- The Mac asleep: the tick is skipped and Desktop starts one catch-up run on wake, only while the app is open.
+- A lock older than 4 hours is a crashed run: the next tick marks the issue `factory-failed` and the session reports `failed` for each `stale` entry. `factory-failed` issues are skipped until the owner removes the label. The next tick then starts attempt 2 as stage 5 describes.
+- Docker: only implement and gates need it. When it is down, run `open -a Docker` and wait up to 3 minutes. If still down, release the claim, change no labels, report nothing, and leave it for the next tick.
 
 #### Before the run
 
@@ -45,6 +57,8 @@ If a repo has none, report `waiting` with reason `question` asking for it (unatt
 
 - `factory`: picked up. `needs-plan-approval`, `plan-approved`, `needs-decision`.
 - `factory-failed`: the run gave up, so it does not loop.
+- `factory-running`: a run holds the issue. Set and cleared by `pick-up.mjs`.
+- `needs-pr-read`: the PR waits for the owner's diff read.
 - Create a missing label at pick-up. It is reversible.
 - At archive remove `plan-approved` and keep `factory`.
 
@@ -62,9 +76,9 @@ Run these in order. Each names what to do and the `report_stage` call. Each even
    - Trusted-commands guard: flag in the PR any edit to `.factory/recipe.yml`, `.factory/playbook.md`, phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or CI files.
    - Give up after three fix rounds: add `factory-failed` and report `failed` with the reason. A retry starts a new branch (`factory/<issue>-a2`) with `attempt: 2`, and its first message quotes the last failure and the owner's note.
    - Report `verify`.
-6. PR. Ready, never draft. Add `## Merge assessment` after `## Verification`: how you read the issue, assumptions, confidence and why, rules checked, what was not exercised. Run `/deslop` over the diff before the commit. Unrelated fixes go in their own commits, named under Scope. Out-of-scope findings become follow-up issues. A PR that changes a page carries Playwright screenshots of each changed page, each with a caption. Flag a UI PR without them. Report `pr` with the merge assessment, then ONE `waiting` event: reason `adr` when an ADR is open (the summary also says the diff is ready to read), otherwise `pr_read`. The contract allows one reason per event, so a single event is the simplest fit.
+6. PR. Ready, never draft. Add `## Merge assessment` after `## Verification`: how you read the issue, assumptions, confidence and why, rules checked, what was not exercised. Run `/deslop` over the diff before the commit. Unrelated fixes go in their own commits, named under Scope. Out-of-scope findings become follow-up issues. A PR that changes a page carries Playwright screenshots of each changed page, each with a caption. Flag a UI PR without them. Report `pr` with the merge assessment, then ONE `waiting` event: reason `adr` when an ADR is open (the summary also says the diff is ready to read), otherwise `pr_read`. The contract allows one reason per event, so a single event is the simplest fit. After the `waiting` event add `needs-pr-read` to the issue. The owner removes `needs-pr-read` to send the run back with PR comments. A merged PR closes the issue, which pick-up turns into the `archive` action. Work done while the PR waits is followed by another `waiting` event (see Dashboard events).
 7. Merge. The run never merges on its own. It merges one PR only when the owner says so for that PR, in the thread or a comment, at its verified head, without bypassing branch protection. An open ADR is accepted before the merge. Merge has no dashboard event.
-8. Archive. Archive the plan (OpenSpec archive) in its own PR, as run 1 did with #911, merged the same way. Record accepted ADRs and new rules, and clean up the labels. Clean up ONLY what the run started: before setup, record which containers or services were already running, and at archive stop only the others (run 1's `spin down` also stopped a MinIO that was up before the run). Drop the run's test databases and remove the worktree's dependencies and env file. Add a build log row in the brain with the final count. Report `archived`.
+8. Archive. Archive the plan (OpenSpec archive) in its own PR, as run 1 did with #911, merged the same way. Record accepted ADRs and new rules, and clean up the labels. Clean up ONLY what the run started: before setup, record which containers or services were already running, and at archive stop only the others (run 1's `spin down` also stopped a MinIO that was up before the run). Drop the run's test databases and remove the worktree's dependencies and env file. Add a build log row in the brain with the final count. Also remove `needs-pr-read` if present. Report `archived` only when nothing is pending for the owner (see Dashboard events).
 
 #### Dashboard events
 
@@ -84,7 +98,9 @@ Run these in order. Each names what to do and the `report_stage` call. Each even
 - Fields: `repo` (`owner/name`), `issue_number`, `attempt` (default 1), `stage`, `summary` (up to 2000 characters), and optional `waiting_reason`, `question`, `merge_assessment`, `session_id`, `model`, `cost_usd`.
 - A `waiting` event needs `waiting_reason` and carries `question` as `{text, options}` with 2 or 3 options. No other stage carries a `waiting_reason`.
 - The `pr` event carries `merge_assessment` as `{reading, assumptions[], confidence (low, medium or high), why, rules[]}`.
-- Call the `report_stage` MCP tool when it is registered. When it is not, run `node scripts/send-stage.mjs '<json>'` from a subagent, with `FACTORY_DASHBOARD_URL` and `FACTORY_INGEST_TOKEN` set by the dashboard's wrapper and `FACTORY_DASHBOARD_REPO` pointing at the dashboard checkout. Name these variables, never write a token anywhere.
+- Call the `mcp__report-stage__report_stage` tool (registered at user scope: `claude mcp add --scope user report-stage -- sh <dashboard checkout>/mcp/report-stage/run.sh`). Only when that tool is missing from the session, fall back to `node scripts/send-stage.mjs '<json>'` from a subagent, with `FACTORY_DASHBOARD_REPO` set to the dashboard checkout. The wrapper supplies `FACTORY_DASHBOARD_URL` and `FACTORY_INGEST_TOKEN`. Name these variables, never write a token anywhere.
+- The dashboard's Needs you inbox lists a run while its latest event is `waiting` or `failed`, and drops it on any later event. After doing work during a stop (for example a `verify` after tidying an ADR while the PR still waits on the owner), send `waiting` again with the same reason, so the run stays in the inbox.
+- Send `archived` only when nothing is pending for the owner. Run 1 sent `archived` 410 ms after a `waiting` with reason `pr_read` for its archive PR #911, which took it out of the inbox while a PR still waited.
 
 #### Counting the owner
 
