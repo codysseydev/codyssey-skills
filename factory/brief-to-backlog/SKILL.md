@@ -17,6 +17,8 @@ Convert an approved brief into GitHub issues. A scheduler picks up open `factory
 
 The brief must have a line `Approved: YYYY-MM-DD`. If it does not, stop and tell the user to run brief-writer and approve it first.
 
+A line ending in `(simulated)` counts only with `--dry-run`. In real mode, refuse it and say a human must approve the brief first.
+
 ## Read
 
 - The brief: requirements `R`, features `F`, phases, non-goals, open questions `Q`.
