@@ -12,7 +12,10 @@ const T0 = Date.parse('2026-01-01T12:00:00Z');
 const H = 3600 * 1000;
 
 function issue(number, labels = ['factory'], extra = {}) {
-  return { number, title: `t${number}`, state: 'OPEN', labels: labels.map((name) => ({ name })), body: '', ...extra };
+  return {
+    number, title: `t${number}`, state: 'OPEN', labels: labels.map((name) => ({ name })), body: '',
+    author: { login: 'owner' }, authorAssociation: 'OWNER', ...extra,
+  };
 }
 
 function fake({ issues = {}, nowMs = T0, armed = true } = {}) {
@@ -68,6 +71,29 @@ for (const label of SKIP_LABELS) {
     assert.match(r.reason, new RegExp(label));
   });
 }
+
+for (const a of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
+  test(`evaluateIssue trusts author association ${a}`, () => {
+    assert.equal(evaluateIssue(issue(1, ['factory'], { authorAssociation: a }), R, ok).eligible, true);
+  });
+}
+
+for (const a of ['NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', undefined]) {
+  test(`evaluateIssue skips author association ${a}`, () => {
+    const r = evaluateIssue(issue(1, ['factory'], { author: { login: 'eve' }, authorAssociation: a }), R, ok);
+    assert.equal(r.eligible, false);
+    assert.equal(r.reason, `untrusted author eve (${a ?? 'unknown'})`);
+  });
+}
+
+test('untrusted author is skipped for closed archive candidates and --only', () => {
+  const closed = issue(1, ['factory', 'plan-approved'], { state: 'CLOSED', authorAssociation: 'NONE' });
+  assert.equal(evaluateIssue(closed, R, ok).eligible, false);
+  const { d } = fake({ issues: { [R]: [issue(2, ['factory'], { authorAssociation: 'CONTRIBUTOR' })] } });
+  const out = cmdClaim(d, { repos: [R], runId: 'a', only: { repo: R, issue: 2 }, dryRun: false });
+  assert.equal(out.status, 'none');
+  assert.match(out.reason, /untrusted author/);
+});
 
 test('evaluateIssue: lock, open dependency, plan, implement, archive', () => {
   assert.equal(evaluateIssue(issue(1), R, { ...ok, hasLock: true }).eligible, false);

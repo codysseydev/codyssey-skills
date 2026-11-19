@@ -22,6 +22,7 @@ export const SKIP_LABELS = [
   'needs-decision',
   'needs-pr-read',
 ];
+export const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 export const STALE_MS = 4 * 60 * 60 * 1000;
 const RUNNING = 'factory-running';
 const FAILED = 'factory-failed';
@@ -66,11 +67,16 @@ export function labelNames(issue) {
 }
 
 // Returns {eligible: true, action} or {eligible: false, reason}.
-// issue: {number, title, state: 'OPEN'|'CLOSED', labels, body}
+// issue: {number, title, state: 'OPEN'|'CLOSED', labels, body, author: {login}, authorAssociation}
+// A missing authorAssociation fails closed.
 // hasLock: boolean. depState: (ref) => 'OPEN' | 'CLOSED' | undefined.
 export function evaluateIssue(issue, repo, { hasLock, depState }) {
   const labels = labelNames(issue);
   if (!labels.includes('factory')) return { eligible: false, reason: 'missing label factory' };
+  const assoc = issue.authorAssociation;
+  if (!TRUSTED_ASSOCIATIONS.includes(assoc)) {
+    return { eligible: false, reason: `untrusted author ${issue.author?.login ?? 'unknown'} (${assoc ?? 'unknown'})` };
+  }
   for (const l of SKIP_LABELS) {
     if (labels.includes(l)) return { eligible: false, reason: `has label ${l}` };
   }
@@ -94,14 +100,28 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
 // ---------- boundary (gh + filesystem + clock) ----------
 
 export function makeGh(run = defaultRun) {
-  const issueFields = 'number,title,state,labels,body';
-  const json = (args) => JSON.parse(run(args) || '[]');
+  // `gh issue list/view --json` has no author association field, so issues come from the
+  // REST API, which returns `author_association`. Entries with a `pull_request` key are PRs.
+  const normalize = (i) => ({
+    number: i.number,
+    title: i.title,
+    state: String(i.state).toUpperCase(),
+    labels: (i.labels ?? []).map((l) => (typeof l === 'string' ? { name: l } : { name: l.name })),
+    body: i.body ?? '',
+    author: { login: i.user?.login },
+    authorAssociation: i.author_association,
+  });
+  const list = (repo, labels, state) =>
+    JSON.parse(run(['api', `repos/${repo}/issues?labels=${labels}&state=${state}&per_page=100`]) || '[]')
+      .filter((i) => !i.pull_request)
+      .map(normalize);
   return {
-    listOpen: (repo) =>
-      json(['issue', 'list', '--repo', repo, '--label', 'factory', '--state', 'open', '--limit', '200', '--json', issueFields]),
-    listClosedApproved: (repo) =>
-      json(['issue', 'list', '--repo', repo, '--label', 'factory', '--label', 'plan-approved', '--state', 'closed', '--limit', '200', '--json', issueFields]),
-    getIssue: (repo, n) => JSON.parse(run(['issue', 'view', String(n), '--repo', repo, '--json', issueFields])),
+    listOpen: (repo) => list(repo, 'factory', 'open'),
+    listClosedApproved: (repo) => list(repo, 'factory,plan-approved', 'closed'),
+    getIssue(repo, n) {
+      const i = JSON.parse(run(['api', `repos/${repo}/issues/${n}`]));
+      return i.pull_request ? null : normalize(i);
+    },
     issueState: (repo, n) => JSON.parse(run(['issue', 'view', String(n), '--repo', repo, '--json', 'state'])).state,
     ensureLabel(repo, name) {
       const meta = LABEL_META[name] ?? { description: '', color: 'EDEDED' };
@@ -229,7 +249,9 @@ export function cmdClaim(d, { repos, runId, only, dryRun }) {
 
   let rows;
   if (only) {
-    rows = [{ repo: only.repo, order: 0, issue: d.gh.getIssue(only.repo, only.issue) }];
+    const one = d.gh.getIssue(only.repo, only.issue);
+    if (!one) return { status: 'none', reason: 'not an issue', stale };
+    rows = [{ repo: only.repo, order: 0, issue: one }];
   } else {
     rows = gatherIssues(d, repos);
   }
