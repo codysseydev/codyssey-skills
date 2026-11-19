@@ -10,9 +10,9 @@ This file owns what the rules accept and how input reaches the handler.
 ## Routes
 
 - Each module **MUST** own its route file (`{module}-routes.php`), loaded by the
-  module's service provider under the `api` prefix. A module route file loaded with
-  `loadRoutesFrom()` **MUST** declare its `api` prefix and `api` middleware
-  explicitly, because `loadRoutesFrom()` adds neither
+  module's service provider. A module route file loaded with `loadRoutesFrom()`
+  **MUST** declare its `api` prefix and `api` middleware explicitly, because
+  `loadRoutesFrom()` adds neither
   (`Route::prefix('api')->middleware('api')->group(...)`).
 - Each user intent **MUST** have its own route; one endpoint **MUST NOT** pick its
   action from the request body. One endpoint serving several intents forces a
