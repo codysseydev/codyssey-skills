@@ -1,12 +1,22 @@
 # Routes, HTTP & API Serialization
 
-Applies to: route files, middleware wiring, HTTP statuses, API resources, response
-shape, inbound webhooks.
+Applies to: route files, middleware wiring, Form Request field rules, HTTP
+statuses, API resources, response shape, inbound webhooks.
+
+Lane boundaries: Form Request shape (array-syntax rules, `authorize()` plus
+`rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`.
+This file owns what the rules accept and how input reaches the handler.
 
 ## Routes
 
 - Each module **MUST** own its route file (`{module}-routes.php`), loaded by the
-  module's service provider under the `api` prefix.
+  module's service provider. A module route file loaded with `loadRoutesFrom()`
+  **MUST** declare its `api` prefix and `api` middleware explicitly, because
+  `loadRoutesFrom()` adds neither
+  (`Route::prefix('api')->middleware('api')->group(...)`).
+- Each user intent **MUST** have its own route; one endpoint **MUST NOT** pick its
+  action from the request body. One endpoint serving several intents forces a
+  single authorization rule to cover all of them.
 - Every route **MUST** be named, following `{module}.{resource}.{action}`
   (`commerce.orders.create`). Thin public one-off routes **MAY** use a simple
   single-segment name.
@@ -25,6 +35,27 @@ shape, inbound webhooks.
   carry a `throttle:` limiter.
 - Privileged writes **MUST** carry capability middleware (`abilities:` / `can:`)
   referencing a typed constant, never a magic string (see `authorization.md`).
+
+## Form Request input
+
+- Each write action **MUST** have its own Form Request; a request **MUST NOT**
+  branch on `isMethod()` to serve several actions.
+- Every field the handler reads **MUST** be `required`, or `required` plus
+  `nullable`, or given an explicit default in the Form Request; `sometimes`
+  **MUST NOT** be used for a field the handler reads.
+- Fields an endpoint ignores **SHOULD** be marked `prohibited` so clients get a 422
+  instead of a silent 204.
+- Date inputs **MUST** be validated with `date_format:Y-m-d` (or an explicit
+  format) and read with `$request->date()`, never the loose `date` rule.
+- Client-chosen sort and filter columns **MUST** be validated with `Rule::enum()`
+  and mapped to columns you chose to expose; raw input never reaches `orderBy()` or
+  `where()` as a column name.
+- A field rule **MUST** stay in the Form Request even when a value object also
+  enforces it, so form users get a field-level 422 instead of a 500 (the value
+  object's invariants are in `models-domain.md`).
+- `validated()` **MUST NOT** be spread into `create()`/`update()`; the handler
+  **MUST** list the columns it writes. Models are unguarded (see
+  `models-domain.md`), so every validated key would become a column write.
 
 ## HTTP status discipline
 

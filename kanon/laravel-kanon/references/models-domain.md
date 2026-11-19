@@ -1,7 +1,13 @@
 # Models, Enums, DTOs, Events & Exceptions
 
-Applies to: Eloquent models, enums, domain events, value objects/DTOs, read models,
-exceptions.
+Applies to: Eloquent models (with their observers, accessors and casts), enums,
+domain events, value objects/DTOs, specifications, read models, exceptions.
+
+Lane boundaries: exception types and the not-found carve-out are owned here;
+`orchestration-di.md` owns the lookup-method rule (`findByXOrFail()` /
+`findOrFail()`), so do not re-audit it here. Query-shape performance rules
+(filtering in the database, `$with`, column selection, report queries) are owned by
+`performance.md`, which builds on the eager-loading rule below.
 
 ## Eloquent models
 
@@ -17,8 +23,20 @@ exceptions.
 - Business logic **MUST** live in model methods (Tell, Don't Ask). A model holds
   simple domain methods, finders, invariants, and state transitions; logic spanning
   multiple aggregates **MUST** live in a handler instead.
+- A transaction **SHOULD** save one aggregate; other aggregates **SHOULD** be
+  updated by a listener reacting to a domain event. This holds alongside the rule
+  above: the handler coordinates, and the second aggregate changes in a listener.
+- Model observers and model events **MUST NOT** call `save()` on the row that
+  triggered them; decide every column first and write once. "Model events" means
+  Eloquent lifecycle events (`saving`, `updated`, ...), not domain events. Why: a
+  nested `save()` re-fires the same events and can loop or write twice.
+- Accessors and casts **MUST NOT** run queries; derived values **MUST** be computed
+  from data already loaded. Why: strict mode does not catch it, and a list then
+  runs one query per row.
 - Queries **MUST** start from `Model::query()`, not `DB::` (production classes), and
   **MUST** eager-load what they iterate.
+- A query rule used by more than one handler **SHOULD** live in one Specification
+  (or named scope) object instead of being repeated.
 - Custom traits **MUST NOT** be created; only framework/package traits are allowed
   (`HasFactory`, `SoftDeletes`, `RefreshDatabase`, ...). Shared behavior goes into a
   class, not a trait.
@@ -59,6 +77,15 @@ exceptions.
 
 - **MUST** be `final readonly` with constructor property promotion and explicit
   types.
+- Values with format rules (email, money, date ranges) **SHOULD** be value objects
+  validated once in their constructor, not strings re-checked in each method.
+- Invariants across related fields (check-in before check-out) **MUST** be enforced
+  in a value object's constructor, not only in Form Request rules. Why: Form
+  Requests never run for imports, jobs or console input. The field rule itself
+  still stays in the Form Request (see `http-api.md`).
+- Domain objects **SHOULD** be created through a named constructor that returns a
+  valid object, not `new` plus setters. This extends the read-model static-factory
+  rule to all domain objects.
 - A result/value object **SHOULD** own interpretation of its own data
   (`wasRejected()`, `isHigherThan()`) rather than making consumers branch on raw
   fields. This carve-out is for result/value objects only; events stay method-free.
@@ -71,6 +98,16 @@ exceptions.
 - A custom not-found exception **MUST NOT** be invented for a plain id lookup; use
   `findOrFail()` and let `ModelNotFoundException` become the 404. Custom exceptions
   are reserved for genuine domain errors needing a specific status or message.
+- An outcome the caller handles in the same flow (try the next coupon, show a
+  price without discount) **SHOULD** be returned as a Result object: a `final
+  readonly` result value object (see DTOs and value objects above). A broken rule
+  that ends the use case **MUST** throw a domain exception, which still renders
+  itself per the base-exception rule above.
+- Handlers and models **MUST NOT** throw framework or generic exceptions
+  (`NotFoundHttpException`, `RuntimeException`) for business rules; they **MUST**
+  throw a named domain exception. Plain id lookups are the carve-out: `findOrFail()`
+  and its `ModelNotFoundException` stay allowed (see the not-found rule above and
+  the Tell, Don't Ask lookup rule in `orchestration-di.md`).
 
 ## Shape
 

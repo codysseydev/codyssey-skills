@@ -9,7 +9,8 @@ description: >-
   Laravel changes "against the canon", "against kanon", "the kanon audit", or wants
   their long-term standards applied to any Laravel codebase regardless of that
   project's rules. Do NOT use for correctness/bug review, security audits, or
-  performance hunts (/code-review), and do NOT use when the user wants the review
+  profiling and hunting slow paths no written rule covers (/code-review; the canon's
+  written query-shape rules are audited), and do NOT use when the user wants the review
   grounded in the project's OWN conventions (that is laravel-standards-review). The
   rulebook for WRITING code by these rules is laravel-kanon.
 ---
@@ -63,7 +64,8 @@ empty or touches nothing the canon covers, say so and stop.
 ### 2. Fan out one auditor per rule family
 
 Spawn every applicable auditor in parallel (single message, multiple Agent calls;
-Filament only when the diff touches Filament code), each a
+Filament only when the diff touches Filament code, Reliability only when the diff
+touches batch or bulk processing), each a
 `general-purpose` subagent. Give each auditor:
 
 - the changed-file list relevant to its family (route by the path/content
@@ -78,11 +80,14 @@ Filament only when the diff touches Filament code), each a
 |---|---|---|
 | Architecture & slices | `architecture.md` | new feature folders, slice completeness/co-location, module layout, placement, naming |
 | Orchestration & DI | `orchestration-di.md` | `*Controller`, `*Handler`, `*Job`, `*Listener`, console commands, services, middleware |
-| Models & domain objects | `models-domain.md` | Eloquent models, enums, events, DTOs, exceptions, read models |
+| PHP core | `php-core.md` | every changed production PHP class (service location, singletons, inheritance, guard clauses, chaining, readonly, command-query separation) |
+| Models & domain objects | `models-domain.md` | Eloquent models, observers, accessors, casts, enums, events, DTOs, value objects, specifications, exceptions, read models |
+| Performance | `performance.md` | Eloquent/query-builder queries, report and list query handlers, models declaring `$with` |
+| Reliability | `reliability.md` | batch imports, bulk jobs, console commands that process many rows; spawn only when the diff touches batch or bulk processing |
 | Isolation | `isolation.md` | cross-module imports/FKs/writes, application-surface boundaries, guards |
-| HTTP & serialization | `http-api.md` | route files, middleware, statuses, `*Resource`, webhooks |
+| HTTP & serialization | `http-api.md` | route files, middleware, statuses, `*Resource`, `*Request` Form Request field rules, webhooks |
 | Authorization | `authorization.md` | ownership gates, principal-vs-input, abilities, Form Request `authorize()` |
-| Integrations | `integrations.md` | gateways, connectors, vendor SDK usage, secrets |
+| Integrations | `integrations.md` | gateways, connectors, vendor SDK usage, secrets, classes that consume config values, decoded external payloads |
 | Persistence & providers | `persistence.md` | migrations, factories, `config/`, service providers |
 | Filament | `filament.md` | Filament `*Resource`, pages, actions, widgets, panel policies/providers; spawn only when the diff touches Filament code |
 | Testing | `testing.md` | `tests/`, plus flagging changed behavior that shipped with no test |
@@ -155,6 +160,7 @@ If asked to post it on a PR, write the report to a file and use
 
 - Read-only by default: report, do not edit. Apply fixes only on request; when
   fixing, follow `laravel-kanon` rules.
+- Symfony code is not audited yet; `symfony-kanon` has no audit.
 - Pairs: `/code-review` for bugs, `laravel-standards-review` for house-style,
   this skill for the canon.
 - The rules live in the `laravel-kanon` skill's `references/` folder; edit them

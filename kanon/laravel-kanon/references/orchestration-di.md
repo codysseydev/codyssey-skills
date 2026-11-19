@@ -44,14 +44,18 @@ jobs, application services, middleware.
   - `now()` -> `CarbonImmutable::now()` (explicit import)
   - `Log::` -> `Psr\Log\LoggerInterface`
   - `DB::` -> `Illuminate\Database\ConnectionInterface`
-  - `Auth::` -> `Illuminate\Contracts\Auth\Factory`
+  - `Auth::` -> `Illuminate\Contracts\Auth\Factory` (controllers and middleware
+    only; handlers never read the authenticated user, see "Controllers and handlers")
   - `Cache::` -> `Illuminate\Contracts\Cache\Repository` (decorators only, see below)
   - `response()->json()` -> `new JsonResponse(...)`
-  - `app()`, `collect()` **SHOULD NOT** appear where avoidable.
+  - `app()`, `resolve()`, `collect()`: production classes **MUST NOT** call them.
+    `app()` and `resolve()` are the Laravel form of the no-service-location rule in
+    `php-core.md`.
 - Regular classes **MUST** use constructor injection; queued jobs **MUST** use method
   injection on `handle()`.
 - Facades and helpers **MAY** be used in: blade views, route files, migrations,
-  service providers, factories, and tests.
+  service providers, factories, and tests. Filament pages and widgets have their own
+  sanctioned `App::make(Dispatcher::class)` exception (see `filament.md`).
 
 ## Class shape
 
@@ -82,6 +86,12 @@ jobs, application services, middleware.
   resource controllers.
 - A handler **MUST** expose exactly one public `handle(Command|Query): ReturnType`.
 - Handlers **MUST** return typed Result DTOs, never associative arrays.
+- A handler **MUST** receive the acting user as a parameter on its command; it
+  **MUST NOT** read the authenticated user itself. Queued jobs and console commands
+  have no logged-in user. The controller takes the actor from the authenticated
+  principal, never from request input (see `authorization.md`).
+- A controller **MUST NOT** call or inject another controller; shared work **MUST**
+  move into a handler both call.
 - Controllers **MUST** return an API Resource or `JsonResponse` with an explicit
   status, never a bare array.
 - Controllers **MUST NOT** try/catch domain exceptions; domain exceptions render
@@ -113,8 +123,11 @@ jobs, application services, middleware.
   never a raw string and never the implicit default.
 - Jobs that talk to external systems **MUST** declare explicit `$tries` and
   `$backoff`.
+- Queued jobs **MUST NOT** hold Eloquent models; they **MUST** carry ids or a small
+  DTO with the values the job needs. Same rule as events (see `models-domain.md`):
+  a serialized model goes stale and drags its loaded state into the queue payload.
 
-## Caching
+## Caching and logging
 
 - Query handlers **MUST** stay pure: no cache reads/writes inside a handler. Caching
   lives in a `Cached{Handler}` decorator wired in the service provider.
@@ -123,6 +136,8 @@ jobs, application services, middleware.
 - Cached payloads **MUST** stay user-agnostic: per-user data (access verdicts,
   ownership flags, personalization) resolves after the cache, in the controller,
   never baked into a shared cached entry.
+- Logging around a query handler **SHOULD** live in a decorator, like caching, not
+  inside the handler. A handler **MAY** still log a domain decision only it knows.
 
 ## Middleware
 

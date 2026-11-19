@@ -56,19 +56,22 @@ Rules use RFC-2119 keywords, and they mean it:
 ## How to apply while writing
 
 1. Identify what you are about to create or edit, and read the matching files in
-   this skill's `references/` folder (next to this SKILL.md) BEFORE writing. Read `architecture.md` for any new feature regardless.
+   this skill's `references/` folder (next to this SKILL.md) BEFORE writing. Read `architecture.md` for any new feature regardless, and `php-core.md` for every production class regardless.
 2. Follow MUST/MUST NOT rules absolutely; note SHOULD deviations with justification.
 3. When you finish, list any canon rules you could not satisfy and why.
 
 | You are writing | Read |
 |---|---|
 | A new feature, module, or slice | `references/architecture.md` plus the rows below that apply |
+| Any production PHP class (applies to every change) | `references/php-core.md` |
 | Controllers, handlers, jobs, listeners, console commands, services | `references/orchestration-di.md` |
-| Models, enums, DTOs, events, exceptions, naming decisions | `references/models-domain.md` |
+| Models, observers, accessors, casts, value objects, enums, DTOs, events, exceptions, naming decisions | `references/models-domain.md` |
+| Queries, reports, list endpoints, eager loading | `references/performance.md` |
+| Batch imports, bulk jobs | `references/reliability.md` |
 | Anything touching two modules or two application surfaces | `references/isolation.md` |
 | Routes, middleware, form requests, API resources, webhooks | `references/http-api.md` |
 | Auth checks, ownership, permissions, guards | `references/authorization.md` |
-| Third-party API integrations, SDKs, outbound HTTP | `references/integrations.md` |
+| Third-party API integrations, SDKs, outbound HTTP, classes that consume config values, decoded external payloads | `references/integrations.md` |
 | Migrations, factories, config, service providers | `references/persistence.md` |
 | Filament resources, pages, actions, widgets | `references/filament.md` |
 | Tests | `references/testing.md` |
@@ -76,5 +79,9 @@ Rules use RFC-2119 keywords, and they mean it:
 ## Companions
 
 - `laravel-kanon-audit` audits a branch, PR, or diff against these same references.
+- `symfony-kanon` is the Symfony overlay. It reads `php-core.md` and
+  `reliability.md` from this skill's `references/` folder.
 - The canon covers standards, not correctness: keep using normal judgment (and
-  /code-review) for bugs, security, and performance.
+  /code-review) for bugs and security. For performance, the canon owns the written
+  query-shape rules in `references/performance.md`; profiling and hunting slow
+  paths that no written rule covers stays with /code-review.

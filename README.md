@@ -8,7 +8,7 @@ Four folders, four different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`) and the audit that checks code against it (`laravel-kanon-audit`) | Any Laravel project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), and a Symfony overlay of the Kanon (`symfony-kanon`) | Any Laravel or Symfony project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -16,15 +16,19 @@ Four folders, four different jobs:
 ## kanon/
 
 - `laravel-kanon`: the rulebook, loaded before writing code. Rules use MUST, SHOULD and
-  MAY (RFC 2119), split into 10 reference files by what you are writing. It overrides the
+  MAY (RFC 2119), split into 13 reference files by what you are writing. It overrides the
   host project's conventions on purpose, so do not point it at a codebase with
   established team standards.
 - `laravel-kanon-audit`: the audit, run after writing. It checks a branch or diff
   against the same reference files, one subagent per rule family, and takes each
   finding's severity from the rule's keyword.
+- `symfony-kanon`: a minimal Symfony overlay of the Kanon with two rules (no
+  `$container->get()`, writes go through a Messenger command to one handler). It reads
+  `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
+  install it next to `laravel-kanon`. It has no audit yet.
 
-Install both together. The audit reads the rulebook's `references/` folder, so the two
-folders must sit next to each other.
+Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
+rulebook's `references/` folder, so the two folders must sit next to each other.
 
 ## general/
 
@@ -80,7 +84,8 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
 
 Copy a skill folder into `.claude/skills/` in your project, or into `~/.claude/skills/`
 to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
-side by side.
+side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
+files from `laravel-kanon`'s `references/` folder.
 
 ## License
 
