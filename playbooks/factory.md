@@ -19,7 +19,19 @@ This playbook applies only to an issue that carries the `factory` label. Ignore 
 
 - Enter through PStack's poteto-mode.
 - From the repo root run `node <pstack plugin>/skills/poteto-mode/scripts/check-playbooks.mjs`. If it prints any problem, do not start. Open a `factory` issue in `codysseydev/codyssey-skills` to fix the anchors.
-- Backend setup, gates and scaffolding for the Codyssey backend are in `references/codyssey.md`.
+
+#### Project file
+
+Each repo the factory works in keeps `.factory/playbook.md` with that project's specifics, next to `.factory/recipe.yml`. Read it at pick-up. Its sections:
+
+- `## Checks`: gate commands, used when the repo has no `.factory/recipe.yml` or in addition to it.
+- `## Review`: the reviewer skill and rule pack, and how to confirm the fan-out ran.
+- `## Scaffolding`: scaffolding commands and the implementer agent.
+- `## Local setup`: how to prepare the one worktree (dependencies, env file, test database, services).
+- `## Cleanup`: what archive removes.
+- `## Notes`: anything else run-specific.
+
+If a repo has none, report `waiting` with reason `question` asking for it (unattended) or ask (interactive). A PR that changes a check command or the local setup updates that file in the same change.
 
 #### The five stops
 
@@ -44,10 +56,10 @@ Run these in order. Each names what to do and the `report_stage` call. Each even
 2. Plan. Explore the code and write the plan in the repo's own planning format (an OpenSpec change where the repo uses it). Extend the journey file and sync its boards with the `event-model` skill. Put every first answer against the code before asking for approval: run 1 had 4 first answers fail once the OpenSpec draft met the code, and 9 of its 18 plan-stage questions came from that. Push the branch. Post the plan as an issue comment with the branch link and the changed boards, and add `needs-plan-approval`. Report `plan`, then `waiting` with reason `plan_approval`, and stop. No PR before approval.
 3. Scaffold. Use the repo's own scaffolding commands or skills, named in its CLAUDE.md. Never hand-roll a generator the repo forbids. Report under `implement`.
 4. Implement. Resume when `plan-approved` is on the issue. Use ONE prepared worktree (own dependencies, env file, test database). File-writing delegates take turns in it, one at a time. Read-only delegates may run in parallel. When a decision outlives the change, draft the ADR as proposed and commit it with the code. Report `implement`.
-5. Gates. Run the repo's `.factory/recipe.yml` checks when it has one, else the repo's preflight gates. Evidence is taken at the head commit from a clean tree: a table of gate, command, exit code and result, plus the head sha. A new push needs new evidence. When GitHub Actions cannot run (billing, no minutes), the local evidence stands in for CI and the PR says so.
+5. Gates. Run the repo's `.factory/recipe.yml` checks when it has one, else the repo's preflight gates, plus the `## Checks` of its `.factory/playbook.md`. Evidence is taken at the head commit from a clean tree: a table of gate, command, exit code and result, plus the head sha. A new push needs new evidence. When GitHub Actions cannot run (billing, no minutes), the local evidence stands in for CI and the PR says so.
    - Reviews: give the reviewers only the diff, not your conclusions. Confirm each reviewer ran its per-rule-family fan-out, and record which rule families it read and which it did not. Run 1's first codyssey-reviewer pass skipped its fan-out and six families and had to be repeated. Run the Kanon audit too.
    - A conflict between rules goes to the rule conflicts stop: report `waiting` with reason `rule_conflict`.
-   - Trusted-commands guard: flag in the PR any edit to `.factory/recipe.yml`, phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or CI files.
+   - Trusted-commands guard: flag in the PR any edit to `.factory/recipe.yml`, `.factory/playbook.md`, phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or CI files.
    - Give up after three fix rounds: add `factory-failed` and report `failed` with the reason. A retry starts a new branch (`factory/<issue>-a2`) with `attempt: 2`, and its first message quotes the last failure and the owner's note.
    - Report `verify`.
 6. PR. Ready, never draft. Add `## Merge assessment` after `## Verification`: how you read the issue, assumptions, confidence and why, rules checked, what was not exercised. Run `/deslop` over the diff before the commit. Unrelated fixes go in their own commits, named under Scope. Out-of-scope findings become follow-up issues. A PR that changes a page carries Playwright screenshots of each changed page, each with a caption. Flag a UI PR without them. Report `pr` with the merge assessment, then ONE `waiting` event: reason `adr` when an ADR is open (the summary also says the diff is ready to read), otherwise `pr_read`. The contract allows one reason per event, so a single event is the simplest fit.

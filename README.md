@@ -12,7 +12,7 @@ Five folders, five different jobs:
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
-| `playbooks/` | The factory's per-issue playbook for PStack, plus one product's setup notes and a script that reports stages to the dashboard | Any GitHub issue labelled `factory` |
+| `playbooks/` | The factory's per-issue playbook for PStack, plus a script that reports stages to the dashboard | Any GitHub issue labelled `factory` |
 
 ## kanon/
 
@@ -88,9 +88,9 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   `bug-fix`, `opening-a-pr` and `babysit` playbooks, so it only lists the changes to their
   steps plus its own: the five human stops, the labels, the stage reports, evidence at the
   head commit, and cleanup of only what the run started.
-- `references/codyssey.md`: the Codyssey backend's gates, scaffolding and local Docker
-  setup. It holds one product's specifics, so the playbook stays stack-agnostic. It is not a
-  playbook, and PStack's checker does not read it.
+- Per-project specifics (gates, review, scaffolding, local setup, cleanup) do not live
+  here. Each repo keeps them at `.factory/playbook.md`, and `factory.md` reads that file at
+  pick-up.
 - `scripts/send-stage.mjs`: reports a stage to the factory dashboard over stdio until
   `report_stage` is registered in Claude Code. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
