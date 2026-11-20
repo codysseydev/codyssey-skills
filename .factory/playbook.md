@@ -27,4 +27,4 @@ Setup starts no containers or servers. Nothing to remove.
 ## Notes
 
 - `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
-- A merged change to `playbooks/` or `factory/` only takes effect for scheduled runs after the installed copies under `~/.agents/playbooks/` and `~/.claude/skills/` are reinstalled from `main`.
+- The factory runs the installed copies, not this repo. `~/.agents/playbooks/` and the skills in `~/.claude/skills/` are plain copies made by hand (README "Install"), and nothing syncs them. A merged change to `playbooks/` or `factory/` takes effect only after the owner copies it there from `main`. A run on this repo edits its worktree, never the installed copies.
