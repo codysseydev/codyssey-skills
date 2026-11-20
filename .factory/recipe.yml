@@ -1,0 +1,12 @@
+version: 1
+setup: []
+checks:
+  - name: pick-up-tests
+    run: node --test playbooks/scripts/pick-up.test.mjs
+  - name: bootstrap-tests
+    run: python3 -m unittest discover -s factory/bootstrap/tests
+  - name: event-model-tests
+    run: python3 -m unittest discover -s factory/event-model/tests
+  - name: factory-onboard-tests
+    run: python3 -m unittest discover -s factory/factory-onboard/tests
+teardown: []
