@@ -90,8 +90,8 @@ class FreshTest(unittest.TestCase):
 
     def test_without_recipe_uses_table(self):
         repo = make_repo({
-            "package.json": json.dumps({"scripts": {"lint": "eslint .", "test:unit": "vitest", "dev": "vite",
-                                                    "lint:fix": "eslint --fix .", "build": "vite build"}}),
+            "package.json": json.dumps({"scripts": {"lint": "eslint .", "analyse": "phpstan", "test:unit": "vitest", "dev": "vite",
+                                                    "lint:fix": "eslint --fix .", "format": "prettier --write .", "build": "vite build"}}),
             "pnpm-lock.yaml": "",
         })
         code, out, _ = run(repo)
@@ -102,8 +102,10 @@ class FreshTest(unittest.TestCase):
         self.assertIn("| lint | `pnpm lint` |", checks)
         self.assertIn("| test:unit | `pnpm test:unit` |", checks)
         self.assertIn("| build | `pnpm build` |", checks)
+        self.assertIn("| analyse | `pnpm analyse` |", checks)
         self.assertNotIn("dev", checks)
         self.assertNotIn("lint:fix", checks)
+        self.assertNotIn("format", checks)
         for name in ("Review", "Scaffolding", "Local setup", "Cleanup", "Notes"):
             self.assertEqual(section(text, name), "None yet.")
 
@@ -162,6 +164,11 @@ class ExistingTest(unittest.TestCase):
         added = "## Local setup\n\nNone yet.\n\n"
         self.assertIn(added, new)
         self.assertEqual(new.replace(added, "", 1), EXISTING)  # byte for byte, only the section is new
+
+    def test_added_section_is_none_even_with_a_recipe(self):
+        repo = make_repo({".factory/recipe.yml": RECIPE, ".factory/playbook.md": EXISTING})
+        run(repo)
+        self.assertEqual(section(read(repo), "Local setup"), "None yet.")
 
     def test_missing_last_section_is_appended_at_end(self):
         repo = make_repo({".factory/playbook.md": EXISTING.split("## Notes")[0]})

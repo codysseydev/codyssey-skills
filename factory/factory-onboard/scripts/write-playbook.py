@@ -21,7 +21,7 @@ import argparse, importlib.util, json, os, re, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SECTIONS = ("Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes")
 NONE_LINE = "None yet."
-GATE_WORDS = {"lint", "check", "format", "typecheck", "test", "phpstan", "pint", "arkitect", "rector", "build"}
+GATE_WORDS = {"lint", "check", "analyse", "analyze", "typecheck", "test", "phpstan", "pint", "arkitect", "rector", "build"}
 NOT_GATE_WORDS = {"fix", "watch"}
 # Subcommands that are not project scripts, so they never count as an unresolved script.
 BUILTINS = {
@@ -178,7 +178,7 @@ def starter(repo, recipe):
     return "\n".join(out)
 
 
-def add_missing(text, repo, recipe):
+def add_missing(text):
     """Insert each missing section as pure additions. Returns (new text, [names], {name: where})."""
     lines = text.splitlines(keepends=True)
     if lines and not lines[-1].endswith("\n"):
@@ -188,7 +188,7 @@ def add_missing(text, repo, recipe):
         found = headings("".join(lines))
         if s in found:
             continue
-        block = [f"## {s}\n", "\n", section_body(s, repo, recipe) + "\n", "\n"]
+        block = [f"## {s}\n", "\n", NONE_LINE + "\n", "\n"]
         later = [found[t] for t in SECTIONS[SECTIONS.index(s) + 1:] if t in found]
         if later:
             at = min(later)
@@ -310,7 +310,7 @@ def main(argv=None):
         if exists:
             with open(path, encoding="utf-8", newline="") as f:
                 old = f.read()
-            text, added, where = add_missing(old, repo, recipe)
+            text, added, where = add_missing(old)
             if added:
                 with open(path, "w", encoding="utf-8", newline="") as f:
                     f.write(text)

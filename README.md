@@ -62,9 +62,9 @@ rulebook's `references/` folder, so the two folders must sit next to each other.
   (`check`, `plan`, `commit`) and a sample product to copy.
 
 - `bootstrap`: creates a product's brain vault and code repository from templates, sets up
-  the event model journey folder in the brain, and proves the repo's recipe from a clean
-  clone, and writes the repo's `.factory/playbook.md` through `factory-onboard`'s
-  `write-playbook.py`. Local only: it never creates GitHub repositories or pushes. Needs a
+  the event model journey folder in the brain, writes the repo's `.factory/playbook.md`
+  through `factory-onboard`'s `write-playbook.py`, and proves the repo's recipe from a clean
+  clone. Local only: it never creates GitHub repositories or pushes. Needs a
   brain template and a stack pack (Laravel today).
 - `factory-onboard`: writes or updates a repository's `.factory/recipe.yml` (setup, checks,
   teardown) from its CI config and docs, proves it from a clean clone with
