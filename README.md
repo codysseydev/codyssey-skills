@@ -91,8 +91,11 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
 - Per-project specifics (gates, review, scaffolding, local setup, cleanup) do not live
   here. Each repo keeps them at `.factory/playbook.md`, and `factory.md` reads that file at
   pick-up.
-- `scripts/send-stage.mjs`: reports a stage to the factory dashboard over stdio until
-  `report_stage` is registered in Claude Code. Set `FACTORY_DASHBOARD_REPO` to the
+- `scripts/pick-up.mjs`: `claim`, `release` and `list` for the Desktop scheduled task. A
+  claim creates a lock dir in `~/.factory/locks/` and labels the issue `factory-running`.
+  `claim` does nothing unless the arm file `~/.factory/armed` exists.
+- `scripts/send-stage.mjs`: the fallback for reporting a stage to the factory dashboard
+  when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
 
 ## Install
@@ -106,6 +109,14 @@ For the playbook, copy the contents of `playbooks/` into `~/.agents/playbooks/` 
 repository's `.agents/playbooks/`). After each PStack upgrade, run PStack's
 `check-playbooks.mjs` from the repository root. It fails when an upgrade rewrote a step the
 playbook quotes.
+
+For unattended runs:
+
+- Register the report MCP server once:
+  `claude mcp add --scope user report-stage -- sh <dashboard checkout>/mcp/report-stage/run.sh`.
+- Create the Claude Desktop scheduled task `factory-pickup`. Its prompt text lives in
+  `playbooks/factory.md` under Scheduled pick-up.
+- `mkdir -p ~/.factory && touch ~/.factory/armed` arms it. `rm ~/.factory/armed` disarms it.
 
 ## License
 
