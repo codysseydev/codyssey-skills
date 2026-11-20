@@ -68,6 +68,15 @@ class BootstrapTest(unittest.TestCase):
         self.assertIn("lanes=[], slices=[]", j01)
         self.assertIn("Acme App", j01)
         self.assertNotIn("bike", j01.lower())
+        repo = os.path.join(self.root, "acme-app")
+        playbook = open(os.path.join(repo, ".factory", "playbook.md")).read()
+        self.assertEqual([l[3:] for l in playbook.splitlines() if l.startswith("## ")],
+                         ["Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes"])
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
+        repo_log = subprocess.run(["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True).stdout.splitlines()
+        self.assertEqual(repo_log[0], "Add the factory project file")
+        self.assertEqual(report["steps"][-2:], ["playbook written, checked and committed", "recipe proved from a clean clone"])
+        self.assertEqual(report["playbook"]["added_sections"][0], "Checks")
         log = subprocess.run(["git", "log", "--oneline"], cwd=os.path.join(self.root, "acme-app-docs"),
                              capture_output=True, text=True).stdout
         self.assertIn("event model journey setup", log)

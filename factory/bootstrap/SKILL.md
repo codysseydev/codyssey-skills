@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Create a factory product's brain vault (`<slug>-docs`), its event model journey setup and its code repository (`<slug>`) from templates, then prove the repo's recipe from a clean clone. Use after domain design, before the backlog. Not for adding a feature to an existing product and not for creating GitHub repositories.
+description: Create a factory product's brain vault (`<slug>-docs`), its event model journey setup and its code repository (`<slug>`) from templates, then write the repo's factory project file and prove its recipe from a clean clone. Use after domain design, before the backlog. Not for adding a feature to an existing product and not for creating GitHub repositories.
 ---
 
 # Bootstrap
@@ -34,13 +34,16 @@ The script refuses if `<root>/<slug>-docs` or `<root>/<slug>` exists and is not 
 1. Brain: runs the brain template's `scripts/new-brain.py` into `<root>/<slug>-docs`. The brain has its own `CLAUDE.md`, structure checker and skills.
 2. Event model setup: copies `product.py` and `wb_state.json` from the `event-model` skill's `examples/sample-product/` into `Architecture/event-model-generator/` in the brain and sets the product name. It writes an empty `j01.py` named after the product (`lanes=[]`, `slices=[]`, no hot spots). It adds `.wb/` to the brain's `.gitignore`, runs `wb.py --product <dir> check` and `plan` (both must pass; `plan` skips boards that have no URL yet), reruns the brain's own checker, and commits in the brain.
 3. Code repo: runs the pack's `scripts/new-repo.py --name --slug --pitch --target [--modules] [--date]` into `<root>/<slug>`. Packs are pluggable: a Symfony pack is planned with the same `new-repo.py` contract.
-4. Recipe: runs `factory-onboard`'s `prove-recipe.py` on the new repo, from a clean clone. The Laravel pack writes `.factory/recipe.yml`, and this step proves it.
+4. Playbook: runs `factory-onboard`'s `write-playbook.py` on the new repo, then again with `--check`, which fails unless `.factory/playbook.md` has all six sections. It commits the file as "Add the factory project file". The sections the repo gives nothing for read `None yet.`.
+5. Recipe: runs `factory-onboard`'s `prove-recipe.py` on the new repo, from a clean clone. The Laravel pack writes `.factory/recipe.yml`, and this step proves it.
+
+The report lists these as `steps` and carries the playbook script's JSON under `playbook`. The playbook is a starter. Refine it with `factory-onboard`.
 
 The journey is empty on purpose. Domain design adds the product's lanes, slices and further journeys, and the first feature fills `j01.py` at its plan stage. Its boards are placeholders until then.
 
 ## Dry run
 
-`--dry-run` is local git only. Without it the report also tells the session to run `factory-onboard` on the repo, which opens a PR for the recipe. In a dry run the recipe stays committed locally and no PR is opened. The script never creates a GitHub repository and never pushes, with or without the flag.
+`--dry-run` is local git only. Without it the report also tells the session to run `factory-onboard` on the repo, which opens a PR for the recipe and the playbook. In a dry run both stay committed locally and no PR is opened. The script never creates a GitHub repository and never pushes, with or without the flag.
 
 ## After the script
 
