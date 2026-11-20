@@ -52,7 +52,7 @@ A section with nothing to say keeps its heading and the line `None yet.`.
 
 `scripts/write-playbook.py` writes the starter from facts it reads mechanically: the recipe, `package.json` and `composer.json` scripts, `.claude/skills`, `.claude/agents` and `.ai/rules/`. You then refine it from the README, `docs/`, `CLAUDE.md` and CI. State only what the repo says.
 
-An existing playbook is kept. The script never rewrites its text. It appends any missing section with `None yet.` and prints JSON with `unresolved`: backticked repo paths that do not exist, and backticked `pnpm`, `npm run`, `yarn` or `composer` scripts that are not in `package.json` or `composer.json`. Edit only those lines, and any other line the README, `docs/` or CI shows has drifted. Leave the intro, run notes and every other line as written.
+An existing playbook is kept. The script never rewrites its text. It appends any missing section with `None yet.` and prints JSON with `unresolved`: backticked repo paths that do not exist, and backticked `pnpm`, `npm run`, `yarn` or `composer` scripts that are not in `package.json` or `composer.json`. Check each listed item first. A path in another repo, or one that is named as absent, is correct as written. Change a line only when the repo, the README, `docs/` or CI shows it drifted. Leave the intro, run notes and every other line as written.
 
 ## Steps
 
