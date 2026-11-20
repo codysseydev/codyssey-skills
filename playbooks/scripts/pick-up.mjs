@@ -9,6 +9,12 @@
 // State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file) and
 // `locks/<owner>-<repo>-<issue>/claim.json`. One JSON object on stdout, errors on stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
+//
+// claim, release and the stale sweep also POST run events (claimed, released, expired) to the
+// dashboard's /api/runs. FACTORY_DASHBOARD_URL overrides https://factory.codyssey.dev;
+// FACTORY_INGEST_TOKEN overrides the Keychain item `codyssey-factory-ingest`. A dashboard
+// failure never changes the command result: it shows up as the `dashboard` field and one
+// stderr line.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -24,6 +30,10 @@ export const SKIP_LABELS = [
 ];
 export const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 export const STALE_MS = 4 * 60 * 60 * 1000;
+export const DEFAULT_DASHBOARD_URL = 'https://factory.codyssey.dev';
+export const KEYCHAIN_SERVICE = 'codyssey-factory-ingest';
+const POST_TIMEOUT_MS = 10_000;
+const RETRY_WAITS_MS = [500, 1000]; // 3 attempts in all, same policy as the report_stage MCP tool
 const RUNNING = 'factory-running';
 const FAILED = 'factory-failed';
 const LABEL_META = {
@@ -142,10 +152,110 @@ function defaultRun(args) {
   return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+// ---------- dashboard boundary (fetch + Keychain + clock) ----------
+
+// URL must be https, or http for localhost / 127.0.0.1 only. Returns the origin+path or undefined.
+export function resolveDashboardUrl(env = process.env) {
+  const raw = (env.FACTORY_DASHBOARD_URL || DEFAULT_DASHBOARD_URL).trim();
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  const localHttp = u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+  if (u.protocol !== 'https:' && !localHttp) return undefined;
+  return raw.replace(/\/+$/, '');
+}
+
+// Env var first, then the Keychain through an injectable runner. Never throws, never logs the token.
+export function resolveIngestToken(env = process.env, runSecurity = defaultSecurity) {
+  const fromEnv = (env.FACTORY_INGEST_TOKEN ?? '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    return String(runSecurity(['find-generic-password', '-s', KEYCHAIN_SERVICE, '-w'])).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultSecurity(args) {
+  return execFileSync('security', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const shortError = (e) => {
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'timeout';
+  return String(e?.cause?.code ?? e?.message ?? e).replace(/\s+/g, ' ').slice(0, 80);
+};
+
+// post(event) resolves to the `dashboard` field value and writes one stderr line on anything but "sent".
+// event: {event, run_id, repo, issue_number, action?, occurred_at}.
+export function makeDashboard({
+  env = process.env, fetchImpl = globalThis.fetch, sleep = defaultSleep, runSecurity = defaultSecurity,
+  timeoutMs = POST_TIMEOUT_MS, retryWaitsMs = RETRY_WAITS_MS,
+} = {}) {
+  let token; // resolved once per process, on first use
+  let tokenResolved = false;
+  const getToken = () => {
+    if (!tokenResolved) {
+      token = resolveIngestToken(env, runSecurity);
+      tokenResolved = true;
+    }
+    return token;
+  };
+  return {
+    async post(ev) {
+      const fail = (result) => {
+        console.error(`pick-up: dashboard ${ev.event} for ${ev.repo}#${ev.issue_number} ${result}`);
+        return result;
+      };
+      const url = resolveDashboardUrl(env);
+      if (!url) return fail('skipped: bad url');
+      const bearer = getToken();
+      if (!bearer) return fail('skipped: no token');
+      const body = JSON.stringify(ev);
+      let result = 'failed: unknown';
+      for (let attempt = 0; attempt <= retryWaitsMs.length; attempt++) {
+        let retry = true;
+        try {
+          const res = await fetchImpl(`${url}/api/runs`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
+            body,
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (res.status === 200 || res.status === 201) return 'sent';
+          result = `failed: ${res.status}`;
+          retry = res.status >= 500;
+        } catch (e) {
+          result = `failed: ${shortError(e)}`;
+        }
+        if (!retry || attempt === retryWaitsMs.length) break;
+        await sleep(retryWaitsMs[attempt]);
+      }
+      return fail(result);
+    },
+  };
+}
+
+// Dashboard failure never changes a command result, so a throwing sender is folded into the field.
+async function sendEvent(d, ev) {
+  try {
+    return await d.dashboard.post(ev);
+  } catch (e) {
+    const result = `failed: ${shortError(e)}`;
+    console.error(`pick-up: dashboard ${ev.event} for ${ev.repo}#${ev.issue_number} ${result}`);
+    return result;
+  }
+}
+
 export function makeDeps(env = process.env) {
   return {
     stateDir: env.FACTORY_HOME || join(homedir(), '.factory'),
     gh: makeGh(),
+    dashboard: makeDashboard({ env }),
     now: () => Date.now(),
   };
 }
@@ -225,11 +335,12 @@ export function cmdList(d, { repos }) {
   };
 }
 
-function handleStale(d, runId, dryRun) {
+async function handleStale(d, dryRun) {
   const stale = [];
   for (const { dir, claim } of readClaims(d)) {
     if (!isStale(claim.claimed_at, d.now())) continue;
-    stale.push({ repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at });
+    const entry = { repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at };
+    stale.push(entry);
     if (dryRun) continue;
     ignoreFailure(() => d.gh.removeLabel(claim.repo, claim.issue, RUNNING));
     d.gh.ensureLabel(claim.repo, FAILED);
@@ -240,13 +351,18 @@ function handleStale(d, runId, dryRun) {
       `Factory run ${claim.run_id} claimed this issue at ${claim.claimed_at} and did not release it within 4 hours. Marked factory-failed. Remove the label to retry.`
     );
     rmSync(dir, { recursive: true, force: true });
+    if (claim.run_id) {
+      entry.dashboard = await sendEvent(d, {
+        run_id: claim.run_id, repo: claim.repo, issue_number: claim.issue, event: 'expired', occurred_at: iso(d),
+      });
+    }
   }
   return stale;
 }
 
-export function cmdClaim(d, { repos, runId, only, dryRun }) {
+export async function cmdClaim(d, { repos, runId, only, dryRun }) {
   if (!only && !existsSync(join(d.stateDir, 'armed'))) return { status: 'not_armed' };
-  const stale = handleStale(d, runId, dryRun);
+  const stale = await handleStale(d, dryRun);
 
   let rows;
   if (only) {
@@ -287,6 +403,11 @@ export function cmdClaim(d, { repos, runId, only, dryRun }) {
       rmSync(dir, { recursive: true, force: true });
       throw err;
     }
+    const dashboard = dryRun
+      ? 'skipped: dry run'
+      : await sendEvent(d, {
+          run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, occurred_at: claimedAt,
+        });
     return {
       status: 'claimed',
       repo: e.repo,
@@ -295,13 +416,14 @@ export function cmdClaim(d, { repos, runId, only, dryRun }) {
       action,
       run_id: runId,
       dry_run: dryRun,
+      dashboard,
       stale,
     };
   }
   return { status: 'none', stale };
 }
 
-export function cmdRelease(d, { repo, issue, runId }) {
+export async function cmdRelease(d, { repo, issue, runId }) {
   const dir = lockPath(d, repo, issue);
   if (!existsSync(dir)) return { status: 'not_claimed' };
   let claim;
@@ -312,9 +434,13 @@ export function cmdRelease(d, { repo, issue, runId }) {
   }
   if (claim.run_id !== runId) return { status: 'not_owner' };
   ignoreFailure(() => d.gh.removeLabel(repo, issue, RUNNING));
-  d.gh.comment(repo, issue, `Released by factory run ${runId} at ${iso(d)}.`);
+  const releasedAt = iso(d);
+  d.gh.comment(repo, issue, `Released by factory run ${runId} at ${releasedAt}.`);
   rmSync(dir, { recursive: true, force: true });
-  return { status: 'released', repo, issue };
+  const dashboard = await sendEvent(d, {
+    run_id: runId, repo, issue_number: issue, event: 'released', occurred_at: releasedAt,
+  });
+  return { status: 'released', repo, issue, dashboard };
 }
 
 // ---------- CLI ----------
@@ -364,16 +490,16 @@ export function parseArgs(argv) {
   return o;
 }
 
-export function main(argv, d = makeDeps()) {
+export async function main(argv, d = makeDeps()) {
   const o = parseArgs(argv);
   if (o.cmd === 'list') return cmdList(d, o);
-  if (o.cmd === 'claim') return cmdClaim(d, o);
-  return cmdRelease(d, { repo: o.repos[0], issue: o.issue, runId: o.runId });
+  if (o.cmd === 'claim') return await cmdClaim(d, o);
+  return await cmdRelease(d, { repo: o.repos[0], issue: o.issue, runId: o.runId });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
-    console.log(JSON.stringify(main(process.argv.slice(2))));
+    console.log(JSON.stringify(await main(process.argv.slice(2))));
   } catch (e) {
     if (e instanceof UsageError) {
       console.error(`usage error: ${e.message}`);
