@@ -5,8 +5,8 @@ Usage: python3 bootstrap.py --name "Sample Product" --slug sample-product --pitc
            --modules Billing,Catalog --stack laravel --root ~/Code [--brain-template PATH_OR_URL] \\
            [--pack PATH_OR_URL] [--date YYYY-MM-DD] [--dry-run]
 
-Creates <root>/<slug>-docs and <root>/<slug>, then proves the repo's .factory/recipe.yml from a
-clean clone. Local only: it never creates a GitHub repository and never pushes.
+Creates <root>/<slug>-docs and <root>/<slug>, writes and commits the repo's .factory/playbook.md,
+then proves the repo's .factory/recipe.yml from a clean clone. Local only: it never creates a GitHub repository and never pushes.
 Exit code: 0 when everything passed, 1 when a step failed, 2 on bad input.
 """
 import argparse, datetime, json, os, re, shutil, subprocess, sys, tempfile
@@ -91,6 +91,17 @@ def setup_event_model(brain, name):
     run([sys.executable, wb, "--product", dest, "plan"], what="event-model plan")  # writes .wb/ (gitignored); boards without a URL are skipped
 
 
+def write_playbook(repo):
+    """Write .factory/playbook.md with factory-onboard's script, check its six sections, commit it."""
+    script = sibling_or_installed("factory-onboard", os.path.join("scripts", "write-playbook.py"))
+    p = run([sys.executable, script, repo], what="write-playbook.py")
+    run([sys.executable, script, repo, "--check"], what="write-playbook.py --check")
+    run(["git", "add", ".factory/playbook.md"], cwd=repo)
+    if run(["git", "status", "--porcelain", "--", ".factory/playbook.md"], cwd=repo).stdout.strip():
+        run(["git", "commit", "-q", "-m", "Add the factory project file"], cwd=repo)
+    return json.loads(p.stdout)
+
+
 def prove(repo, out):
     script = sibling_or_installed("factory-onboard", os.path.join("scripts", "prove-recipe.py"))
     p = subprocess.run([sys.executable, script, repo, "--out", out], capture_output=True, text=True)
@@ -165,7 +176,11 @@ def main(argv=None):
         run(cmd, what="new-repo.py")
         report["steps"].append("repo created")
 
-        # 4. prove the repo's recipe from a clean clone
+        # 4. the factory project file, committed before the recipe proof
+        report["playbook"] = write_playbook(repo)
+        report["steps"].append("playbook written, checked and committed")
+
+        # 5. prove the repo's recipe from a clean clone
         code, evidence = prove(repo, os.path.join(tmp, "evidence.json"))
         report["evidence"] = evidence
         if code != 0:
@@ -174,8 +189,8 @@ def main(argv=None):
         report["passed"] = True
         report["next"] = ("Local only, nothing pushed. Ask the user, then create the private GitHub repos "
                           f"{args.slug}-docs and {args.slug} with gh and push. "
-                          + ("Dry run: the recipe stays committed locally." if args.dry_run
-                             else "Run factory-onboard on the repo to confirm the recipe and open its PR."))
+                          + ("Dry run: the recipe and the playbook stay committed locally." if args.dry_run
+                             else "Run factory-onboard on the repo to confirm the recipe and the playbook and open their PR."))
     except Fail as e:
         report["error"] = str(e)
     finally:

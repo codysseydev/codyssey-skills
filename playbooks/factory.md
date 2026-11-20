@@ -44,7 +44,7 @@ Each repo the factory works in keeps `.factory/playbook.md` with that project's 
 - `## Cleanup`: what archive removes.
 - `## Notes`: anything else run-specific.
 
-If a repo has none, report `waiting` with reason `question` asking for it (unattended) or ask (interactive). A PR that changes a check command or the local setup updates that file in the same change.
+If a repo has none, report `waiting` with reason `question` asking for it (unattended) or ask (interactive); `factory-onboard` writes a starter. A PR that changes a check command or the local setup updates that file in the same change.
 
 #### The five stops
 
