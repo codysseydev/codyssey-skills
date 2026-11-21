@@ -415,7 +415,11 @@ async function handleStale(d, repos, dryRun) {
         d.gh.addLabel(entry.repo, entry.issue, FAILED);
         d.gh.comment(entry.repo, entry.issue, body);
       } catch (err) {
-        renameSync(taken, join(locksDir(d), name)); // the next tick retries, as before the take
+        try {
+          renameSync(taken, join(locksDir(d), name)); // the next tick retries, as before the take
+        } catch {
+          /* another claim relocked the issue; keep its lock */
+        }
         throw err;
       }
     }

@@ -340,6 +340,18 @@ test('stale: a gh error after the take puts the lock back and throws', async () 
   }
 });
 
+test('stale: a gh error after another claim relocked the issue throws the gh error and keeps that lock', async () => {
+  const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  writeLock(stateDir, R, 4, 'old', ISO0);
+  let fresh;
+  d.gh.addLabel = () => {
+    fresh = readFileSync(join(writeLock(stateDir, R, 4, 'other', new Date(OLD).toISOString()), 'claim.json'), 'utf8');
+    throw new Error('gh down');
+  };
+  await assert.rejects(cmdClaim(d, { repos: [R], runId: 'new', dryRun: false }), /gh down/);
+  assert.equal(readFileSync(join(stateDir, 'locks', lockName(R, 4), 'claim.json'), 'utf8'), fresh);
+});
+
 test('stale: a plain file in locks/ is ignored', async () => {
   const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
   mkdirSync(join(stateDir, 'locks'));
