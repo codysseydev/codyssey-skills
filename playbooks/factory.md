@@ -61,7 +61,7 @@ If a repo has none, report `waiting` with reason `question` asking for it (unatt
 - `factory-failed`: the run gave up, so it does not loop.
 - `factory-running`: a run holds the issue. Set and cleared by `pick-up.mjs`.
 - `needs-pr-read`: the PR waits for the owner's diff read.
-- Create a missing label at pick-up. It is reversible.
+- `pick-up.mjs claim` creates every missing factory label in the claimed repo from `FACTORY_LABELS` and leaves existing labels as they are. `brief-to-backlog` creates `factory` and `needs-decision` with the same values when it files issues.
 - At archive remove `plan-approved` and keep `factory`.
 
 #### Stages
