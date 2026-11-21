@@ -19,8 +19,11 @@ teardown:
 """
 
 
-def make_repo(files):
+def make_repo(files, folder=None):
     d = tempfile.mkdtemp()
+    if folder:
+        d = os.path.join(d, folder)
+        os.makedirs(d)
     git = lambda *a: subprocess.run(["git", *a], cwd=d, check=True, capture_output=True)
     git("init", "-q", "-b", "main")
     for rel, content in files.items():
@@ -116,6 +119,28 @@ class FreshTest(unittest.TestCase):
         repo = make_repo({"README.md": "x"})
         run(repo)
         self.assertEqual(section(read(repo), "Checks"), "None yet.")
+
+    def test_title_uses_origin_repo_name(self):
+        repo = make_repo({"README.md": "x"}, folder="worktree-name")
+        git = lambda *a: subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+        git("remote", "add", "origin", "https://github.com/acme/real-repo.git")
+        run(repo)
+        https = read(repo)
+        git("remote", "set-url", "origin", "git@github.com:acme/real-repo.git")
+        os.remove(os.path.join(repo, ".factory", "playbook.md"))
+        run(repo)
+        for text in (https, read(repo)):
+            self.assertEqual(text.splitlines()[0], "# Factory project file: real-repo")
+            self.assertIn("Holds real-repo's specifics", text)
+
+    def test_title_falls_back_to_folder_name(self):
+        repo = make_repo({"README.md": "x"}, folder="worktree-name")
+        run(repo)
+        self.assertEqual(read(repo).splitlines()[0], "# Factory project file: worktree-name")
+        subprocess.run(["git", "remote", "add", "origin", "/tmp/x/other.git"], cwd=repo, check=True, capture_output=True)
+        os.remove(os.path.join(repo, ".factory", "playbook.md"))
+        run(repo)
+        self.assertEqual(read(repo).splitlines()[0], "# Factory project file: worktree-name")
 
     def test_bad_recipe_is_an_error(self):
         repo = make_repo({".factory/recipe.yml": "version: 1\nbogus: x\n"})
