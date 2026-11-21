@@ -40,10 +40,15 @@ const POST_TIMEOUT_MS = 10_000;
 const RETRY_WAITS_MS = [500, 1000]; // 3 attempts in all, same policy as the report_stage MCP tool
 const RUNNING = 'factory-running';
 const FAILED = 'factory-failed';
-const LABEL_META = {
-  [RUNNING]: { description: 'A factory run holds this issue', color: 'FBCA04' },
-  [FAILED]: { description: 'The factory run gave up on this issue', color: 'D93F0B' },
-};
+export const FACTORY_LABELS = [
+  { name: 'factory', color: '47cbb0', description: '' },
+  { name: RUNNING, color: 'FBCA04', description: 'A factory run holds this issue' },
+  { name: FAILED, color: 'b60205', description: 'Factory: run gave up; see the last comment' },
+  { name: 'needs-plan-approval', color: 'fbca04', description: 'Factory: plan posted on the issue, waiting for the owner' },
+  { name: 'plan-approved', color: '0e8a16', description: 'Factory: owner approved the plan; the build may start' },
+  { name: 'needs-decision', color: 'd93f0b', description: 'Factory: blocked on a question for the owner' },
+  { name: 'needs-pr-read', color: 'FBCA04', description: "Factory: the PR waits for the owner's diff read" },
+];
 
 export class UsageError extends Error {}
 
@@ -150,10 +155,10 @@ export function makeGh(run = defaultRun) {
       return i.pull_request ? null : normalize(i);
     },
     issueState: (repo, n) => JSON.parse(run(['issue', 'view', String(n), '--repo', repo, '--json', 'state'])).state,
-    ensureLabel(repo, name) {
-      const meta = LABEL_META[name] ?? { description: '', color: 'EDEDED' };
+    listLabels: (repo) => JSON.parse(run(['label', 'list', '--repo', repo, '--limit', '1000', '--json', 'name']) || '[]').map((l) => l.name),
+    createLabel(repo, { name, color, description }) {
       try {
-        run(['label', 'create', name, '--repo', repo, '--description', meta.description, '--color', meta.color]);
+        run(['label', 'create', name, '--repo', repo, '--color', color, '--description', description]);
       } catch (e) {
         if (!/already exists/i.test(`${e.stderr ?? ''}${e.message}`)) throw e;
       }
@@ -323,6 +328,17 @@ function takeLock(d, name) {
   return taken;
 }
 
+export function ensureLabels(gh, repo) {
+  const have = new Set(gh.listLabels(repo).map((n) => n.toLowerCase()));
+  const created = [];
+  for (const label of FACTORY_LABELS) {
+    if (have.has(label.name.toLowerCase())) continue;
+    gh.createLabel(repo, label);
+    created.push(label.name);
+  }
+  return created;
+}
+
 function ignoreFailure(fn) {
   try {
     fn();
@@ -411,7 +427,7 @@ async function handleStale(d, repos, dryRun) {
     if (entry.repo) {
       try {
         ignoreFailure(() => d.gh.removeLabel(entry.repo, entry.issue, RUNNING));
-        d.gh.ensureLabel(entry.repo, FAILED);
+        ensureLabels(d.gh, entry.repo);
         d.gh.addLabel(entry.repo, entry.issue, FAILED);
         d.gh.comment(entry.repo, entry.issue, body);
       } catch (err) {
@@ -465,7 +481,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
         join(dir, 'claim.json'),
         JSON.stringify({ repo: e.repo, issue: e.issue.number, action, run_id: runId, claimed_at: claimedAt }, null, 2)
       );
-      d.gh.ensureLabel(e.repo, RUNNING);
+      ensureLabels(d.gh, e.repo);
       d.gh.addLabel(e.repo, e.issue.number, RUNNING);
       d.gh.comment(
         e.repo,

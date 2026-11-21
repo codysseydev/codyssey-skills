@@ -96,7 +96,7 @@ Write the file given to `--dry-run`. The caller may have put its own header (tit
 ## Real mode
 
 1. Check `gh auth status`. Stop if it fails.
-2. For each repo, create the label if missing: `gh label create factory --repo <repo> --description "Picked up by the software factory" --color 0E8A16`. Create `needs-decision` the same way when any issue needs it.
+2. For each repo, create the label if missing: `gh label create factory --repo <repo> --color 47cbb0`. Create `needs-decision` the same way when any issue needs it: `gh label create needs-decision --repo <repo> --color d93f0b --description "Factory: blocked on a question for the owner"`. The values come from `FACTORY_LABELS` in `playbooks/scripts/pick-up.mjs`; `pick-up.mjs claim` creates the rest.
 3. Create issues in dependency order so `Depends on:` holds real numbers. For each: `gh issue create --repo <repo> --title ... --body-file <tmp> --label factory`. Replace draft IDs with the numbers `gh` returned before creating dependents. Paired issues in one feature get each other's number after both exist (`gh issue edit`).
 4. Write the issue numbers back into the brief next to each feature ID: `F1.2 (api #14, web #15)`.
 5. Write the brain's `Phases/Backlog.md`. The brain is the vault that holds the brief, normally `Product/Brief.md`, so the note is at `<brain root>/Phases/Backlog.md`. If the brief is not inside a brain (no `Phases/` folder next to its `Product/` folder), skip this step and say so in the Return. Rewrite the whole note on each run:
