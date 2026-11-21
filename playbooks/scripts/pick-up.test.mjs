@@ -505,6 +505,11 @@ test('ensureLabels returns the created names and creates nothing when all exist'
   assert.deepEqual(ensureLabels(d.gh, R), []);
 });
 
+test('ensureLabels on a factory-only repo returns the other six names in table order', () => {
+  const { d } = fake({ labels: FACTORY_ONLY });
+  assert.deepEqual(ensureLabels(d.gh, R), FACTORY_LABELS.slice(1).map((l) => l.name));
+});
+
 test('makeGh lists and creates labels with the expected gh arguments', () => {
   const seen = [];
   const gh = makeGh((args) => {
@@ -526,8 +531,12 @@ test('makeGh createLabel ignores an already-exists error and throws any other', 
   assert.throws(() => failing('HTTP 403: forbidden').createLabel(R, FACTORY_LABELS[0]), /exit 1/);
 });
 
-test('brief-to-backlog creates factory and needs-decision with the table values', () => {
-  const skill = readFileSync(fileURLToPath(new URL('../../factory/brief-to-backlog/SKILL.md', import.meta.url)), 'utf8');
+const SKILL_PATH = fileURLToPath(new URL('../../factory/brief-to-backlog/SKILL.md', import.meta.url));
+
+test('brief-to-backlog creates factory and needs-decision with the table values', {
+  skip: existsSync(SKILL_PATH) ? false : `${SKILL_PATH} not found (installed copy)`,
+}, () => {
+  const skill = readFileSync(SKILL_PATH, 'utf8');
   const lines = skill.match(/`gh label create [^`]+`/g) ?? [];
   for (const name of ['factory', 'needs-decision']) {
     const line = lines.find((l) => l.includes(`gh label create ${name} `));
