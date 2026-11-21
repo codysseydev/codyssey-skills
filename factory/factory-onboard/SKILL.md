@@ -56,7 +56,7 @@ An existing playbook is kept. The script never rewrites its text. It appends any
 
 ## Steps
 
-1. Read the repo's workflow files (`.github/workflows/`, `.gitlab-ci.yml`, or the equivalent) as a list of gate commands, `README`, `composer.json` or `package.json` scripts, `Makefile`, and any `CONTRIBUTING` or `docs/` setup page. Workflow files are a source of commands only. Never run, trigger or wait for GitHub Actions, and never add a workflow to a repo that has none. The proof in step 8 is the evidence.
+1. Read the repo's `README`, `composer.json` or `package.json` scripts, `Makefile`, any `CONTRIBUTING` or `docs/` setup page, and its workflow files (`.github/workflows/`, `.gitlab-ci.yml`, or the equivalent). Workflow files are a source of gate commands only. Never run, trigger or wait for GitHub Actions, and never add a workflow to a repo that has none. The proof in step 8 is the evidence.
 2. If `.factory/recipe.yml` exists, keep every step that still matches the documented gates (workflow files, scripts, docs). Change only what drifted.
 3. Setup steps install dependencies and prepare the app the way a new developer would on a clean machine: copy the env file, install, generate keys, migrate, build assets.
 4. Checks are the commands the repo uses to decide a change is good: tests, static analysis, architecture rules, formatting. Copy them from the workflow files, scripts and docs, do not invent new ones. One check per command, so a failure names the check.
@@ -76,7 +76,7 @@ Options: `--keep-going`, `--timeout SECONDS` per step (default 1800), `--keep-co
 
 ## Trusted commands
 
-The gates depend on the recipe, so the recipe is trusted input. A PR that edits `.factory/recipe.yml`, `.factory/playbook.md`, the phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or workflow files can switch off a gate, so a human reads it carefully before merge. Say so in the PR description when your change touches any of them.
+The gates depend on the recipe, so the recipe is trusted input. A PR that edits `.factory/recipe.yml`, `.factory/playbook.md`, the phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or workflow files, which list gate commands, can switch off a gate, so a human reads it carefully before merge. Say so in the PR description when your change touches any of them.
 
 ## Return
 
