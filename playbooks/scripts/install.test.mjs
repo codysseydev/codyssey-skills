@@ -7,7 +7,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FACTORY_SKILLS } from './install.mjs';
+import { FACTORY_SKILLS, install, makeDeps } from './install.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'install.mjs');
 const H = 3600 * 1000;
@@ -40,6 +40,7 @@ function commit(wc, files, message) {
 const baseFiles = (v) => [
   ['playbooks/factory.md', `playbook ${v}\n`],
   ['playbooks/scripts/pick-up.mjs', `pick-up ${v}\n`],
+  ['playbooks/scripts/install.mjs', `install ${v}\n`],
   ['playbooks/scripts/run.sh', `#!/bin/sh\necho ${v}\n`, 0o755],
   ...FACTORY_SKILLS.map((name) => [`factory/${name}/SKILL.md`, `${name} ${v}\n`]),
   ['factory/event-model/scripts/check.py', `check ${v}\n`],
@@ -64,8 +65,8 @@ function fixture() {
   const skillsDir = join(root, 'skills');
   const home = join(root, 'home');
   for (const dir of [agentsDir, skillsDir, home]) mkdirSync(dir);
-  const run = (...args) => {
-    const r = spawnSync('node', [SCRIPT, ...args], {
+  const runScript = (script, ...args) => {
+    const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
       env: { ...process.env, FACTORY_HOME: home, FACTORY_AGENTS_DIR: agentsDir, FACTORY_SKILLS_DIR: skillsDir },
     });
@@ -77,7 +78,8 @@ function fixture() {
     }
     return { code: r.status, out, stderr: r.stderr };
   };
-  return { root, bare, seed, source, agentsDir, skillsDir, home, sha1, run };
+  const run = (...args) => runScript(SCRIPT, ...args);
+  return { root, bare, seed, source, agentsDir, skillsDir, home, sha1, run, runScript };
 }
 
 const read = (...p) => readFileSync(join(...p), 'utf8');
@@ -309,5 +311,75 @@ test('usage errors exit 2 and write nothing', () => {
     assert.equal(code, 2, args.join(' '));
     assert.match(stderr, /usage error/);
   }
+  nothingWritten(f);
+});
+
+// install() with a git dep that wraps the real one, for failures the CLI cannot be made to hit.
+function depsWith(f, wrap) {
+  const real = makeDeps({}).git;
+  return {
+    stateDir: f.home,
+    agentsDir: f.agentsDir,
+    skillsDir: f.skillsDir,
+    git: (args) => wrap(args, real),
+    now: () => Date.now(),
+  };
+}
+
+test('a git failure while reading a blob writes nothing', () => {
+  const f = fixture();
+  let reads = 0;
+  const d = depsWith(f, (args, real) => {
+    if (args[2] === 'cat-file' && ++reads === 5) throw new Error('git cat-file failed');
+    return real(args);
+  });
+  assert.throws(() => install(d, { source: f.source, ref: 'HEAD' }), /git cat-file failed/);
+  assert.equal(reads, 5);
+  nothingWritten(f);
+});
+
+test('the installed install.mjs is written last, just before the sha file', () => {
+  const f = fixture();
+  const { out } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.deepEqual(out.changed.slice(-2), [
+    join(f.agentsDir, 'playbooks/scripts/install.mjs'),
+    join(f.agentsDir, 'playbooks/.installed-sha'),
+  ]);
+});
+
+test('running the script through a symlinked folder still installs', () => {
+  const f = fixture();
+  const link = join(f.root, 'linked-scripts');
+  symlinkSync(dirname(SCRIPT), link);
+  const { code, out } = f.runScript(join(link, 'install.mjs'), '--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 0);
+  assert.equal(out.status, 'installed');
+  assert.equal(read(f.agentsDir, 'playbooks/factory.md'), 'playbook v1\n');
+});
+
+test('a folder below a target root that is a symlink out exits 1 and writes nothing', () => {
+  const f = fixture();
+  const outside = join(f.root, 'outside');
+  mkdirSync(outside);
+  mkdirSync(join(f.agentsDir, 'playbooks'));
+  symlinkSync(outside, join(f.agentsDir, 'playbooks/scripts'));
+  const { code, stderr } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 1);
+  assert.match(stderr, /symlink/);
+  assert.deepEqual(listFiles(outside), []);
+  assert.deepEqual(listFiles(f.agentsDir), ['playbooks/scripts'], 'only the pre-made link');
+  assert.deepEqual(listFiles(f.skillsDir), []);
+});
+
+test('a lock that appears during the fetch refuses and writes nothing', () => {
+  const f = fixture();
+  const d = depsWith(f, (args, real) => {
+    const out = real(args);
+    if (args[2] === 'fetch') writeLock(f.home, 'o-r-1', Date.now());
+    return out;
+  });
+  const result = install(d, { source: f.source });
+  assert.equal(result.status, 'refused');
+  assert.deepEqual(result.locks, [join(f.home, 'locks', 'o-r-1')]);
   nothingWritten(f);
 });

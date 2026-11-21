@@ -19,15 +19,16 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
-  chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
 export const DEFAULT_REF = 'origin/main';
+const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 
 // The only place the install list lives: a path prefix in the commit -> its folder on disk.
 export function installMap({ agentsDir, skillsDir }) {
@@ -69,12 +70,32 @@ export function liveLocks(d) {
     .map((name) => join(locksDir(d), name));
 }
 
+// The real path of a path that may not exist yet: the nearest existing ancestor, resolved, plus the rest.
+function realPathOfNearest(path) {
+  const rest = [];
+  let cur = path;
+  while (!lstatSync(cur, { throwIfNoEntry: false })) {
+    const parent = dirname(cur);
+    if (parent === cur) return path;
+    rest.unshift(basename(cur));
+    cur = parent;
+  }
+  return join(realpathSync(cur), ...rest);
+}
+
+const isInside = (root, path) => {
+  const rel = relative(root, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+};
+
 // [{src, dest, mode, blob}] for every file of the commit that the map installs.
 export function planInstall(d, { source, sha }) {
   const map = installMap(d);
   for (const { dir } of map) {
     if (lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`${dir} is a symlink; refusing to write through it`);
   }
+  const realRoots = new Map(map.map(({ dir }) => [dir, realPathOfNearest(dir)]));
+  const checkedDirs = new Set();
   const listing = d.git(['-C', source, 'ls-tree', '-r', '-z', sha]).toString('utf8');
   const entries = [];
   for (const rec of listing.split('\0')) {
@@ -87,7 +108,15 @@ export function planInstall(d, { source, sha }) {
     if (type !== 'blob' || (mode !== '100644' && mode !== '100755')) {
       throw new Error(`${src} is a ${type} with mode ${mode}; only regular files install`);
     }
-    entries.push({ src, dest: join(target.dir, src.slice(target.prefix.length)), mode, blob });
+    const dest = join(target.dir, src.slice(target.prefix.length));
+    const destDir = dirname(dest);
+    if (!checkedDirs.has(destDir)) {
+      if (!isInside(realRoots.get(target.dir), realPathOfNearest(destDir))) {
+        throw new Error(`${destDir} resolves outside ${target.dir} through a symlink; refusing to write through it`);
+      }
+      checkedDirs.add(destDir);
+    }
+    entries.push({ src, dest, mode, blob });
   }
   if (!entries.length) throw new Error(`${sha} has no playbooks/ or factory skill files to install`);
   return entries;
@@ -128,9 +157,14 @@ export function install(d, { source, ref }) {
   const second = refusal();
   if (second) return second;
   const entries = planInstall(d, { source, sha });
+  // Every blob is read before the first write, so a git failure leaves the install untouched.
+  // install.mjs is written after every other file: the new one imports exports that only the new
+  // pick-up.mjs has, so a failure between the two writes must not leave a new installer on old scripts.
+  const items = entries
+    .map((e) => ({ e, bytes: d.git(['-C', source, 'cat-file', 'blob', e.blob]) }))
+    .sort((a, b) => (a.e.src === INSTALLER_SRC) - (b.e.src === INSTALLER_SRC));
   const changed = [];
-  for (const e of entries) {
-    const bytes = d.git(['-C', source, 'cat-file', 'blob', e.blob]);
+  for (const { e, bytes } of items) {
     if (syncFile(e.dest, bytes, e.mode === '100755')) changed.push(e.dest);
   }
   if (syncFile(shaFile(d), Buffer.from(`${sha}\n`), false)) changed.push(shaFile(d));
@@ -161,7 +195,8 @@ export function main(argv, d = makeDeps()) {
   return install(d, parseArgs(argv));
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// argv[1] may be a symlink; import.meta.url is already the real path.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   try {
     const result = main(process.argv.slice(2));
     console.log(JSON.stringify(result));
