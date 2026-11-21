@@ -11,6 +11,7 @@ import {
 const R = 'o/r';
 const T0 = Date.parse('2026-01-01T12:00:00Z');
 const H = 3600 * 1000;
+const ISO0 = new Date(T0).toISOString();
 
 function issue(number, labels = ['factory'], extra = {}) {
   return {
@@ -220,32 +221,32 @@ test('dry-run lists stale locks and changes nothing on stale issues', async () =
 // ---------- unreadable and contested stale locks ----------
 
 const OLD = T0 + 4 * H + 1000;
-const ISO_T0 = new Date(T0).toISOString();
 const GH_WRITES = ['ensureLabel', 'addLabel', 'removeLabel', 'comment'];
 const unreadableComment = (reason) =>
-  `A factory run left an unreadable lock on this issue (${reason}), last changed at ${ISO_T0}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
+  `A factory run left an unreadable lock on this issue (${reason}), last changed at ${ISO0}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
 
 test('stale: an old lock folder with no claim.json is removed and listed', async () => {
   const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
   const dir = rawLock(stateDir, lockName(R, 4), undefined, T0);
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
-  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO0 }]);
   assert.equal(existsSync(dir), false);
   assert.deepEqual(readdirSync(join(stateDir, 'expired')), []);
 });
 
-for (const [what, content, reason] of [
-  ['unparseable claim.json', '{not json', 'claim.json does not parse'],
-  ['claimed_at is not a date', JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: 'yesterday' }), 'claimed_at is not a date'],
+for (const [name, content, reason] of [
+  ['stale: an old lock with unparseable claim.json is removed and listed', '{not json', 'claim.json does not parse'],
+  [
+    'stale: an old lock whose claimed_at is not a date is removed and listed',
+    JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: 'yesterday' }),
+    'claimed_at is not a date',
+  ],
 ]) {
-  const name = what === 'unparseable claim.json'
-    ? 'stale: an old lock with unparseable claim.json is removed and listed'
-    : 'stale: an old lock whose claimed_at is not a date is removed and listed';
   test(name, async () => {
     const { d, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
     const dir = rawLock(stateDir, lockName(R, 4), content, T0);
     const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
-    assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason, changed_at: ISO_T0 }]);
+    assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason, changed_at: ISO0 }]);
     assert.equal(existsSync(dir), false);
     assert.deepEqual(events, []);
   });
@@ -279,7 +280,7 @@ test('stale: an unreadable lock matching no --repo is listed by folder only with
   const { d, calls, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
   const dir = rawLock(stateDir, 'other-repo-7', undefined, T0);
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
-  assert.deepEqual(out.stale, [{ lock: 'other-repo-7', reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.deepEqual(out.stale, [{ lock: 'other-repo-7', reason: 'no claim.json', changed_at: ISO0 }]);
   assert.equal(existsSync(dir), false);
   assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
 });
@@ -288,7 +289,7 @@ test('stale: a folder name matching two --repo values is treated as no match', a
   const { d, calls, stateDir } = fake({ nowMs: OLD });
   const dir = rawLock(stateDir, 'a-b-c-5', undefined, T0);
   const out = await cmdClaim(d, { repos: ['a/b-c', 'a-b/c'], runId: 'new', dryRun: false });
-  assert.deepEqual(out.stale, [{ lock: 'a-b-c-5', reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.deepEqual(out.stale, [{ lock: 'a-b-c-5', reason: 'no claim.json', changed_at: ISO0 }]);
   assert.equal(existsSync(dir), false);
   assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
 });
@@ -297,7 +298,7 @@ test('dry-run lists a stale unreadable lock and changes nothing', async () => {
   const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
   const dir = rawLock(stateDir, lockName(R, 4), undefined, T0);
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: true });
-  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO0 }]);
   assert.equal(existsSync(dir), true);
   assert.equal(existsSync(join(stateDir, 'expired')), false);
   assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
@@ -306,7 +307,7 @@ test('dry-run lists a stale unreadable lock and changes nothing', async () => {
 
 test('stale: two claims sweeping one lock comment, label and post once', async () => {
   const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
-  writeLock(stateDir, R, 4, 'old', ISO_T0);
+  writeLock(stateDir, R, 4, 'old', ISO0);
   // Claim B starts inside claim A's first clock read: after A read the lock, before A takes it.
   const dB = { ...d };
   let claimB;
@@ -323,7 +324,7 @@ test('stale: two claims sweeping one lock comment, label and post once', async (
 });
 
 test('stale: a gh error after the take puts the lock back and throws', async () => {
-  for (const content of [JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: ISO_T0 }), undefined]) {
+  for (const content of [JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: ISO0 }), undefined]) {
     const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
     const dir = rawLock(stateDir, lockName(R, 4), content, T0);
     const addLabel = d.gh.addLabel;
@@ -398,8 +399,6 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
 });
 
 // ---------- dashboard events ----------
-
-const ISO0 = new Date(T0).toISOString();
 
 test('claim posts claimed with the claim.json time and action, and reports sent', async () => {
   const { d, events, stateDir } = fake({ issues: { [R]: [issue(3, ['factory', 'plan-approved'])] } });
