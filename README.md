@@ -96,7 +96,8 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   here. Each repo keeps them at `.factory/playbook.md`, and `factory.md` reads that file at
   pick-up.
 - `scripts/pick-up.mjs`: `claim`, `release` and `list` for the Desktop scheduled task. A
-  claim creates a lock dir in `~/.factory/locks/` and labels the issue `factory-running`.
+  claim creates a lock dir in `~/.factory/locks/`, creates any missing factory labels in the
+  repo, and labels the issue `factory-running`.
   `claim` does nothing unless the arm file `~/.factory/armed` exists.
 - `scripts/send-stage.mjs`: the fallback for reporting a stage to the factory dashboard
   when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the

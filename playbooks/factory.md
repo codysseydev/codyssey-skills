@@ -24,9 +24,9 @@ A Claude Desktop scheduled task `factory-pickup` runs hourly in Auto permission 
 - Claim is the atomic lock dir in `~/.factory/locks/` plus the `factory-running` label and one comment.
 - Claim, release and the stale sweep post run events (`claimed`, `released`, `expired`) to the dashboard's `/api/runs` themselves (URL from `FACTORY_DASHBOARD_URL`, token from `FACTORY_INGEST_TOKEN` or the `codyssey-factory-ingest` Keychain item). The dashboard's /runs page shows a run as running from claim until release. The session does not report these and must still run `release` with the same run id.
 - A run works the one issue it claimed, starting at the action the script returns (`plan`, `implement`, `archive`), until the next stop or the end. Then it runs `pick-up.mjs release` with the same run id, also when it fails or gives up.
-- One run at a time: Desktop skips a tick while another scheduled run is still going.
+- Runs on different issues may run at the same time. The per-issue lock in `~/.factory/locks/` is the only guard. It is enough because the lock stops two runs from taking the same issue, and each run works in its own worktree and branch. Desktop skipping its own next tick while a scheduled run is going is scheduling, not a guard. A hand-started run (`claim --only`) can run next to a scheduled one.
 - The Mac asleep: the tick is skipped and Desktop starts one catch-up run on wake, only while the app is open.
-- A lock older than 4 hours is a crashed run: the next tick marks the issue `factory-failed` and the session reports `failed` for each `stale` entry. `factory-failed` issues are skipped until the owner removes the label. The next tick then starts attempt 2 as stage 5 describes.
+- A lock older than 4 hours is a crashed run: the next tick marks the issue `factory-failed`. A lock whose `claim.json` is missing, cannot be read, does not parse or has no valid `claimed_at` is stale when its folder is more than 4 hours old. The session reports `failed` for each `stale` entry that names `repo` and `issue`. An entry with only `lock` goes in the final message. `factory-failed` issues are skipped until the owner removes the label. The next tick then starts attempt 2 as stage 5 describes.
 - Docker: only implement and gates need it. When it is down, check `docker context show`. When it is `orbstack`, run `orb start` (OrbStack); otherwise run `open -a Docker` (Docker Desktop). Then wait up to 3 minutes. If still down, release the claim, change no labels, report nothing, and leave it for the next tick.
 
 #### Before the run
@@ -61,7 +61,7 @@ If a repo has none, report `waiting` with reason `question` asking for it (unatt
 - `factory-failed`: the run gave up, so it does not loop.
 - `factory-running`: a run holds the issue. Set and cleared by `pick-up.mjs`.
 - `needs-pr-read`: the PR waits for the owner's diff read.
-- Create a missing label at pick-up. It is reversible.
+- `pick-up.mjs` creates every missing factory label from `FACTORY_LABELS` in a repo before it adds a label there, at claim and at the stale sweep, and leaves existing labels as they are. `brief-to-backlog` creates `factory` when it files issues, and `needs-decision` when any issue needs it, with the same values.
 - At archive remove `plan-approved` and keep `factory`.
 
 #### Stages

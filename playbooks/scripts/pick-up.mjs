@@ -6,8 +6,9 @@
 //   node pick-up.mjs claim   --repo <owner/name> [--repo ...] --run-id <id> [--only <owner/name#n>] [--dry-run]
 //   node pick-up.mjs release --repo <owner/name> --issue <n> --run-id <id>
 //
-// State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file) and
-// `locks/<owner>-<repo>-<issue>/claim.json`. One JSON object on stdout, errors on stderr.
+// State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file),
+// `locks/<owner>-<repo>-<issue>/claim.json`, and `expired/`, where the stale sweep moves a lock
+// before it handles it. One JSON object on stdout, errors on stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
 //
 // claim, release and the stale sweep also POST run events (claimed, released, expired) to the
@@ -16,7 +17,10 @@
 // failure never changes the command result: it shows up as the `dashboard` field and one
 // stderr line.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,10 +40,15 @@ const POST_TIMEOUT_MS = 10_000;
 const RETRY_WAITS_MS = [500, 1000]; // 3 attempts in all, same policy as the report_stage MCP tool
 const RUNNING = 'factory-running';
 const FAILED = 'factory-failed';
-const LABEL_META = {
-  [RUNNING]: { description: 'A factory run holds this issue', color: 'FBCA04' },
-  [FAILED]: { description: 'The factory run gave up on this issue', color: 'D93F0B' },
-};
+export const FACTORY_LABELS = [
+  { name: 'factory', color: '47cbb0', description: '' },
+  { name: RUNNING, color: 'FBCA04', description: 'A factory run holds this issue' },
+  { name: FAILED, color: 'b60205', description: 'Factory: run gave up; see the last comment' },
+  { name: 'needs-plan-approval', color: 'fbca04', description: 'Factory: plan posted on the issue, waiting for the owner' },
+  { name: 'plan-approved', color: '0e8a16', description: 'Factory: owner approved the plan; the build may start' },
+  { name: 'needs-decision', color: 'd93f0b', description: 'Factory: blocked on a question for the owner' },
+  { name: 'needs-pr-read', color: 'FBCA04', description: "Factory: the PR waits for the owner's diff read" },
+];
 
 export class UsageError extends Error {}
 
@@ -63,6 +72,18 @@ export function parseDependsOn(body, repo) {
 
 export function lockName(repo, issue) {
   return `${repo.replace('/', '-')}-${issue}`;
+}
+
+// Lock folder name -> {repo, issue} when exactly one repo's lockName prefix fits, else undefined.
+// Names cannot be split back on their own, because owner and repo names contain hyphens.
+export function matchLockName(name, repos) {
+  const hits = [];
+  for (const repo of new Set(repos)) {
+    const prefix = `${repo.replace('/', '-')}-`;
+    const rest = name.slice(prefix.length);
+    if (name.startsWith(prefix) && /^\d+$/.test(rest)) hits.push({ repo, issue: Number(rest) });
+  }
+  return hits.length === 1 ? hits[0] : undefined;
 }
 
 // Strictly older than 4 hours. Exactly 4 hours is not stale.
@@ -134,10 +155,10 @@ export function makeGh(run = defaultRun) {
       return i.pull_request ? null : normalize(i);
     },
     issueState: (repo, n) => JSON.parse(run(['issue', 'view', String(n), '--repo', repo, '--json', 'state'])).state,
-    ensureLabel(repo, name) {
-      const meta = LABEL_META[name] ?? { description: '', color: 'EDEDED' };
+    listLabels: (repo) => JSON.parse(run(['label', 'list', '--repo', repo, '--limit', '1000', '--json', 'name']) || '[]').map((l) => l.name),
+    createLabel(repo, { name, color, description }) {
       try {
-        run(['label', 'create', name, '--repo', repo, '--description', meta.description, '--color', meta.color]);
+        run(['label', 'create', name, '--repo', repo, '--color', color, '--description', description]);
       } catch (e) {
         if (!/already exists/i.test(`${e.stderr ?? ''}${e.message}`)) throw e;
       }
@@ -264,18 +285,58 @@ const locksDir = (d) => join(d.stateDir, 'locks');
 const lockPath = (d, repo, issue) => join(locksDir(d), lockName(repo, issue));
 const iso = (d) => new Date(d.now()).toISOString();
 
-function readClaims(d) {
-  if (!existsSync(locksDir(d))) return [];
-  const out = [];
-  for (const name of readdirSync(locksDir(d))) {
-    const file = join(locksDir(d), name, 'claim.json');
-    try {
-      out.push({ dir: join(locksDir(d), name), claim: JSON.parse(readFileSync(file, 'utf8')) });
-    } catch {
-      console.error(`pick-up: ignoring unreadable lock ${name}`);
-    }
+// {kind: 'gone'} | {kind: 'unreadable', reason, mtimeMs} | {kind: 'readable', claim}.
+// `gone` is an entry that vanished after the listing or is not a folder.
+function inspectLock(d, name) {
+  const dir = join(locksDir(d), name);
+  let st;
+  try {
+    st = statSync(dir);
+  } catch (e) {
+    if (e.code === 'ENOENT') return { kind: 'gone' };
+    throw e;
   }
-  return out;
+  if (!st.isDirectory()) return { kind: 'gone' };
+  const unreadable = (reason) => ({ kind: 'unreadable', reason, mtimeMs: st.mtimeMs });
+  let text;
+  try {
+    text = readFileSync(join(dir, 'claim.json'), 'utf8');
+  } catch (e) {
+    return unreadable(e.code === 'ENOENT' ? 'no claim.json' : 'claim.json cannot be read');
+  }
+  let claim;
+  try {
+    claim = JSON.parse(text);
+  } catch {
+    return unreadable('claim.json does not parse');
+  }
+  if (Number.isNaN(Date.parse(claim?.claimed_at))) return unreadable('claimed_at is not a date');
+  return { kind: 'readable', claim };
+}
+
+// Moves the lock out of locks/ so only one claim handles it. Undefined when another claim took it first.
+function takeLock(d, name) {
+  const expiredDir = join(d.stateDir, 'expired');
+  mkdirSync(expiredDir, { recursive: true });
+  const taken = join(expiredDir, `${name}.${randomUUID()}`);
+  try {
+    renameSync(join(locksDir(d), name), taken);
+  } catch (e) {
+    if (e.code === 'ENOENT') return undefined;
+    throw e;
+  }
+  return taken;
+}
+
+export function ensureLabels(gh, repo) {
+  const have = new Set(gh.listLabels(repo).map((n) => n.toLowerCase()));
+  const created = [];
+  for (const label of FACTORY_LABELS) {
+    if (have.has(label.name.toLowerCase())) continue;
+    gh.createLabel(repo, label);
+    created.push(label.name);
+  }
+  return created;
 }
 
 function ignoreFailure(fn) {
@@ -335,25 +396,53 @@ export function cmdList(d, { repos }) {
   };
 }
 
-async function handleStale(d, dryRun) {
+// Inspect, staleness check and take run back to back with no await or gh call between them,
+// so two claims sweeping at once handle each lock once.
+async function handleStale(d, repos, dryRun) {
   const stale = [];
-  for (const { dir, claim } of readClaims(d)) {
-    if (!isStale(claim.claimed_at, d.now())) continue;
-    const entry = { repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at };
+  if (!existsSync(locksDir(d))) return stale;
+  for (const name of readdirSync(locksDir(d))) {
+    const lock = inspectLock(d, name);
+    if (lock.kind === 'gone') continue;
+    let entry;
+    let body;
+    if (lock.kind === 'readable') {
+      const { claim } = lock;
+      if (!isStale(claim.claimed_at, d.now())) continue;
+      entry = { lock: name, repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at };
+      body = `Factory run ${claim.run_id} claimed this issue at ${claim.claimed_at} and did not release it within 4 hours. Marked factory-failed. Remove the label to retry.`;
+    } else {
+      if (d.now() - lock.mtimeMs <= STALE_MS) continue;
+      const changedAt = new Date(lock.mtimeMs).toISOString();
+      entry = { lock: name, ...matchLockName(name, repos), reason: lock.reason, changed_at: changedAt };
+      body = `A factory run left an unreadable lock on this issue (${lock.reason}), last changed at ${changedAt}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
+    }
+    if (dryRun) {
+      stale.push(entry);
+      continue;
+    }
+    const taken = takeLock(d, name);
+    if (!taken) continue;
     stale.push(entry);
-    if (dryRun) continue;
-    ignoreFailure(() => d.gh.removeLabel(claim.repo, claim.issue, RUNNING));
-    d.gh.ensureLabel(claim.repo, FAILED);
-    d.gh.addLabel(claim.repo, claim.issue, FAILED);
-    d.gh.comment(
-      claim.repo,
-      claim.issue,
-      `Factory run ${claim.run_id} claimed this issue at ${claim.claimed_at} and did not release it within 4 hours. Marked factory-failed. Remove the label to retry.`
-    );
-    rmSync(dir, { recursive: true, force: true });
-    if (claim.run_id) {
+    if (entry.repo) {
+      try {
+        ignoreFailure(() => d.gh.removeLabel(entry.repo, entry.issue, RUNNING));
+        ensureLabels(d.gh, entry.repo);
+        d.gh.addLabel(entry.repo, entry.issue, FAILED);
+        d.gh.comment(entry.repo, entry.issue, body);
+      } catch (err) {
+        try {
+          renameSync(taken, join(locksDir(d), name)); // the next tick retries, as before the take
+        } catch {
+          /* another claim relocked the issue; keep its lock */
+        }
+        throw err;
+      }
+    }
+    rmSync(taken, { recursive: true, force: true });
+    if (entry.run_id) {
       entry.dashboard = await sendEvent(d, {
-        run_id: claim.run_id, repo: claim.repo, issue_number: claim.issue, event: 'expired', occurred_at: iso(d),
+        run_id: entry.run_id, repo: entry.repo, issue_number: entry.issue, event: 'expired', occurred_at: iso(d),
       });
     }
   }
@@ -362,7 +451,7 @@ async function handleStale(d, dryRun) {
 
 export async function cmdClaim(d, { repos, runId, only, dryRun }) {
   if (!only && !existsSync(join(d.stateDir, 'armed'))) return { status: 'not_armed' };
-  const stale = await handleStale(d, dryRun);
+  const stale = await handleStale(d, repos, dryRun);
 
   let rows;
   if (only) {
@@ -392,7 +481,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
         join(dir, 'claim.json'),
         JSON.stringify({ repo: e.repo, issue: e.issue.number, action, run_id: runId, claimed_at: claimedAt }, null, 2)
       );
-      d.gh.ensureLabel(e.repo, RUNNING);
+      ensureLabels(d.gh, e.repo);
       d.gh.addLabel(e.repo, e.issue.number, RUNNING);
       d.gh.comment(
         e.repo,
