@@ -39,6 +39,7 @@ BUILTINS = {
 ROOT_ONLY = {"npm": {"test", "start", "stop", "restart"}}
 TOKEN_RE = re.compile(r"`([^`\n]+)`")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
+REMOTE_RE = re.compile(r"^(?:(?:https?|ssh|git)://[^/]+/|[\w.-]+@[\w.-]+:)(?:[^/]+/)+([^/]+?)/?$")
 H2_RE = re.compile(r"^##\s+(.*?)\s*$")
 
 
@@ -168,7 +169,7 @@ def section_body(name, repo, recipe):
 
 
 def starter(repo, recipe):
-    name = os.path.basename(os.path.abspath(repo))
+    name = repo_name(repo)
     out = [f"# Factory project file: {name}", "",
            f"Holds {name}'s specifics for the factory playbook in codysseydev/codyssey-skills "
            "(playbooks/factory.md). `factory-onboard` wrote the first version from the repo. "
@@ -205,6 +206,17 @@ def add_missing(text):
 
 def git_ok(repo, *args):
     return subprocess.run(["git", *args], cwd=repo, capture_output=True).returncode == 0
+
+
+def repo_name(repo):
+    """The repo name from the origin URL, else the folder name. A worktree folder has its own name."""
+    folder = os.path.basename(os.path.abspath(repo))
+    try:
+        p = subprocess.run(["git", "remote", "get-url", "origin"], cwd=repo, capture_output=True, text=True)
+    except OSError:
+        return folder
+    m = p.returncode == 0 and REMOTE_RE.match(p.stdout.strip())
+    return (m and m.group(1).removesuffix(".git")) or folder
 
 
 def path_exists(repo, token):
