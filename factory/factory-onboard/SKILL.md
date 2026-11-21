@@ -39,7 +39,7 @@ The Laravel pack writes this file for a fresh repo. For any other repo, write it
 
 ## The project file
 
-`.factory/playbook.md` has a `# Factory project file: <repo>` title, a one-paragraph intro, and six `## ` sections in this order. The meanings are in `playbooks/factory.md` under "Project file".
+`.factory/playbook.md` has a `# Factory project file: <repo>` title, a one-paragraph intro, and six `## ` sections in this order. `<repo>` is the repo name from the `origin` URL, or the folder name when `origin` is missing or is not an `owner/repo` URL. The meanings are in `playbooks/factory.md` under "Project file".
 
 1. `## Checks`: the gates. With a recipe, one line names `.factory/recipe.yml` as the gate source, then only the gates the recipe lacks. Without a recipe, a `| Gate | Command |` table.
 2. `## Review`: the reviewer skill and rule pack, and how to confirm the fan-out ran.
