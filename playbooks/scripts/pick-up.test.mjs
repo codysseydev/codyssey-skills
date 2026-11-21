@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
+  FACTORY_LABELS, ensureLabels, SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
   makeDashboard, resolveDashboardUrl, resolveIngestToken, main,
 } from './pick-up.mjs';
 
@@ -20,7 +21,7 @@ function issue(number, labels = ['factory'], extra = {}) {
   };
 }
 
-function fake({ issues = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
+function fake({ issues = {}, labels = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), 'pickup-'));
   if (armed) writeFileSync(join(stateDir, 'armed'), '');
   const calls = [];
@@ -29,21 +30,27 @@ function fake({ issues = {}, nowMs = T0, armed = true, dashboardResult = 'sent' 
     return fn(...a);
   };
   const all = (repo) => issues[repo] ?? [];
+  const labelState = Object.fromEntries(Object.entries(labels).map(([repo, ls]) => [repo, [...ls]]));
   const gh = {
     listOpen: rec('listOpen', (repo) => all(repo).filter((i) => i.state === 'OPEN')),
     listClosedApproved: rec('listClosedApproved', (repo) =>
       all(repo).filter((i) => i.state === 'CLOSED' && i.labels.some((l) => l.name === 'plan-approved'))),
     getIssue: rec('getIssue', (repo, n) => all(repo).find((i) => i.number === n)),
     issueState: rec('issueState', (repo, n) => all(repo).find((i) => i.number === n)?.state),
-    ensureLabel: rec('ensureLabel', () => {}),
+    listLabels: rec('listLabels', (repo) => (labelState[repo] ?? []).map((l) => l.name)),
+    createLabel: rec('createLabel', (repo, label) => void (labelState[repo] ??= []).push({ ...label })),
     addLabel: rec('addLabel', () => {}),
     removeLabel: rec('removeLabel', () => {}),
     comment: rec('comment', () => {}),
   };
   const events = [];
   const dashboard = { post: async (ev) => (events.push(ev), dashboardResult) };
-  return { d: { stateDir, gh, dashboard, now: () => nowMs }, calls, stateDir, events };
+  return { d: { stateDir, gh, dashboard, now: () => nowMs }, calls, stateDir, events, labelState };
 }
+
+const FACTORY_ONLY = { [R]: [{ name: 'factory', color: '47cbb0', description: '' }] };
+const allLabels = () => ({ [R]: FACTORY_LABELS.map((l) => ({ ...l })) });
+const created = (calls) => calls.filter(([n]) => n === 'createLabel').map(([, , l]) => l.name);
 
 function writeLock(stateDir, repo, n, runId, claimedAt) {
   const dir = join(stateDir, 'locks', lockName(repo, n));
@@ -215,13 +222,13 @@ test('dry-run lists stale locks and changes nothing on stale issues', async () =
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: true });
   assert.equal(out.stale.length, 1);
   assert.equal(existsSync(dir), true);
-  assert.equal(calls.filter(([n]) => ['addLabel', 'removeLabel', 'comment', 'ensureLabel'].includes(n)).length, 0);
+  assert.equal(calls.filter(([n]) => ['createLabel', 'addLabel', 'removeLabel', 'comment'].includes(n)).length, 0);
 });
 
 // ---------- unreadable and contested stale locks ----------
 
 const OLD = T0 + 4 * H + 1000;
-const GH_WRITES = ['ensureLabel', 'addLabel', 'removeLabel', 'comment'];
+const GH_WRITES = ['createLabel', 'addLabel', 'removeLabel', 'comment'];
 const unreadableComment = (reason) =>
   `A factory run left an unreadable lock on this issue (${reason}), last changed at ${ISO0}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
 
@@ -262,14 +269,13 @@ test('stale: a young lock folder with no claim.json is kept and its issue stays 
 });
 
 test('stale: an unreadable lock matching a --repo marks the issue factory-failed', async () => {
-  const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] }, labels: allLabels() });
   rawLock(stateDir, lockName(R, 4), undefined, T0);
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
   assert.equal(out.stale[0].repo, R);
   assert.equal(out.stale[0].issue, 4);
   assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), [
     ['removeLabel', R, 4, 'factory-running'],
-    ['ensureLabel', R, 'factory-failed'],
     ['addLabel', R, 4, 'factory-failed'],
     ['comment', R, 4, unreadableComment('no claim.json')],
   ]);
@@ -408,6 +414,128 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
   assert.equal(out[0].state, 'OPEN');
   assert.equal(out[0].authorAssociation, 'OWNER');
   assert.ok(seen[0].includes('--paginate') && seen[0].includes('--slurp'));
+});
+
+// ---------- factory labels ----------
+
+const OTHER_SIX = FACTORY_LABELS.filter((l) => l.name !== 'factory');
+
+test('FACTORY_LABELS holds seven unique names and factory-failed is b60205', () => {
+  const names = FACTORY_LABELS.map((l) => l.name);
+  assert.equal(names.length, 7);
+  assert.equal(new Set(names.map((n) => n.toLowerCase())).size, 7);
+  assert.equal(FACTORY_LABELS.find((l) => l.name === 'factory-failed').color, 'b60205');
+});
+
+test('claim creates the six missing factory labels with the table values, then none on the next claim', async () => {
+  const { d, calls, labelState } = fake({ issues: { [R]: [issue(1), issue(2)] }, labels: FACTORY_ONLY });
+  await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.deepEqual(created(calls), OTHER_SIX.map((l) => l.name));
+  assert.deepEqual(labelState[R].filter((l) => l.name !== 'factory'), OTHER_SIX);
+  calls.length = 0;
+  await cmdClaim(d, { repos: [R], runId: 'b', dryRun: false });
+  assert.deepEqual(created(calls), []);
+});
+
+test('claim creates the labels before it adds factory-running', async () => {
+  const { d, calls } = fake({ issues: { [R]: [issue(1)] }, labels: FACTORY_ONLY });
+  await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  const names = calls.map(([n]) => n);
+  assert.ok(names.lastIndexOf('createLabel') < names.indexOf('addLabel'));
+});
+
+test('claim leaves an existing label with another colour alone', async () => {
+  const labels = { [R]: [{ name: 'factory', color: '47cbb0', description: '' }, { name: 'factory-failed', color: 'D93F0B', description: 'mine' }] };
+  const { d, calls, labelState } = fake({ issues: { [R]: [issue(1)] }, labels });
+  await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.ok(!created(calls).includes('factory-failed'));
+  assert.deepEqual(labelState[R].find((l) => l.name === 'factory-failed'), { name: 'factory-failed', color: 'D93F0B', description: 'mine' });
+});
+
+test('claim matches existing label names case-insensitively', async () => {
+  const labels = { [R]: [{ name: 'factory' }, { name: 'Factory-Running' }] };
+  const { d, calls } = fake({ issues: { [R]: [issue(1)] }, labels });
+  await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.ok(!created(calls).includes('factory-running'));
+  assert.equal(created(calls).length, 5);
+});
+
+test('dry-run claim still creates labels because it adds factory-running for real', async () => {
+  const { d, calls } = fake({ issues: { [R]: [issue(1)] }, labels: FACTORY_ONLY });
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: true });
+  assert.equal(out.status, 'claimed');
+  assert.equal(created(calls).length, 6);
+  assert.ok(calls.some(([n, , , l]) => n === 'addLabel' && l === 'factory-running'));
+});
+
+test('dry-run stale sweep creates no labels', async () => {
+  const { d, calls, stateDir } = fake({ nowMs: T0 + 5 * H, issues: { [R]: [] }, labels: FACTORY_ONLY });
+  writeLock(stateDir, R, 4, 'old', ISO0);
+  await cmdClaim(d, { repos: [R], runId: 'new', dryRun: true });
+  assert.deepEqual(created(calls), []);
+});
+
+test('stale sweep creates missing labels before it adds factory-failed', async () => {
+  const { d, calls, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] }, labels: FACTORY_ONLY });
+  writeLock(stateDir, R, 4, 'old', ISO0);
+  await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  const writes = calls.filter(([n]) => GH_WRITES.includes(n)).map(([n]) => n);
+  assert.deepEqual(created(calls), OTHER_SIX.map((l) => l.name));
+  assert.ok(writes.lastIndexOf('createLabel') < writes.indexOf('addLabel'));
+});
+
+test('a label failure during claim releases the lock and adds no label', async () => {
+  const { d, calls, stateDir } = fake({ issues: { [R]: [issue(1)] }, labels: FACTORY_ONLY });
+  d.gh.createLabel = () => { throw new Error('gh down'); };
+  await assert.rejects(cmdClaim(d, { repos: [R], runId: 'a', dryRun: false }), /gh down/);
+  assert.equal(existsSync(join(stateDir, 'locks', lockName(R, 1))), false);
+  assert.deepEqual(calls.filter(([n]) => n === 'addLabel' || n === 'comment'), []);
+});
+
+test('a label failure during the stale sweep puts the lock back', async () => {
+  const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] }, labels: FACTORY_ONLY });
+  const dir = writeLock(stateDir, R, 4, 'old', ISO0);
+  d.gh.listLabels = () => { throw new Error('gh down'); };
+  await assert.rejects(cmdClaim(d, { repos: [R], runId: 'new', dryRun: false }), /gh down/);
+  assert.equal(existsSync(join(dir, 'claim.json')), true);
+});
+
+test('ensureLabels returns the created names and creates nothing when all exist', () => {
+  const { d } = fake({ labels: allLabels() });
+  assert.deepEqual(ensureLabels(d.gh, R), []);
+});
+
+test('makeGh lists and creates labels with the expected gh arguments', () => {
+  const seen = [];
+  const gh = makeGh((args) => {
+    seen.push(args);
+    return JSON.stringify([{ name: 'bug' }, { name: 'factory' }]);
+  });
+  assert.deepEqual(gh.listLabels(R), ['bug', 'factory']);
+  assert.deepEqual(seen[0], ['label', 'list', '--repo', R, '--limit', '1000', '--json', 'name']);
+  gh.createLabel(R, FACTORY_LABELS[2]);
+  assert.deepEqual(seen[1], [
+    'label', 'create', 'factory-failed', '--repo', R, '--color', 'b60205', '--description', 'Factory: run gave up; see the last comment',
+  ]);
+  assert.ok(!seen[1].includes('--force'));
+});
+
+test('makeGh createLabel ignores an already-exists error and throws any other', () => {
+  const failing = (stderr) => makeGh(() => { throw Object.assign(new Error('exit 1'), { stderr }); });
+  assert.doesNotThrow(() => failing('label with name "factory" already exists').createLabel(R, FACTORY_LABELS[0]));
+  assert.throws(() => failing('HTTP 403: forbidden').createLabel(R, FACTORY_LABELS[0]), /exit 1/);
+});
+
+test('brief-to-backlog creates factory and needs-decision with the table values', () => {
+  const skill = readFileSync(fileURLToPath(new URL('../../factory/brief-to-backlog/SKILL.md', import.meta.url)), 'utf8');
+  const lines = skill.match(/`gh label create [^`]+`/g) ?? [];
+  for (const name of ['factory', 'needs-decision']) {
+    const line = lines.find((l) => l.includes(`gh label create ${name} `));
+    assert.ok(line, `no gh label create line for ${name}`);
+    const row = FACTORY_LABELS.find((l) => l.name === name);
+    assert.equal(/--color (\w+)/.exec(line)?.[1].toLowerCase(), row.color.toLowerCase());
+    assert.equal(/--description "([^"]*)"/.exec(line)?.[1] ?? '', row.description);
+  }
 });
 
 // ---------- dashboard events ----------
