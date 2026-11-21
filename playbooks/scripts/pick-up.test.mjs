@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -48,6 +48,15 @@ function writeLock(stateDir, repo, n, runId, claimedAt) {
   const dir = join(stateDir, 'locks', lockName(repo, n));
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'claim.json'), JSON.stringify({ repo, issue: n, action: 'plan', run_id: runId, claimed_at: claimedAt }));
+  return dir;
+}
+
+// A lock folder with an optional raw claim.json, its folder mtime set after the write.
+function rawLock(stateDir, name, content, mtimeMs) {
+  const dir = join(stateDir, 'locks', name);
+  mkdirSync(dir, { recursive: true });
+  if (content !== undefined) writeFileSync(join(dir, 'claim.json'), content);
+  utimesSync(dir, new Date(mtimeMs), new Date(mtimeMs));
   return dir;
 }
 
@@ -158,17 +167,18 @@ test('claim: atomic lock, a second claim moves to the next issue', async () => {
   assert.equal((await cmdClaim(d, { repos: [R], runId: 'c', dryRun: false })).status, 'none');
 });
 
-test('claim: lock created between listing and mkdir is skipped via EEXIST', async () => {
-  const { d, stateDir } = fake({ issues: { [R]: [issue(1), issue(2)] } });
-  const orig = d.gh.listOpen;
-  d.gh.listOpen = (repo) => {
-    const out = orig(repo);
-    writeLock(stateDir, R, 1, 'other', new Date(T0).toISOString()); // another run wins the race
-    return out;
+test('claim: lock created after evaluation is skipped via EEXIST', async () => {
+  const { d, stateDir } = fake({ issues: { [R]: [issue(1, ['factory'], { body: 'Depends on: #99' }), issue(2)] } });
+  // The dependency lookup runs after hasLock was read for issue 1, so issue 1 is still eligible
+  // and the claim meets the other run's lock at mkdir.
+  d.gh.issueState = () => {
+    writeLock(stateDir, R, 1, 'other', new Date(T0).toISOString());
+    return 'CLOSED';
   };
-  // eligibility was computed before the lock appeared only if evaluation ran first; here the
-  // lock exists before evaluation, so issue 1 is skipped as locked and 2 is claimed.
-  assert.equal((await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false })).issue, 2);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.equal(out.issue, 2);
+  const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 1), 'claim.json'), 'utf8'));
+  assert.equal(claim.run_id, 'other');
 });
 
 test('stale: exactly 4h is not stale, just over is', () => {
@@ -182,7 +192,7 @@ test('stale: claim marks factory-failed, comments, deletes lock and lists it', a
   const claimedAt = new Date(T0).toISOString();
   const dir = writeLock(stateDir, R, 4, 'old', claimedAt);
   const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
-  assert.deepEqual(out.stale, [{ repo: R, issue: 4, run_id: 'old', claimed_at: claimedAt, dashboard: 'sent' }]);
+  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, run_id: 'old', claimed_at: claimedAt, dashboard: 'sent' }]);
   assert.equal(existsSync(dir), false);
   assert.ok(calls.some(([n, , , l]) => n === 'removeLabel' && l === 'factory-running'));
   assert.ok(calls.some(([n, , , l]) => n === 'addLabel' && l === 'factory-failed'));
@@ -205,6 +215,139 @@ test('dry-run lists stale locks and changes nothing on stale issues', async () =
   assert.equal(out.stale.length, 1);
   assert.equal(existsSync(dir), true);
   assert.equal(calls.filter(([n]) => ['addLabel', 'removeLabel', 'comment', 'ensureLabel'].includes(n)).length, 0);
+});
+
+// ---------- unreadable and contested stale locks ----------
+
+const OLD = T0 + 4 * H + 1000;
+const ISO_T0 = new Date(T0).toISOString();
+const GH_WRITES = ['ensureLabel', 'addLabel', 'removeLabel', 'comment'];
+const unreadableComment = (reason) =>
+  `A factory run left an unreadable lock on this issue (${reason}), last changed at ${ISO_T0}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
+
+test('stale: an old lock folder with no claim.json is removed and listed', async () => {
+  const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  const dir = rawLock(stateDir, lockName(R, 4), undefined, T0);
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.equal(existsSync(dir), false);
+  assert.deepEqual(readdirSync(join(stateDir, 'expired')), []);
+});
+
+for (const [what, content, reason] of [
+  ['unparseable claim.json', '{not json', 'claim.json does not parse'],
+  ['claimed_at is not a date', JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: 'yesterday' }), 'claimed_at is not a date'],
+]) {
+  const name = what === 'unparseable claim.json'
+    ? 'stale: an old lock with unparseable claim.json is removed and listed'
+    : 'stale: an old lock whose claimed_at is not a date is removed and listed';
+  test(name, async () => {
+    const { d, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
+    const dir = rawLock(stateDir, lockName(R, 4), content, T0);
+    const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+    assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason, changed_at: ISO_T0 }]);
+    assert.equal(existsSync(dir), false);
+    assert.deepEqual(events, []);
+  });
+}
+
+test('stale: a young lock folder with no claim.json is kept and its issue stays locked', async () => {
+  const { d, stateDir } = fake({ nowMs: T0 + 3 * H, issues: { [R]: [issue(4)] } });
+  const dir = rawLock(stateDir, lockName(R, 4), undefined, T0);
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.deepEqual(out, { status: 'none', stale: [] });
+  assert.equal(existsSync(dir), true);
+  assert.deepEqual(cmdList(d, { repos: [R] }).skipped, [{ repo: R, issue: 4, reason: 'locked' }]);
+});
+
+test('stale: an unreadable lock matching a --repo marks the issue factory-failed', async () => {
+  const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  rawLock(stateDir, lockName(R, 4), undefined, T0);
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.equal(out.stale[0].repo, R);
+  assert.equal(out.stale[0].issue, 4);
+  assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), [
+    ['removeLabel', R, 4, 'factory-running'],
+    ['ensureLabel', R, 'factory-failed'],
+    ['addLabel', R, 4, 'factory-failed'],
+    ['comment', R, 4, unreadableComment('no claim.json')],
+  ]);
+  assert.deepEqual(events, []);
+});
+
+test('stale: an unreadable lock matching no --repo is listed by folder only with no gh call', async () => {
+  const { d, calls, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  const dir = rawLock(stateDir, 'other-repo-7', undefined, T0);
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.deepEqual(out.stale, [{ lock: 'other-repo-7', reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.equal(existsSync(dir), false);
+  assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
+});
+
+test('stale: a folder name matching two --repo values is treated as no match', async () => {
+  const { d, calls, stateDir } = fake({ nowMs: OLD });
+  const dir = rawLock(stateDir, 'a-b-c-5', undefined, T0);
+  const out = await cmdClaim(d, { repos: ['a/b-c', 'a-b/c'], runId: 'new', dryRun: false });
+  assert.deepEqual(out.stale, [{ lock: 'a-b-c-5', reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.equal(existsSync(dir), false);
+  assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
+});
+
+test('dry-run lists a stale unreadable lock and changes nothing', async () => {
+  const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  const dir = rawLock(stateDir, lockName(R, 4), undefined, T0);
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: true });
+  assert.deepEqual(out.stale, [{ lock: 'o-r-4', repo: R, issue: 4, reason: 'no claim.json', changed_at: ISO_T0 }]);
+  assert.equal(existsSync(dir), true);
+  assert.equal(existsSync(join(stateDir, 'expired')), false);
+  assert.deepEqual(calls.filter(([n]) => GH_WRITES.includes(n)), []);
+  assert.deepEqual(events, []);
+});
+
+test('stale: two claims sweeping one lock comment, label and post once', async () => {
+  const { d, calls, stateDir, events } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  writeLock(stateDir, R, 4, 'old', ISO_T0);
+  // Claim B starts inside claim A's first clock read: after A read the lock, before A takes it.
+  const dB = { ...d };
+  let claimB;
+  d.now = () => {
+    claimB ??= cmdClaim(dB, { repos: [R], runId: 'b', dryRun: false });
+    return OLD;
+  };
+  const a = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  const b = await claimB;
+  assert.equal(a.stale.length + b.stale.length, 1);
+  assert.equal(calls.filter(([n]) => n === 'comment').length, 1);
+  assert.equal(calls.filter(([n, , , l]) => n === 'addLabel' && l === 'factory-failed').length, 1);
+  assert.deepEqual(events.map((e) => e.event), ['expired']);
+});
+
+test('stale: a gh error after the take puts the lock back and throws', async () => {
+  for (const content of [JSON.stringify({ repo: R, issue: 4, action: 'plan', run_id: 'old', claimed_at: ISO_T0 }), undefined]) {
+    const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
+    const dir = rawLock(stateDir, lockName(R, 4), content, T0);
+    const addLabel = d.gh.addLabel;
+    d.gh.addLabel = () => { throw new Error('gh down'); };
+    await assert.rejects(cmdClaim(d, { repos: [R], runId: 'new', dryRun: false }), /gh down/);
+    assert.equal(existsSync(dir), true);
+    assert.equal(existsSync(join(dir, 'claim.json')), content !== undefined);
+    assert.deepEqual(readdirSync(join(stateDir, 'expired')), []);
+    d.gh.addLabel = addLabel;
+    const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+    assert.equal(out.stale.length, 1);
+    assert.equal(existsSync(dir), false);
+  }
+});
+
+test('stale: a plain file in locks/ is ignored', async () => {
+  const { d, stateDir } = fake({ nowMs: OLD, issues: { [R]: [] } });
+  mkdirSync(join(stateDir, 'locks'));
+  const file = join(stateDir, 'locks', '.DS_Store');
+  writeFileSync(file, '');
+  utimesSync(file, new Date(T0), new Date(T0));
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.deepEqual(out.stale, []);
+  assert.equal(existsSync(file), true);
 });
 
 test('release refuses a different run id and changes nothing', async () => {
