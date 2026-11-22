@@ -2,19 +2,28 @@
 // the fix, and that it fails at that commit and passes at HEAD.
 //
 // Usage:
-//   node test-first.mjs --dir <worktree> --issue <n> --command '<test command>' [--base origin/main] [--test-path <prefix-or-glob>]...
+//   node test-first.mjs --dir <worktree> --issue <n> --command '<test command>' [--base origin/main]
+//                       [--test-path <prefix-or-glob>]... [--timeout-min <minutes>]
 //   node test-first.mjs --issue <n> --none "<reason>"
 //
 // Prints one JSON object on stdout. Exit 0 whenever it prints a result (the `result` field says
 // pass, fail or not_exercised; the top-level `exit_code` is the gate row's exit code). Exit 2 when
 // it refuses (dirty tree, no test commit, more than one test commit, bad usage), with a message on
 // stderr. Exit 1 on an unexpected error. It never prints environment variables.
-import { execFileSync, spawnSync } from 'node:child_process';
+//
+// The command runs in the given worktree: first at the test commit (detached), then at the original
+// branch. After each run it discards what the command left behind (tracked edits and untracked files
+// that are not ignored; ignored dependency folders stay) and the original branch is restored with a
+// forced checkout, also on SIGINT and SIGTERM. If the restore fails twice the JSON carries
+// `restore_failed: true` and the result is fail.
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export class UsageError extends Error {}
 
 const TAIL_LINES = 40;
+const KEEP_BYTES = 1024 * 1024; // the rolling window of output kept per run
+export const DEFAULT_TIMEOUT_MIN = 10;
 const TEST_DIRS = new Set(['tests', 'test', '__tests__', 'spec']);
 const TEST_NAMES = [/\.test\./, /\.spec\./, /Test\.php$/, /^test_.*\.py$/, /_test\.py$/, /_test\.go$/];
 
@@ -40,9 +49,11 @@ export function globToRegExp(glob) {
   return new RegExp(`^${re}$`);
 }
 
+// A plain spec is a path or a directory: `tests` matches `tests` and `tests/a.php`, not `tests-helper/a.php`.
 export function matchesTestPath(path, spec) {
   if (/[*?]/.test(spec)) return globToRegExp(spec).test(path);
-  return path.startsWith(spec);
+  const dir = spec.endsWith('/') ? spec : `${spec}/`;
+  return path === spec || path.startsWith(dir);
 }
 
 export function isTestFile(path, extraPaths = []) {
@@ -58,8 +69,15 @@ export function tailLines(text, n = TAIL_LINES) {
   return lines.slice(-n).join('\n');
 }
 
-export function decide({ nonTestFiles, atTestCommit, atHead }) {
-  return nonTestFiles.length === 0 && atTestCommit !== 0 && atHead === 0 ? 'pass' : 'fail';
+// A failure only counts when the command ran and reported failure: not killed, not timed out, not
+// "cannot execute" (126) or "not found" (127), and no spawn error.
+export function isValidFailure(run) {
+  return run.exit_code !== null && run.exit_code !== 0 && run.exit_code !== 126 && run.exit_code !== 127
+    && !run.signal && !run.timed_out && !run.error;
+}
+
+export function isCleanPass(run) {
+  return run.exit_code === 0 && !run.signal && !run.timed_out && !run.error;
 }
 
 export function noneResult(reason) {
@@ -69,19 +87,79 @@ export function noneResult(reason) {
 // ---------- git and process ----------
 
 function git(dir, args) {
-  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-// stderr is folded into stdout so the tail keeps the order a developer would see.
-export function runCommand(dir, command) {
-  const r = spawnSync('sh', ['-c', `exec 2>&1\n${command}`], {
-    cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+// Throw away what a test run left behind. `git clean -fd` without -x leaves ignored files alone, so
+// vendor and node_modules stay.
+export function discardChanges(dir) {
+  git(dir, ['reset', '-q', '--hard']);
+  git(dir, ['clean', '-q', '-fd']);
+}
+
+// Forced checkout of the original branch (or commit when the run started detached). Retries once.
+export function restore(dir, original) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      git(dir, ['checkout', '-q', '-f', original]);
+      discardChanges(dir);
+      return true;
+    } catch {
+      // try again once
+    }
+  }
+  return false;
+}
+
+// stderr is folded into stdout so the tail keeps the order a developer would see. The command runs
+// in its own process group so a timeout or a signal kills it and everything it started.
+export function runCommand(dir, command, { timeoutMs = DEFAULT_TIMEOUT_MIN * 60_000, onChild } = {}) {
+  return new Promise((resolve) => {
+    let out = '';
+    let timedOut = false;
+    let settled = false;
+    const finish = (r) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      onChild?.(undefined);
+      resolve({ exit_code: null, signal: null, timed_out: timedOut, ...r, output_tail: tailLines(out) });
+    };
+    let child;
+    try {
+      child = spawn('sh', ['-c', `exec 2>&1\n${command}`], { cwd: dir, stdio: ['ignore', 'pipe', 'ignore'], detached: true });
+    } catch (e) {
+      finish({ error: String(e?.message ?? e) });
+      return;
+    }
+    onChild?.(child);
+    const killGroup = () => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        try { child.kill('SIGKILL'); } catch { /* already gone */ }
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (d) => {
+      out += d;
+      if (out.length > KEEP_BYTES * 2) out = out.slice(-KEEP_BYTES);
+    });
+    child.on('error', (e) => finish({ error: String(e?.message ?? e) }));
+    child.on('exit', (code, signal) => {
+      // Grandchildren can keep the pipe open; do not wait for it forever.
+      setTimeout(() => finish({ exit_code: code, signal }), 200);
+    });
   });
-  if (r.error) throw r.error;
-  return { exit_code: r.status ?? 1, output_tail: tailLines(r.stdout ?? '') };
 }
 
-export function checkTestFirst({ dir, issue, command, base = 'origin/main', testPaths = [] }) {
+export async function checkTestFirst({
+  dir, issue, command, base = 'origin/main', testPaths = [], timeoutMin = DEFAULT_TIMEOUT_MIN,
+}) {
   if (git(dir, ['status', '--porcelain']).trim() !== '') {
     throw new UsageError('refusing: the working tree is dirty. Commit or remove changes and run again from a clean tree.');
   }
@@ -96,9 +174,15 @@ export function checkTestFirst({ dir, issue, command, base = 'origin/main', test
     throw new UsageError(`refusing: ${matches.length} commits in ${base}..HEAD have a subject starting "test: failing test for #${issue}" (${matches.map((c) => c.sha.slice(0, 7)).join(', ')}). Exactly one is allowed.`);
   }
   const testCommit = matches[0].sha;
+  const problems = [];
+  const parents = git(dir, ['rev-list', '--parents', '-n', '1', testCommit]).trim().split(/\s+/).length - 1;
+  if (parents !== 1) problems.push(`the test commit has ${parents} parents, expected exactly 1`);
   const files = git(dir, ['show', '--no-renames', '--name-only', '--format=', '-z', testCommit])
     .split('\0').filter(Boolean);
   const nonTestFiles = files.filter((f) => !isTestFile(f, testPaths));
+  if (files.length === 0) problems.push('the test commit changes no files');
+  else if (nonTestFiles.length === files.length) problems.push('the test commit changes no test file');
+  if (nonTestFiles.length > 0) problems.push('the test commit changes files that are not test files');
 
   let original;
   try {
@@ -106,32 +190,71 @@ export function checkTestFirst({ dir, issue, command, base = 'origin/main', test
   } catch {
     original = git(dir, ['rev-parse', 'HEAD']).trim(); // started detached
   }
+
+  const timeoutMs = Math.round(timeoutMin * 60_000);
+  let child;
+  const onSignal = (sig) => {
+    try { process.kill(-child.pid, 'SIGKILL'); } catch { /* no child */ }
+    restore(dir, original);
+    process.exit(sig === 'SIGINT' ? 130 : 143);
+  };
+  const handlers = ['SIGINT', 'SIGTERM'].map((sig) => {
+    const h = () => onSignal(sig);
+    process.on(sig, h);
+    return [sig, h];
+  });
+  const track = (c) => { child = c; };
+
   let atTestCommit;
+  let atHead;
+  let restoreFailed = false;
   try {
     git(dir, ['checkout', '-q', '--detach', testCommit]);
-    atTestCommit = runCommand(dir, command);
+    atTestCommit = await runCommand(dir, command, { timeoutMs, onChild: track });
+    discardChanges(dir);
+  } catch (e) {
+    atTestCommit ??= { exit_code: null, signal: null, timed_out: false, error: String(e?.message ?? e), output_tail: '' };
   } finally {
-    git(dir, ['checkout', '-q', original]);
+    restoreFailed = !restore(dir, original);
   }
-  const atHead = runCommand(dir, command);
+  let headSha = null;
+  if (!restoreFailed) {
+    headSha = git(dir, ['rev-parse', 'HEAD']).trim();
+    if (git(dir, ['status', '--porcelain']).trim() !== '') {
+      atHead = { exit_code: null, signal: null, timed_out: false, error: 'the tree is not clean after the restore', output_tail: '' };
+    } else {
+      atHead = await runCommand(dir, command, { timeoutMs, onChild: track });
+      try {
+        discardChanges(dir);
+      } catch { /* checked below */ }
+    }
+    if (git(dir, ['status', '--porcelain']).trim() !== '' && !restore(dir, original)) restoreFailed = true;
+  } else {
+    atHead = { exit_code: null, signal: null, timed_out: false, error: 'could not restore the original branch', output_tail: '' };
+  }
+  for (const [sig, h] of handlers) process.off(sig, h);
 
-  const result = decide({ nonTestFiles, atTestCommit: atTestCommit.exit_code, atHead: atHead.exit_code });
-  return {
+  const pass = problems.length === 0 && !restoreFailed && isValidFailure(atTestCommit) && isCleanPass(atHead);
+  const out = {
     gate: 'test-first',
     command,
-    exit_code: result === 'pass' ? 0 : 1,
-    result,
+    exit_code: pass ? 0 : 1,
+    result: pass ? 'pass' : 'fail',
     test_commit: testCommit,
+    head_sha: headSha,
     non_test_files: nonTestFiles,
     at_test_commit: atTestCommit,
     at_head: atHead,
   };
+  if (problems.length) out.problems = problems;
+  if (restoreFailed) out.restore_failed = true;
+  return out;
 }
 
 // ---------- CLI ----------
 
 export function parseArgs(argv) {
-  const o = { base: 'origin/main', testPaths: [] };
+  const o = { base: 'origin/main', testPaths: [], timeoutMin: DEFAULT_TIMEOUT_MIN };
   for (let i = 0; i < argv.length; i++) {
     const f = argv[i];
     const val = () => {
@@ -144,9 +267,15 @@ export function parseArgs(argv) {
       if (!/^\d+$/.test(n)) throw new UsageError(`bad issue number: ${n}`);
       o.issue = Number(n);
     } else if (f === '--command') o.command = val();
-    else if (f === '--base') o.base = val();
-    else if (f === '--test-path') o.testPaths.push(val());
-    else if (f === '--none') o.none = val();
+    else if (f === '--base') {
+      o.base = val();
+      if (o.base.startsWith('-')) throw new UsageError(`bad --base: ${o.base}`);
+    } else if (f === '--test-path') o.testPaths.push(val());
+    else if (f === '--timeout-min') {
+      const m = Number(val());
+      if (!(m > 0) || !Number.isFinite(m)) throw new UsageError('--timeout-min must be a positive number');
+      o.timeoutMin = m;
+    } else if (f === '--none') o.none = val();
     else throw new UsageError(`unknown flag: ${f}`);
   }
   if (o.issue === undefined) throw new UsageError('--issue is required');
@@ -160,7 +289,7 @@ export function parseArgs(argv) {
   return o;
 }
 
-export function main(argv) {
+export async function main(argv) {
   const o = parseArgs(argv);
   if (o.none !== undefined) return noneResult(o.none);
   return checkTestFirst(o);
@@ -168,7 +297,7 @@ export function main(argv) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
-    console.log(JSON.stringify(main(process.argv.slice(2))));
+    console.log(JSON.stringify(await main(process.argv.slice(2))));
   } catch (e) {
     if (e instanceof UsageError) {
       console.error(`usage error: ${e.message}`);

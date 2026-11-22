@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isTestFile, subjectMatches, tailLines } from './test-first.mjs';
-
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'test-first.mjs');
 const CMD = 'sh tests/check.sh';
 
@@ -198,4 +197,137 @@ test('subjectMatches and tailLines', () => {
   const lines = tailLines(text).split('\n');
   assert.equal(lines.length, 40);
   assert.equal(lines.at(-1), 'l99');
+});
+
+// ---------- review fixes ----------
+
+function fixed(dir) {
+  const t = commit(dir, 'test: failing test for #7', { 'tests/check.sh': TEST_SH });
+  commit(dir, 'fix: use the good value', { 'src/value.txt': 'good\n' });
+  return t;
+}
+
+test('a command that edits tracked files at the test commit: JSON, branch restored, tree clean', () => {
+  const dir = repo();
+  fixed(dir);
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const r = gate(dir, [], { command: 'echo junk >> src/value.txt; echo junk >> tests/check.sh; exit 1' });
+  assert.equal(r.code, 0);
+  assert.equal(r.json.result, 'fail');
+  assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD'), 'fix');
+  assert.equal(git(dir, 'rev-parse', 'HEAD'), head);
+  assert.equal(git(dir, 'status', '--porcelain'), '');
+});
+
+test('a command that leaves untracked files is cleaned, ignored folders stay', () => {
+  const dir = repo();
+  commit(dir, 'ignore vendor', { '.gitignore': 'vendor/\n' });
+  fixed(dir);
+  put(dir, 'vendor/dep.txt', 'dep\n');
+  const r = gate(dir, [], { command: 'touch stray.txt; test -f vendor/dep.txt && grep -q good src/value.txt' });
+  assert.equal(r.json.result, 'pass');
+  assert.equal(git(dir, 'status', '--porcelain'), '');
+  assert.equal(readFileSync(join(dir, 'vendor/dep.txt'), 'utf8'), 'dep\n');
+});
+
+test('a command that dirties the tree at HEAD leaves it clean', () => {
+  const dir = repo();
+  fixed(dir);
+  const r = gate(dir, [], { command: 'grep -q good src/value.txt || exit 1; echo junk >> README.md; touch stray.txt' });
+  assert.equal(r.json.result, 'pass');
+  assert.equal(git(dir, 'status', '--porcelain'), '');
+});
+
+test('fail: an empty test commit', () => {
+  const dir = repo();
+  git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '--allow-empty', '-m', 'test: failing test for #7');
+  commit(dir, 'fix: use the good value', { 'src/value.txt': 'good\n' });
+  const r = gate(dir, [], { command: 'grep -q good src/value.txt' });
+  assert.equal(r.code, 0);
+  assert.equal(r.json.result, 'fail');
+  assert.match(r.json.problems.join(' '), /no files/);
+});
+
+test('fail: a test commit with no test file among its changes', () => {
+  const dir = repo();
+  commit(dir, 'test: failing test for #7', { 'src/value.txt': 'bad2\n' });
+  const r = gate(dir, [], { command: 'false' });
+  assert.equal(r.json.result, 'fail');
+});
+
+test('fail: a merge commit with the test subject', () => {
+  const dir = repo();
+  git(dir, 'checkout', '-q', '-b', 'side');
+  commit(dir, 'side work', { 'tests/side.sh': 'true\n' });
+  git(dir, 'checkout', '-q', 'fix');
+  commit(dir, 'fix work', { 'README.md': 'z\n' });
+  git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'merge', '--no-ff', '-q', '-m', 'test: failing test for #7', 'side');
+  commit(dir, 'fix: use the good value', { 'src/value.txt': 'good\n' });
+  const r = gate(dir, [], { command: 'grep -q good src/value.txt' });
+  assert.equal(r.json.result, 'fail');
+  assert.match(r.json.problems.join(' '), /parents/);
+});
+
+test('timeout: a run that hangs is killed and the gate fails', () => {
+  const dir = repo();
+  fixed(dir);
+  const r = gate(dir, ['--timeout-min', '0.02'], { command: 'sleep 30' });
+  assert.equal(r.code, 0);
+  assert.equal(r.json.result, 'fail');
+  assert.equal(r.json.at_test_commit.timed_out, true);
+  assert.equal(r.json.at_test_commit.signal, 'SIGKILL');
+  assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD'), 'fix');
+});
+
+test('exit 127 and 126 at the test commit are not a valid failure', () => {
+  for (const [command, code] of [['no_such_command_xyz', 127], ['exit 126', 126]]) {
+    const dir = repo();
+    fixed(dir);
+    const r = gate(dir, [], { command: `if grep -q good src/value.txt; then exit 0; fi; ${command}` });
+    assert.equal(r.json.at_test_commit.exit_code, code);
+    assert.equal(r.json.result, 'fail');
+  }
+});
+
+test('--test-path matches on a directory boundary', () => {
+  const dir = repo();
+  commit(dir, 'test: failing test for #7', { 'tests/check.sh': TEST_SH, 'helpers-x/prod.php': 'x\n', 'helpers/ok.php': 'x\n' });
+  commit(dir, 'fix: use the good value', { 'src/value.txt': 'good\n' });
+  assert.equal(gate(dir, ['--test-path', 'helpers']).json.result, 'fail');
+  assert.equal(gate(dir, ['--test-path', 'helpers', '--test-path', 'helpers-x']).json.result, 'pass');
+  assert.equal(isTestFile('tests-helper/prod.php', ['tests']), false);
+  assert.equal(isTestFile('lib/tests-helper/prod.php', ['lib/tests']), false);
+  assert.equal(isTestFile('lib/tests/a.php', ['lib/tests']), true);
+  assert.equal(isTestFile('lib/tests', ['lib/tests']), true);
+});
+
+test('head_sha is the commit the head run used', () => {
+  const dir = repo();
+  fixed(dir);
+  const r = gate(dir);
+  assert.equal(r.json.head_sha, git(dir, 'rev-parse', 'HEAD'));
+});
+
+test('--base starting with a dash is rejected', () => {
+  const dir = repo();
+  fixed(dir);
+  assert.equal(gate(dir, ['--base', '--output=x']).code, 2);
+});
+
+test('SIGTERM mid-run restores the branch', async () => {
+  const dir = repo();
+  fixed(dir);
+  const child = spawn('node', [SCRIPT, '--dir', dir, '--issue', '7', '--command', 'echo junk >> src/value.txt; sleep 30'], { stdio: 'ignore' });
+  const exited = new Promise((res) => child.on('exit', (code) => res(code)));
+  for (let i = 0; i < 100; i++) {
+    let detached = false;
+    try { git(dir, 'symbolic-ref', '-q', 'HEAD'); } catch { detached = true; }
+    if (detached) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  await new Promise((r) => setTimeout(r, 300));
+  child.kill('SIGTERM');
+  assert.equal(await exited, 143);
+  assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD'), 'fix');
+  assert.equal(git(dir, 'status', '--porcelain'), '');
 });
