@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isTestFile, subjectMatches, tailLines } from './test-first.mjs';
+import { isTestFile, isValidFailure, runCommand, subjectMatches, tailLines } from './test-first.mjs';
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'test-first.mjs');
 const CMD = 'sh tests/check.sh';
 
@@ -38,8 +38,8 @@ function repo() {
 
 const TEST_SH = 'grep -q good src/value.txt || { echo "assertion failed: value is bad"; exit 1; }\n';
 
-function gate(dir, extra = [], { issue = '7', command = CMD } = {}) {
-  const r = spawnSync('node', [SCRIPT, '--dir', dir, '--issue', issue, '--command', command, ...extra], { encoding: 'utf8' });
+function gate(dir, extra = [], { issue = '7', command = CMD, env } = {}) {
+  const r = spawnSync('node', [SCRIPT, '--dir', dir, '--issue', issue, '--command', command, ...extra], { encoding: 'utf8', env: env ?? process.env });
   return { code: r.status, out: r.stdout, err: r.stderr, json: r.stdout ? JSON.parse(r.stdout) : undefined };
 }
 
@@ -275,7 +275,7 @@ test('timeout: a run that hangs is killed and the gate fails', () => {
   assert.equal(r.code, 0);
   assert.equal(r.json.result, 'fail');
   assert.equal(r.json.at_test_commit.timed_out, true);
-  assert.equal(r.json.at_test_commit.signal, 'SIGKILL');
+  assert.equal(r.json.at_test_commit.signal, 'SIGTERM');
   assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD'), 'fix');
 });
 
@@ -312,6 +312,94 @@ test('--base starting with a dash is rejected', () => {
   const dir = repo();
   fixed(dir);
   assert.equal(gate(dir, ['--base', '--output=x']).code, 2);
+});
+
+// ---------- round two ----------
+
+// A fake `docker` on PATH: `ps` prints one container id, every call is logged.
+function fakeDocker() {
+  const bin = mkdtempSync(join(tmpdir(), 'fakedocker-'));
+  const log = join(bin, 'calls.log');
+  writeFileSync(join(bin, 'docker'), `#!/bin/sh\necho "$@" >> "${log}"\n[ "$1" = ps ] && echo abc123\nexit 0\n`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  return { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, log };
+}
+
+test('TEST_FIRST_RUN_ID is in the command environment and containers with it are removed', () => {
+  const dir = repo();
+  fixed(dir);
+  const d = fakeDocker();
+  const r = gate(dir, [], { command: 'echo "id=$TEST_FIRST_RUN_ID"; grep -q good src/value.txt', env: d.env });
+  assert.match(r.json.at_test_commit.output_tail, /id=tf-7-\d+-1/);
+  assert.match(r.json.at_head.output_tail, /id=tf-7-\d+-2/);
+  const calls = readFileSync(d.log, 'utf8');
+  assert.match(calls, /ps -aq --filter label=test-first=tf-7-\d+-1/);
+  assert.match(calls, /rm -f abc123/);
+});
+
+test('a missing docker is skipped silently', () => {
+  const dir = repo();
+  fixed(dir);
+  assert.equal(gate(dir).json.result, 'pass');
+});
+
+test('a command that exits leaving a background job: the job is stopped, nothing lands later', async () => {
+  const dir = repo();
+  fixed(dir);
+  const r = gate(dir, [], { command: 'grep -q good src/value.txt && exit 0; (sleep 2; echo late > late.txt) & exit 1' });
+  assert.equal(r.json.result, 'pass');
+  await new Promise((res) => setTimeout(res, 3000));
+  assert.equal(existsSync(join(dir, 'late.txt')), false);
+  assert.equal(git(dir, 'status', '--porcelain'), '');
+});
+
+test('a command that ignores SIGTERM is killed after the grace period', () => {
+  const dir = repo();
+  fixed(dir);
+  const t0 = Date.now();
+  const r = gate(dir, ['--timeout-min', '0.02', '--kill-grace-sec', '1'], { command: "trap '' TERM; sleep 30" });
+  assert.equal(r.json.result, 'fail');
+  assert.equal(r.json.at_test_commit.timed_out, true);
+  assert.ok(Date.now() - t0 < 25_000);
+  assert.equal(git(dir, 'symbolic-ref', '--short', 'HEAD'), 'fix');
+});
+
+test('untracked files that existed before the run survive, even when .gitignore changes later', () => {
+  const dir = repo();
+  commit(dir, 'test: failing test for #7', { 'tests/check.sh': TEST_SH });
+  commit(dir, 'fix: use the good value and ignore vendor', { 'src/value.txt': 'good\n', '.gitignore': 'vendor/\n' });
+  put(dir, 'vendor/dep.txt', 'dep\n');
+  const r = gate(dir, [], { command: 'touch stray.txt; mkdir -p scratch; touch scratch/x; echo more > vendor/new.txt; grep -q good src/value.txt' });
+  assert.equal(r.json.result, 'pass');
+  assert.equal(readFileSync(join(dir, 'vendor/dep.txt'), 'utf8'), 'dep\n');
+  assert.equal(existsSync(join(dir, 'stray.txt')), false);
+  assert.equal(existsSync(join(dir, 'scratch/x')), false);
+});
+
+test('a new ignored folder is removed, a pre-existing ignored folder stays', () => {
+  const dir = repo();
+  commit(dir, 'ignore', { '.gitignore': 'vendor/\ncache/\n' });
+  fixed(dir);
+  put(dir, 'vendor/dep.txt', 'dep\n');
+  gate(dir, [], { command: 'mkdir -p cache; echo c > cache/c.txt; grep -q good src/value.txt' });
+  assert.equal(existsSync(join(dir, 'vendor/dep.txt')), true);
+  assert.equal(existsSync(join(dir, 'cache')), false);
+});
+
+test('exit 125 at the test commit is not a valid failure', () => {
+  const dir = repo();
+  fixed(dir);
+  const r = gate(dir, [], { command: 'grep -q good src/value.txt || exit 125' });
+  assert.equal(r.json.at_test_commit.exit_code, 125);
+  assert.equal(r.json.result, 'fail');
+  assert.equal(isValidFailure({ exit_code: 125 }), false);
+  assert.equal(isValidFailure({ exit_code: 1 }), true);
+});
+
+test('a spawn that throws resolves with an error instead of throwing', async () => {
+  const run = await runCommand(tmpdir(), 'true\0false');
+  assert.equal(typeof run.error, 'string');
+  assert.equal(run.exit_code, null);
 });
 
 test('SIGTERM mid-run restores the branch', async () => {
