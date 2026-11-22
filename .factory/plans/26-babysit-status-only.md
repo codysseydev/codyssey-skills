@@ -1,6 +1,6 @@
 # Plan for #26, factory babysit reads only the conflict, thread and behind-base gates
 
-Issue codysseydev/codyssey-skills#26. Base origin/main 2aa34c6. Branch `factory/26`.
+Issue codysseydev/codyssey-skills#26. Base origin/main ad19dcd. Branch `factory/26-a2`.
 
 Kind: feature
 
@@ -19,7 +19,7 @@ Prose only, no code. One new list item in `playbooks/factory.md`, "Changes to th
 1. After the `**In** "Order: conflicts, threads, CI."` item (line 159), add:
 
 ```
-- **In** "On GitHub, status comes from the watcher at" a factory babysit runs the watcher with `--status-only` in every mode and polls by running it again. Never run it without `--status-only`, because that loop waits on pending Actions checks and stops on failing ones. From each row read only three gates, a conflict (`facts.mergeable` is `CONFLICTING` or `facts.mergeStateStatus` is `DIRTY`), open `threads`, and behind-base (`facts.mergeStateStatus` is `BEHIND`). Ignore the row's `ci` field. When the watcher exits non-zero, for example 7 with a `checks-unavailable` failure, the check read failed, not the PR. Read `mergeable`, `mergeStateStatus` and `headRefOid` with `gh pr view <pr> --json mergeable,mergeStateStatus,headRefOid`, read the review threads with `gh api graphql`, and apply the same gates. In `drive` mode, merge-ready means none of the three gates is open, `mergeable` is `MERGEABLE` so a still-computing `UNKNOWN` is not ready, and the stage 5 evidence was taken at the PR's current head commit.
+- **In** "On GitHub, status comes from the watcher at" a factory babysit runs the watcher with `--status-only --max-query-errors 1` in every mode and polls by running it again. Never run it without both flags, because without `--status-only` the loop waits on pending Actions checks and stops on failing ones, and without `--max-query-errors 1` it retries a check read that is not ready for about 12 minutes. From each row read only three gates, a conflict (`facts.mergeable` is `CONFLICTING` or `facts.mergeStateStatus` is `DIRTY`), open `threads`, and behind-base (`facts.mergeStateStatus` is `BEHIND`). Ignore the row's `ci` field. When the watcher exits non-zero, for example 7 with a `checks-unavailable` failure, the status read failed, not the PR. Read `mergeable`, `mergeStateStatus` and `headRefOid` with `gh pr view <pr> --json mergeable,mergeStateStatus,headRefOid`, read the unresolved review threads (`isResolved` false) with `gh api graphql`, and apply the same gates. In `drive` mode, merge-ready means none of the three gates is open, `mergeable` is `MERGEABLE` so a still-computing `UNKNOWN` is not ready, and the stage 5 evidence was taken at the PR's current head commit.
 ```
 
 The watcher step is where every babysit mode gets its status, so one item there covers `drive`, `threads-only` and `check`, and it redefines merge-ready for `drive` in the same place. The line-159 item from #16 says an Actions check is not a blocker, but it does not stop the watcher's own loop from waiting or exiting on checks.
@@ -28,7 +28,7 @@ No other file changes. No ADR: the rule is #16's standing rule, and this item cl
 
 ## Why the watcher blocks, read against the code
 
-`watch-pr/policy.ts` in pstack 0.9.143: `waitReason` returns `pending-checks` for `ci-pending` (line 307), `ciBlocker` returns the `failing-checks` blocker for `ci-failing` (line 282), and `readyContribution` counts a PR ready only for `ci-clean` or `ci-none` (line 344). With `--status-only`, `runSimple` returns the STATUS rows before it classifies anything (line 607), so checks neither wait nor block.
+`watch-pr/policy.ts` in pstack 0.9.143: `waitReason` returns `pending-checks` for `ci-pending` (line 308), `ciBlocker` returns the `failing-checks` blocker for `ci-failing` (lines 281-285), and `readyContribution` counts a PR ready only for `ci-clean` or `ci-none` (line 344). With `--status-only`, `runSimple` returns the STATUS rows before it classifies anything (line 607), so checks neither wait nor block.
 
 ## Tests, one per acceptance criterion
 
@@ -40,7 +40,7 @@ No other file changes. No ADR: the rule is #16's standing rule, and this item cl
 
 ## Probes against the code
 
-Base 2aa34c6, worktree `~/.factory/worktrees/codyssey-skills-26`.
+Base ad19dcd, worktree `~/.factory/worktrees/codyssey-skills-26-a2`.
 
 - Baseline. All nine recipe checks pass: pick-up 96, post-merge 23, capture-ui 115, trial-decision 39, test-first 36 and install 22 tests pass; bootstrap 3, event-model 4 and factory-onboard 28 OK.
 - P1. With the new item inserted in a temp HOME, `check-playbooks.mjs` prints "Every project playbook matches this pstack's playbooks." and exits 0. With the anchor changed to "watcher from", it prints `"On GitHub, status comes from the watcher from" is not in any playbook it extends` and exits 1. The anchor text appears once in `babysit.md`. The unchanged origin/main `factory.md` also passes.
@@ -67,7 +67,7 @@ Plus the `check-playbooks.mjs` run from criterion 1.
 
 ## Implement
 
-One delegate, one worktree (`factory/26`), one file, no fan-out. Trusted-commands flag: none, since `playbooks/factory.md` is not on the guard's list.
+One delegate, one worktree (`factory/26-a2`), one file, no fan-out. Trusted-commands flag: none, since `playbooks/factory.md` is not on the guard's list.
 
 ## Out of scope
 
