@@ -70,6 +70,7 @@ export class RefusalError extends Error {}
 // ---------- config ----------
 
 const SIGN_IN_KEYS = ['path', 'email_selector', 'password_selector', 'submit_selector', 'signed_in', 'env_email', 'env_password'];
+const SIGN_IN_OPTIONAL_KEYS = ['signed_in_phone', 'open'];
 export const CONFIG_KEYS = ['base_url', 'sign_in', 'consent_button', 'hide_css', 'masks', 'globs', 'ignore_requests', 'phone'];
 
 const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string' && x);
@@ -121,7 +122,7 @@ export function parseConfig(text) {
   if (raw.sign_in !== undefined) {
     const s = raw.sign_in;
     if (!isObject(s)) bad('sign_in must be an object');
-    for (const k of Object.keys(s)) if (!SIGN_IN_KEYS.includes(k)) bad(`unknown key sign_in.${k}`);
+    for (const k of Object.keys(s)) if (!SIGN_IN_KEYS.includes(k) && !SIGN_IN_OPTIONAL_KEYS.includes(k)) bad(`unknown key sign_in.${k}`);
     for (const k of SIGN_IN_KEYS) {
       if (s[k] === undefined) bad(`sign_in.${k} is required`);
       if (k === 'signed_in') continue;
@@ -131,9 +132,11 @@ export function parseConfig(text) {
     for (const k of ['env_email', 'env_password']) {
       if (!ENV_NAME_RE.test(s[k])) bad(`sign_in.${k} must match ${ENV_NAME_RE}`);
     }
-    const si = s.signed_in;
-    const okObject = isObject(si) && Object.keys(si).sort().join() === 'name,role' && typeof si.role === 'string' && typeof si.name === 'string' && si.role && si.name;
-    if (!(typeof si === 'string' && si) && !okObject) bad('sign_in.signed_in must be a selector string or {role, name}');
+    const validProof = (si) => (typeof si === 'string' && si.length > 0)
+      || (isObject(si) && Object.keys(si).sort().join() === 'name,role' && typeof si.role === 'string' && typeof si.name === 'string' && si.role && si.name);
+    if (!validProof(s.signed_in)) bad('sign_in.signed_in must be a selector string or {role, name}');
+    if (s.signed_in_phone !== undefined && !validProof(s.signed_in_phone)) bad('sign_in.signed_in_phone must be a selector string or {role, name}');
+    if (s.open !== undefined && (typeof s.open !== 'string' || !s.open)) bad('sign_in.open must be a non-empty button name');
     cfg.sign_in = s;
   }
   return cfg;
@@ -526,12 +529,24 @@ async function shootOne(ctx, context, shot, before) {
     };
     await settle();
     if (o.signIn && cfg.sign_in && !onSignIn(cfg, target.href)) {
-      const si = cfg.sign_in.signed_in;
+      const phone = shot.viewport.name === PHONE.name;
+      const si = (phone && cfg.sign_in.signed_in_phone) || cfg.sign_in.signed_in;
       const proof = typeof si === 'string' ? page.locator(si) : page.getByRole(si.role, { name: si.name });
+      const opener = phone && cfg.sign_in.open;
       try {
+        if (opener) await page.getByRole('button', { name: opener }).click({ timeout: PROOF_TIMEOUT_MS });
         await proof.first().waitFor({ state: 'visible', timeout: PROOF_TIMEOUT_MS });
       } catch {
         throw new ProofMissingError('signed-in state not confirmed');
+      }
+      if (opener) {
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => document.activeElement?.blur?.());
+        const closed = await page.getByRole('dialog').first().waitFor({ state: 'hidden', timeout: 3_000 }).then(() => true, () => false);
+        if (!closed) {
+          await page.reload({ waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
+          await settle();
+        }
       }
     }
     const height = Number(await page.evaluate(() => document.documentElement.scrollHeight));

@@ -14,9 +14,9 @@ const SHA = 'a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0';
 
 function fakePlaywright({
   consoleErrors = [], failed = [], pageErrors = [], gotoError, launchError, height = 500, cookieBanner = false, signInLandings = 0,
-  signInPath = '/sign-in', redirectTo, fillError, contextError, screenshotError, reloadConsoleErrors, reloadFailed, driftAfterFill, proofMisses = 0,
+  signInPath = '/sign-in', redirectTo, fillError, contextError, screenshotError, reloadConsoleErrors, reloadFailed, driftAfterFill, proofMisses = 0, proofMissName = 'Manage account', menuStuck = false,
 } = {}) {
-  const log = { contexts: [], screenshots: [], gotos: [], fills: [], styles: [], clicks: [], waits: [], html: [], reloads: 0, submitClicks: 0, browserClosed: false };
+  const log = { contexts: [], screenshots: [], gotos: [], fills: [], styles: [], clicks: [], waits: [], html: [], reloads: 0, evals: [], keys: [], submitClicks: 0, browserClosed: false };
   let landings = signInLandings;
   let misses = proofMisses;
   const makePage = () => {
@@ -48,13 +48,19 @@ function fakePlaywright({
         log.reloads += 1;
         emit(reloadConsoleErrors ?? consoleErrors, reloadFailed ?? failed);
       },
-      getByRole: (role, { name }) => {
+      keyboard: { press: async (key) => void log.keys.push(key) },
+      getByRole: (role, { name } = {}) => {
         const loc = {
           isVisible: async () => cookieBanner && name === 'Reject all',
           click: async () => void log.clicks.push(name),
           waitFor: async (opts) => {
             const onShot = !current.includes(signInPath);
-            if (onShot && name === 'Manage account' && misses > 0) {
+            if (role === 'dialog') {
+              log.waits.push(['dialog', opts.state]);
+              if (menuStuck) throw new Error('menu still open');
+              return;
+            }
+            if (onShot && name === proofMissName && misses > 0) {
               misses -= 1;
               throw new Error('proof not visible');
             }
@@ -66,7 +72,10 @@ function fakePlaywright({
       },
       addStyleTag: async ({ content }) => void log.styles.push(content),
       waitForFunction: async (fn, arg, opts) => void log.waits.push(arg === undefined ? ['images'] : ['enabled', arg, opts.timeout]),
-      evaluate: async () => height,
+      evaluate: async (fn) => {
+        log.evals.push(String(fn));
+        return height;
+      },
       waitForLoadState: async () => {
         throw new Error('networkidle timeout');
       },
@@ -1054,4 +1063,81 @@ test('markdown pr lists an identical not-exercised bullet once', () => {
   seed(home, [entry({ phase: 'before', ...skip }), entry({ ...skip })]);
   const md = readFileSync(cmdMarkdown(d, { repo: 'o/r', issue: 7, attempt: 1, for: 'pr' }).fragment_file, 'utf8');
   assert.equal(md.split('not exercised, signed-in state not confirmed').length - 1, 1);
+});
+
+const PHONE_CONFIG = { ...CONFIG, sign_in: { ...CONFIG.sign_in, signed_in_phone: { role: 'button', name: 'Sign out' }, open: 'Open main menu' } };
+const phoneArgs = (phase = 'mockup') => parseArgs(['capture', '--repo', 'o/r', '--issue', '7', '--phase', phase, '--base-url', 'http://localhost:3000', '--route', '/', '--project', tmpdir(), '--phone', '--sign-in']);
+
+test('phone shots use signed_in_phone, desktop keeps signed_in', async () => {
+  const pw = fakePlaywright();
+  const { d } = deps({ pw, config: PHONE_CONFIG });
+  const r = await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
+  assert.deepEqual(r.shots.map((s) => s.result), ['pass', 'pass']);
+  const proofs = pw.log.waits.filter(([, , where]) => where === 'shot').map(([n]) => n);
+  assert.deepEqual(proofs, ['Manage account', 'Sign out']);
+});
+
+test('phone without signed_in_phone falls back to signed_in and clicks no menu', async () => {
+  const pw = fakePlaywright();
+  const { d } = deps({ pw });
+  await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
+  const proofs = pw.log.waits.filter(([, , where]) => where === 'shot').map(([n]) => n);
+  assert.deepEqual(proofs, ['Manage account', 'Manage account']);
+  assert.ok(!pw.log.clicks.includes('Open main menu'));
+});
+
+test('open: the menu button is clicked before the proof and closed with Escape before the screenshot', async () => {
+  const pw = fakePlaywright();
+  const { d } = deps({ pw, config: PHONE_CONFIG });
+  await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
+  assert.deepEqual(pw.log.clicks, ['Open main menu']);
+  assert.deepEqual(pw.log.keys, ['Escape']);
+  assert.equal(pw.log.evals.filter((f) => f.includes('blur')).length, 1);
+  assert.ok(pw.log.waits.some(([n, st]) => n === 'dialog' && st === 'hidden'));
+  assert.equal(pw.log.reloads, 0);
+  assert.equal(pw.log.screenshots.length, 2);
+});
+
+test('open: a menu that stays open triggers a reload with hygiene re-run before the screenshot', async () => {
+  const pw = fakePlaywright({ menuStuck: true });
+  const { d } = deps({ pw, config: PHONE_CONFIG });
+  await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
+  assert.equal(pw.log.reloads, 1);
+  assert.equal(pw.log.styles.length, 3);
+});
+
+test('missing phone proof follows the stale-auth path, then records signed-in state not confirmed', async () => {
+  const project = signInProject();
+  const pw = fakePlaywright({ proofMisses: 99, proofMissName: 'Sign out' });
+  const { d, home } = deps({ pw, config: PHONE_CONFIG });
+  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
+  mkdirSync(join(state, '..'), { recursive: true });
+  writeFileSync(state, '{"stale":true}');
+  const r = await cmdCapture(d, { ...phoneArgs(), project });
+  assert.deepEqual(r.shots.map((s) => [s.viewport, s.result, s.reason ?? '']), [['desktop', 'pass', ''], ['phone', 'not-exercised', 'signed-in state not confirmed']]);
+  assert.equal(pw.log.fills.length, 2);
+  assert.equal(pw.log.screenshots.length, 1);
+});
+
+test('missing phone proof once recovers after a fresh sign-in', async () => {
+  const project = signInProject();
+  const pw = fakePlaywright({ proofMisses: 1, proofMissName: 'Sign out' });
+  const { d, home } = deps({ pw, config: PHONE_CONFIG });
+  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
+  mkdirSync(join(state, '..'), { recursive: true });
+  writeFileSync(state, '{"stale":true}');
+  const r = await cmdCapture(d, { ...phoneArgs(), project });
+  assert.deepEqual(r.shots.map((s) => s.result), ['pass', 'pass']);
+  assert.equal(pw.log.fills.length, 2);
+});
+
+test('config: signed_in_phone and open are validated strictly', () => {
+  assert.doesNotThrow(() => parseConfig(JSON.stringify(PHONE_CONFIG)));
+  assert.doesNotThrow(() => parseConfig(JSON.stringify({ sign_in: { ...CONFIG.sign_in, signed_in_phone: '#menu-user' } })));
+  for (const extra of [
+    { signed_in_phone: {} }, { signed_in_phone: { role: 'button' } }, { signed_in_phone: { role: 'button', name: 'x', extra: 1 } }, { signed_in_phone: 5 }, { signed_in_phone: '' },
+    { open: '' }, { open: 5 }, { open: { role: 'button' } },
+  ]) {
+    assert.throws(() => parseConfig(JSON.stringify({ sign_in: { ...CONFIG.sign_in, ...extra } })), UsageError, JSON.stringify(extra));
+  }
 });
