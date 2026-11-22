@@ -289,6 +289,11 @@ export function makeDeps(env = process.env) {
       }
     },
     readStdin: () => readFileSync(0, 'utf8'),
+    // True only when GitHub says the repo is private. Throws when the check fails.
+    repoIsPrivate(repo) {
+      const out = execFileSync('gh', ['repo', 'view', repo, '--json', 'isPrivate'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
+      return JSON.parse(out).isPrivate === true;
+    },
     readConfigText(project, configPath) {
       if (configPath) {
         try {
@@ -861,7 +866,19 @@ const shotLabel = (e) => `${codeSpan(e.route)} (${plain(e.viewport.name)})`;
 const image = (e) => `![${plain(e.caption)}${e.truncated ? TRUNCATED_CAPTION_SUFFIX : ''}](${rel(e)})`;
 const notExercisedBullet = (e) => `- ${shotLabel(e)}: not exercised, ${plain(e.reason) || 'no reason recorded'}`;
 
-function planBody(entries) {
+const PUBLIC_REASON = 'repository is public, images not attached';
+const UNKNOWN_REASON = 'repository visibility unknown, images not attached';
+
+// Returns null when images may be attached (private repo), else the reason they may not.
+function imageBlockReason(d, repo) {
+  try {
+    return d.repoIsPrivate(repo) === true ? null : PUBLIC_REASON;
+  } catch {
+    return UNKNOWN_REASON;
+  }
+}
+
+function planBody(entries, noImages) {
   const before = entries.filter((e) => e.phase === 'before');
   const mockup = entries.filter((e) => e.phase === 'mockup');
   const out = [];
@@ -870,8 +887,8 @@ function planBody(entries) {
     out.push(`### ${title}`, '');
     if (intro) out.push(intro, '');
     for (const e of list) {
-      if (exercised(e)) out.push(shotLabel(e), '', image(e), '');
-      else out.push(notExercisedBullet(e));
+      if (exercised(e) && !noImages) out.push(shotLabel(e), '', image(e), '');
+      else out.push(notExercisedBullet(exercised(e) ? { ...e, reason: noImages } : e));
     }
     out.push('');
   };
@@ -880,7 +897,7 @@ function planBody(entries) {
   return out;
 }
 
-function prBody(entries) {
+function prBody(entries, noImages) {
   const before = entries.filter((e) => e.phase === 'before');
   const after = entries.filter((e) => e.phase === 'after');
   const afterFor = (e) => after.find((a) => pairKey(a) === pairKey(e));
@@ -890,8 +907,16 @@ function prBody(entries) {
   });
   const out = ['### Before and after', ''];
   const composed = new Set(compare.map(pairKey));
-  for (const e of compare) out.push(shotLabel(e), '', image(e), '');
+  const withheld = [];
+  for (const e of compare) {
+    if (noImages) withheld.push({ ...e, reason: noImages });
+    else out.push(shotLabel(e), '', image(e), '');
+  }
   for (const e of after.filter((a) => exercised(a) && !composed.has(pairKey(a)))) {
+    if (noImages) {
+      withheld.push({ ...e, reason: noImages });
+      continue;
+    }
     const b = before.find((x) => pairKey(x) === pairKey(e) && exercised(x));
     out.push(shotLabel(e), '');
     if (b) out.push(`Before: ${image(b)}`, '');
@@ -909,7 +934,7 @@ function prBody(entries) {
   }
   out.push('Playwright traces: none recorded.', '');
   const skipped = entries.filter((e) => ['before', 'after', 'compare'].includes(e.phase) && !exercised(e));
-  for (const line of new Set(skipped.map(notExercisedBullet))) out.push(line);
+  for (const line of new Set([...withheld, ...skipped].map(notExercisedBullet))) out.push(line);
   return out;
 }
 
@@ -926,14 +951,16 @@ export function cmdMarkdown(d, o) {
   const remote = entries.find((e) => exercised(e) && !isLocalHost(e.url));
   if (remote) throw new RefusalError(`refusing to write markdown: image for ${remote.phase} ${plain(remote.route)} was captured from non-local host ${plain(remote.url)}`);
 
-  const lines = o.for === 'plan' ? planBody(entries) : prBody(entries);
+  const noImages = imageBlockReason(d, o.repo);
+  const lines = o.for === 'plan' ? planBody(entries, noImages) : prBody(entries, noImages);
   const text = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 
   const files = [...new Set(entries.filter(exercised).map((e) => e.file))];
   const badFile = files.find((f) => !FILE_RE.test(f));
   if (badFile) throw new RefusalError(`refusing to attach unexpected path: ${plain(badFile)}`);
   const allowed = new Set(files.map((f) => `./${f}`));
-  const attach = [...new Set(imageRefs(text))];
+  const attach = noImages ? [] : [...new Set(imageRefs(text))];
+  if (noImages && imageRefs(text).length) throw new RefusalError('refusing to write markdown: images present for a repository that is not private');
   if (attach.some((r) => !allowed.has(r))) {
     throw new RefusalError('refusing to write markdown: an image reference in the body is not a captured file');
   }

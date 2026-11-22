@@ -140,7 +140,7 @@ const CONFIG = {
   ignore_requests: [],
 };
 
-function deps({ pw, env = {}, loadError, config = CONFIG } = {}) {
+function deps({ pw, env = {}, loadError, config = CONFIG, isPrivate = true, privateError } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'capture-ui-home-'));
   return {
     home,
@@ -154,6 +154,10 @@ function deps({ pw, env = {}, loadError, config = CONFIG } = {}) {
       },
       gitInfo: () => ({ sha: SHA, branch: 'feat/x' }),
       readStdin: () => 'app/page.tsx\nREADME.md\n',
+      repoIsPrivate: (repo) => {
+        if (privateError) throw new Error(privateError);
+        return isPrivate;
+      },
     },
   };
 }
@@ -1140,4 +1144,48 @@ test('config: signed_in_phone and open are validated strictly', () => {
   ]) {
     assert.throws(() => parseConfig(JSON.stringify({ sign_in: { ...CONFIG.sign_in, ...extra } })), UsageError, JSON.stringify(extra));
   }
+});
+
+test('markdown plan in a public repo lists every shot as not exercised and prints no attach', () => {
+  const { d, home } = deps({ isPrivate: false });
+  const dir = seed(home, [
+    entry({ phase: 'before', file: 'before/home-desktop.png' }),
+    entry({ phase: 'mockup', file: 'mockup/home-desktop.png', caption: 'Mockup, not implemented' }),
+    entry({ phase: 'before', route: '/p', file: null, result: 'not-exercised', reason: 'sign-in failed' }),
+  ]);
+  const r = cmdMarkdown(d, { repo: 'o/r', issue: 7, attempt: 1, for: 'plan' });
+  const md = readFileSync(join(dir, 'images-plan.md'), 'utf8');
+  assert.ok(!md.includes('!['));
+  assert.match(md, /- `\/` \(desktop\): not exercised, repository is public, images not attached/);
+  assert.match(md, /- `\/p` \(desktop\): not exercised, sign-in failed/);
+  assert.deepEqual(r.attach, []);
+  assert.ok(!r.stdout.includes('attach:'));
+  assert.ok(!r.stdout.includes('--attach'));
+  assert.match(r.stdout, /gh issue comment 7 --repo o\/r --body-file <body\.md>$/);
+});
+
+test('markdown pr in a public repo keeps the table, drops images and prints no attach', () => {
+  const { d, home } = deps({ isPrivate: false });
+  const dir = seed(home, [
+    entry({ phase: 'before', file: 'before/home-desktop.png' }),
+    entry(),
+    entry({ phase: 'compare', file: 'compare/home-desktop.png', caption: 'Home, before and after' }),
+  ]);
+  const r = cmdMarkdown(d, { repo: 'o/r', issue: 7, attempt: 1, for: 'pr' });
+  const md = readFileSync(join(dir, 'images-pr.md'), 'utf8');
+  assert.ok(!md.includes('!['));
+  assert.match(md, /\| `\/` \| desktop \| 0 \| 0 \| 0 \| 0 \| pass \| a1b2c3d \|/);
+  assert.match(md, /- `\/` \(desktop\): not exercised, repository is public, images not attached/);
+  assert.deepEqual(r.attach, []);
+  assert.ok(!r.stdout.includes('--attach'));
+});
+
+test('markdown treats a failed visibility check as not private', () => {
+  const { d, home } = deps({ privateError: 'gh: not logged in' });
+  const dir = seed(home, [entry({ phase: 'before', file: 'before/home-desktop.png' })]);
+  const r = cmdMarkdown(d, { repo: 'o/r', issue: 7, attempt: 1, for: 'plan' });
+  const md = readFileSync(join(dir, 'images-plan.md'), 'utf8');
+  assert.match(md, /not exercised, repository visibility unknown, images not attached/);
+  assert.deepEqual(r.attach, []);
+  assert.ok(!r.stdout.includes('--attach'));
 });
