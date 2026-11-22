@@ -19,18 +19,19 @@ A taken folder is named `expired/<lock>.<takenAtMs>.<uuid>`. `takenAtMs` is `d.n
 | #10 name | `<lock>.<uuid>`, no take time | counts as taken at 0, so old |
 | other | a file, or a folder name that does not parse | left alone |
 
-Issue labels while a sweep finishes an issue, in write order: `factory-running`, then `factory-running` and `factory-failed`, then the comment, then `factory-failed` alone. `factory-running` goes last, so a kill or a `gh` error at any point leaves the label the next sweep reads.
+Issue labels while a sweep finishes an issue, in write order: `factory-running`, then `factory-running` and `factory-failed`, then the comment, then `factory-failed` alone. `factory-running` goes last, so a kill or a `gh` error at any point leaves the label the next sweep reads. After the removal the sweep reads the issue again and throws when `factory-running` is still there, so a failed removal keeps the folder (open decision 10).
 
 Entries from `expired/` keep today's stale entry shape. A readable claim gives `{ lock, repo, issue, run_id, claimed_at, dashboard }`. An unreadable one gives `{ lock, repo?, issue?, reason, changed_at }`. `changed_at` stays the original folder mtime, since every rename keeps it (probe 1).
 
 ## Probes
 
-Probes ran in a scratchpad copy of `pick-up.mjs` and `pick-up.test.mjs`. Each variant swaps one line of the prototype and runs the full 90-test file.
+Probes ran in a scratchpad copy of `pick-up.mjs` and `pick-up.test.mjs`. Each variant swaps one line of the prototype and runs the test file as it stood at that probe (90 tests for probes 1 to 4, 94 for probe 5).
 
 1. A rename keeps the folder mtime on APFS and moves ctime to the rename time. This holds both into `expired/` and within it. Script `p1.mjs`: `before mtime 2026-01-01T00:00:00.000Z`, `after mv mtime 2026-01-01T00:00:00.000Z, ctime 2026-11-22T12:09:39.552Z`, `rename in expired/ mtime 2026-01-01T00:00:00.000Z, ctime 2026-11-22T12:09:40.655Z`. A lock moves to `expired/` only once it is stale, so its mtime is already more than 4 hours old at the take. Under the issue's "folder mtime" rule, a second claim takes the folder from a live sweep. Variant `mtime` ages from mtime. It fails `a lock another claim just took from locks/ is not taken by a second claim` with `2 !== 1` comments, and fails 3 more tests, `a folder taken exactly 4 hours ago is left alone` among them.
 2. A lock name can contain dots, since `REPO_RE` allows `.` (`o/my.repo` gives `o-my.repo-4`). The parse is `/^(.+?)(?:\.(\d+))?\.<uuid>$/`. The lazy group keeps the dots in the lock name and takes the stamp only as the last number before the uuid. Test `an unreadable folder of a repo with dots in its name keeps its full lock name` passes on the prototype. One case cannot be told apart. A #10 name whose lock itself ends in `.<digits>` reads as a stamp. `lockName` always ends in `-<issue>`, so only a hand-made folder in `locks/` can produce that.
-3. Live lock guard. A check of `locks/<lock>` alone is not enough. When the re-claim already finished and released, there is no lock and no `factory-running`. Variant `lockonly` then gives that issue `factory-failed` and a "did not release" comment. It fails `has needs-plan-approval and no factory-running` and `has factory-failed and no factory-running`. Variant `labelonly` reads labels and skips the lock check. It finishes an issue a live claim holds and fails `a live claim holds again`. The prototype reads labels first and then checks the lock. A claim makes its lock before it adds `factory-running`, so a live claim seen in the label read always has its lock. Release removes the label before the lock. A release that finishes both its comment and its lock removal while the label read is in flight still looks stuck. That gap is one `gh` read long.
+3. Live lock guard. A check of `locks/<lock>` alone is not enough. When the re-claim already finished and released, there is no lock and no `factory-running`. Variant `lockonly` then gives that issue `factory-failed` and a "did not release" comment. It fails `has needs-plan-approval and no factory-running` and `has factory-failed and no factory-running`. Variant `labelonly` reads labels and skips the lock check. It finishes an issue a live claim holds and fails `a live claim holds again`. The prototype checks the lock, reads labels, then checks the lock again. A claim makes its lock before it adds `factory-running`, so a live claim seen in the label read has its lock by the second check. Release removes the label before the lock, so a release that finishes while the read is in flight held its lock at the first check. Test `a release that finishes during the issue read does not make the issue look stuck` fails with only the second check and passes with both.
 4. Re-handling after a partial run. With today's write order (`factory-running` removed first), a re-take is a single attempt. Once `removeLabel` has run, a `gh` error or a kill leaves an issue without `factory-running`, and the next sweep drops the folder with no `factory-failed`. With a fake `gh` that keeps labels, the prototype in today's order fails `a gh error puts the folder back under its old name and the next tick retries` with `0 !== 1` stale entries. With `factory-running` removed last it passes. Then a kill after the comment and before `removeLabel` gives a second comment on retry. A kill after `removeLabel` leaves `factory-failed` alone, and the folder is dropped with no second comment. Variant `noguard` posts that second comment and fails 4 tests.
+5. A failed `factory-running` removal. With `factory-running` removed last inside `ignoreFailure`, a real error there (network, rate limit, 5xx) is swallowed and the folder is deleted. The issue keeps both labels with no lock and no folder, so pick-up skips it forever once the owner removes `factory-failed`. At base later calls threw on the same outage. Test `a failed factory-running removal keeps <a stale lock | a folder in expired/> and the next tick finishes the issue` makes the fake `removeLabel` throw `HTTP 502` once. Both cases fail on the probe 4 prototype and pass with either fix in open decision 10. What `gh issue edit --remove-label` does with a label that is not on the issue, read from the gh v2.105.0 source (the installed version) and not run against any issue: `UpdateIssue` in `pkg/cmd/pr/shared/editable_http.go` maps names to ids with `LabelsToIDs`, which returns `'<name>' not found` only when the label is missing from the repo. It then sends the GraphQL `removeLabelsFromLabelable` mutation. The sweep runs `ensureLabels` before this call, so the repo case cannot arise. Whether the mutation errors for a label the issue does not have is not observed. I expect a no-op, but this is a guess.
 
 ## Changes
 
@@ -40,19 +41,19 @@ Probes ran in a scratchpad copy of `pick-up.mjs` and `pick-up.test.mjs`. Each va
 - Add `parseTaken(name)`. It returns `{ lock, takenAtMs }` for `<lock>.<ms>.<uuid>`, `{ lock, takenAtMs: 0 }` for `<lock>.<uuid>`, and `null` for any other name.
 - `inspectLock(dir)` takes the folder path, so one function inspects both `locks/` and `expired/`.
 - `takeLock(d, from, lock)` renames `from` to `expired/<lock>.<d.now()>.<uuid>`. Both the first take and a re-take use it. `ENOENT` still means another claim took it first.
-- Add `stillStuck(d, { repo, issue })`. It calls `d.gh.getIssue` and returns true when the issue has `factory-running`, and only then checks that `locks/<lockName>` is absent. A null result (a PR) counts as not stuck.
+- Add `stillStuck(d, { repo, issue })`. It returns false when `locks/<lockName>` exists. Else it calls `d.gh.getIssue` and returns true when the issue has `factory-running` and `locks/<lockName>` is still absent. A null result (a PR) counts as not stuck.
 - `handleStale` lists `locks/` and the parsed names in `expired/` up front. A missing `locks/` no longer returns early. Per folder, in this order:
   1. `inspectLock`. Skip `gone`.
   2. Age check. A folder from `expired/` ages by `takenAtMs`. A lock ages by `claimed_at` or folder mtime, as today. Build the entry as today.
   3. Unless `--dry-run`, `takeLock`, and skip on `undefined`. Steps 1 to 3 keep no `gh` call or `await` between them.
-  4. For a folder from `expired/` with `repo`, when `stillStuck` is false, remove the taken folder and go on. `--dry-run` runs this read too, so its list matches a real run.
-  5. List the entry. Stop here under `--dry-run`. Else ensure labels, add `factory-failed`, comment, and remove `factory-running` last, still inside `ignoreFailure`. This order applies to locks from `locks/` too.
+  4. For a folder from `expired/` with `repo`, when `stillStuck` is false, remove the taken folder and go on. `--dry-run` runs this read too, so its list matches a real run. Under `--dry-run` nothing was taken, so a folder whose issue moved on is neither removed nor listed. Test `dry-run neither lists nor removes a folder whose issue moved on` covers it.
+  5. List the entry. Stop here under `--dry-run`. Else ensure labels, add `factory-failed`, comment, and remove `factory-running` last, still inside `ignoreFailure`. Then read the issue with `getIssue` and throw when it still has `factory-running`. This order applies to locks from `locks/` too.
   6. On a throw in step 4 or 5, rename the taken folder back to the path it came from and rethrow. For a lock that is `locks/<lock>`, as today. For a re-take it is the old `expired/` name with its old stamp, so the next tick retries. Skip the rename when nothing was taken (`--dry-run`).
   7. Remove the taken folder. Post `expired` only for entries with `run_id`, as today.
 - Header comment. Name the folder format `expired/<lock>.<takenAtMs>.<uuid>` and say that the sweep finishes folders left there.
 - Unchanged. `isStale`, `matchLockName`, `cmdList`, `cmdRelease`, the comment bodies, the entry shape.
 
-The prototype diff is 58 lines added and 27 removed in this file.
+The prototype diff is 62 lines added and 27 removed in this file.
 
 ### `playbooks/scripts/pick-up.test.mjs`
 
@@ -60,7 +61,7 @@ The prototype diff is 58 lines added and 27 removed in this file.
 - The fake `addLabel` and `removeLabel` change the fixture issue's labels, as GitHub does. The 74 tests at base still pass with it.
 - `stale: an unreadable lock matching a --repo marks the issue factory-failed` expects the new write order: `addLabel`, `comment`, `removeLabel`.
 - Add helper `expiredLock(stateDir, lock, takenAtMs, content)`. It makes `expired/<lock>.<takenAtMs>.<uuid>`, or `<lock>.<uuid>` when `takenAtMs` is undefined, with an optional raw `claim.json` and folder mtime `T0`. Fixture issues come from a function, since the fake now changes them.
-- Add the 16 tests below. Every one drives `cmdClaim`.
+- Add the 20 tests below. Every one drives `cmdClaim`.
 
 ### `playbooks/factory.md`, "Scheduled pick-up"
 
@@ -79,11 +80,12 @@ Extend the stale lock line with this text. A sweep moves a stale lock to `~/.fac
 Extra tests.
 
 - Probe 1. `expired: a lock another claim just took from locks/ is not taken by a second claim while the first one handles it`, and the same for `a folder another claim just took again`. Claim B starts inside claim A's first `gh` write.
-- Probe 3. `expired: a folder whose issue a live claim holds again is removed with no gh write`. `expired: a folder whose issue has needs-plan-approval and no factory-running is removed with no gh write`, and the same for `factory-failed`.
+- Probe 3. `expired: a folder whose issue a live claim holds again is removed with no gh write`. `expired: a folder whose issue has needs-plan-approval and no factory-running is removed with no gh write`, and the same for `factory-failed`. `expired: a release that finishes during the issue read does not make the issue look stuck`. `expired: dry-run neither lists nor removes a folder whose issue moved on`.
+- Probe 5. `expired: a failed factory-running removal keeps a stale lock and the next tick finishes the issue`, and the same for `a folder in expired/`.
 - Probe 4. `expired: a gh error puts the folder back under its old name and the next tick retries`. `expired: a folder whose issue has factory-running and factory-failed is finished`. `expired: a failed issue read puts the folder back under its old name`, with and without `--dry-run`.
 - Probe 2 and names. `a folder from a #10 sweep, with no take time in its name, is finished at once`, `an unreadable folder of a repo with dots in its name keeps its full lock name`, `an unreadable folder matching no --repo is removed and listed by folder only`, `a plain file and a folder without a taken name are left alone`.
 
-Scratchpad run of the 90-test file (74 today plus 16) in a copy of the repo layout. Against origin/main 76 pass and 14 fail: 13 new tests and the reordered `stale:` test. Against the prototype 90 pass. Three new tests pass at both, and each pins behavior that is already right: the young folder, the lock taken from `locks/`, and the stray entries. The variant runs in the probes show that the concurrency and guard tests fail when their mechanism is removed.
+Scratchpad run of the 94-test file (74 today plus 20) in a copy of the repo layout. Against origin/main 77 pass and 17 fail: 16 new tests and the reordered `stale:` test. Against the prototype 94 pass. Four new tests pass at both, and each pins behavior that is already right: the young folder, the lock taken from `locks/`, the stray entries, and the dry-run folder whose issue moved on. The variant runs in the probes show that the concurrency and guard tests fail when their mechanism is removed.
 
 ## Gates
 
@@ -98,7 +100,7 @@ python3 -m unittest discover -s factory/factory-onboard/tests
 grep -q "~/.factory/expired/" playbooks/factory.md
 ```
 
-Baseline at 0b7c118. Pick-up 74 pass, capture-ui 115 pass, bootstrap 3 OK, event-model 4 OK, factory-onboard 27 OK. Pick-up is expected at 90 pass.
+Baseline at 0b7c118. Pick-up 74 pass, capture-ui 115 pass, bootstrap 3 OK, event-model 4 OK, factory-onboard 27 OK. Pick-up is expected at 94 pass.
 
 ## Out of scope
 
@@ -110,7 +112,7 @@ Baseline at 0b7c118. Pick-up 74 pass, capture-ui 115 pass, bootstrap 3 OK, event
 ## Owner follow-ups
 
 - Copy `playbooks/scripts/pick-up.mjs` and `playbooks/factory.md` to `~/.agents/playbooks/` after merge. The copies are made by hand and nothing syncs them.
-- Before that copy, `ls ~/.factory/expired/` shows the #10 folders the first tick will finish (open decision 6). This run did not read `~/.factory`.
+- Before that copy, `ls ~/.factory/expired/` shows the #10 folders the first tick will finish (open decision 6). A read-only listing by this factory run on 2026-11-22 showed `~/.factory/` holds `armed`, `evidence`, `locks` and `skills`, and `~/.factory/expired/` does not exist. Decision 6 has no folders to act on on this Mac today.
 - `~/.claude/scheduled-tasks/factory-pickup/SKILL.md` step 3 needs no change for #21. Entries from `expired/` keep today's shape, and folders whose issue moved on are not listed. The #10 follow-up is still open. Step 3 still reads "Factory run <entry run_id> held the claim since <entry claimed_at>" for every entry, including unreadable ones (read 2026-11-22).
 
 ## Open decisions
@@ -124,3 +126,4 @@ Baseline at 0b7c118. Pick-up 74 pass, capture-ui 115 pass, bootstrap 3 OK, event
 7. Extra field on entries from `expired/`. Chosen, none. Step 3 reads only `repo`, `issue`, `run_id` and `claimed_at`. Alternative, `taken_at` with the time of the first take.
 8. Other entries in `expired/`. Chosen, a file or a folder whose name does not parse is left alone with no output. Alternative, remove it.
 9. `--dry-run` and the label read. Chosen, dry-run makes the same `getIssue` read, so its list matches a real run. Alternative, list every old folder with no `gh` call.
+10. A failed `factory-running` removal (probe 5). Chosen, keep `ignoreFailure` on the removal, then read the issue again and throw when `factory-running` is still there. The throw renames the folder back, and the next tick finishes the issue. The cost is one more `getIssue` per handled entry, and at most one duplicate comment on retry. It holds whatever GitHub does with a label the issue lacks. Alternative, drop `ignoreFailure` so any throw renames the folder back. It is one line smaller and passes the same tests. It relies on `removeLabelsFromLabelable` being a no-op for a label the issue lacks, which this run did not observe. If that call errors, a stale lock whose issue never got `factory-running` makes every claim exit 1. Switch to it if the owner confirms the no-op.
