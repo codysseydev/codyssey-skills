@@ -13,24 +13,25 @@ Issue codysseydev/codyssey-skills#31. Base origin/main ad19dcd. Branch `factory/
 - `:88` "A retry starts a new branch (`factory/<issue>-a2`) with `attempt: 2`".
 - `:81` and `:102` name the evidence dir `~/.factory/evidence/<owner>-<repo>-<issue>-a<attempt>/`.
 - `:122` every `report_stage` event carries `attempt` (default 1).
+- `:77` and `:82` run `capture-ui.mjs capture`, `compose` and `markdown` with no `--attempt`. `capture-ui.mjs` defaults it to 1 (`playbooks/scripts/capture-ui.mjs:1131`, `:1152`) and builds the evidence dir from it (`:232-234`).
 - `:30` ends "The next tick then starts attempt 2 as stage 5 describes".
 - `:94` the archive run takes the attempt from the merged PR's head branch.
 
-`pick-up.mjs` has no attempt anywhere:
+`pick-up.mjs` has no attempt number:
 
 - `cmdClaim` writes `claim.json` with `repo, issue, action, run_id, claimed_at` (`playbooks/scripts/pick-up.mjs:538-541`).
 - It returns `status, repo, issue, title, action, run_id, dry_run, dashboard, stale` (`:558-568`).
 - It sends `run_id, repo, issue_number, event, action, occurred_at` (`:555-557`, shape comment `:231`).
 - The installed task prompt (`~/.claude/scheduled-tasks/factory-pickup/SKILL.md` step 5, read 2026-11-23) passes repo, issue and action to the session. No attempt.
 
-The issue says no retry has happened yet. One has. #26 got `factory-failed` at 2026-11-22T19:51:23Z, lost it at 20:26:40Z, and `factory/26-a2` is on origin. That session worked out the number by itself.
+The issue says no retry has happened yet. One has. #26 got `factory-failed` at 2026-11-22T19:51:23Z, lost it at 20:26:40Z, and `factory/26-a2` is on origin.
 
 ## Behaviour
 
 | Case | Today | After |
 |---|---|---|
-| first claim, no `factory-failed` ever added | no attempt anywhere | `attempt: 1` |
-| `factory-failed` added once, then removed by the owner (#26) | no attempt, session guesses | `attempt: 2` |
+| first claim, no `factory-failed` ever added | no attempt in claim | `attempt: 1` |
+| `factory-failed` added once, then removed by the owner (#26) | no attempt in claim | `attempt: 2` |
 | added twice | no attempt | `attempt: 3` |
 | timeline unreadable | not read | open decision 1 |
 | `claim --dry-run` | no attempt in output | `attempt` in output |
@@ -80,13 +81,14 @@ Dashboard (no request sent). `codyssey-factory-dashboard` origin/main c7706b3, r
 - "Scheduled pick-up", after the "Claim is the atomic lock dir" bullet (`:25`). New bullet: claim sets `attempt` to 1 plus the number of `factory-failed` additions in the issue timeline, removals not counted. It writes it to `claim.json`, returns it and sends it in the `claimed` event. The task prompt passes it to the session. The unreadable case per decision 1.
 - `:30`, last sentence. "The next claim then counts it as attempt 2 (see the attempt bullet above)."
 - Stage 5, `:88`. "A retry is the next attempt, numbered by `claim` (Scheduled pick-up). Attempt n from 2 works on a new branch `factory/<issue>-a<n>` and reports `attempt: n`. Its first message quotes the last failure and the owner's note."
+- Stage 2, `:77`, and stage 5, `:82`. The `capture-ui.mjs` steps pass `--attempt <attempt>`, so a retry writes its own evidence dir.
 - Stage 8, `:94`, per decision 2.
 
 ### Task prompt (owner follow-up in the PR body)
 
-#32 ("Version the factory-pickup task prompt in this repo") is open, and origin/main has no versioned prompt (`git ls-tree` finds none; `README.md:142` points at factory.md). So the change goes in the PR body for the owner to make in `~/.claude/scheduled-tasks/factory-pickup/SKILL.md`, linking #32:
+#32 ("Version the factory-pickup task prompt in this repo") is open, and origin/main has no versioned prompt (`git ls-tree` finds none; `README.md:142` points at factory.md). #32 carries `factory`, so it can merge first. Implement checks #32 again. If it has merged, implement edits the versioned prompt and links #32. Otherwise the change goes in the PR body for the owner to make in `~/.claude/scheduled-tasks/factory-pickup/SKILL.md`, linking #32:
 
-- Step 4. "Your final message is one line naming the status, the `reason` when the JSON has one, and the number of stale entries reported."
+- Step 4. "Your final message is one line naming the status, the `reason` or `skipped` entries when the JSON has them, and the number of stale entries reported."
 - Step 5. "The JSON names repo, issue, action and attempt." The poteto-mode task gains: "Attempt <attempt>. Use it in every `report_stage` event and in the evidence dir. The branch is `factory/<issue>` for attempt 1 and `factory/<issue>-a<attempt>` from attempt 2."
 
 ## Tests, one per acceptance criterion
@@ -97,7 +99,7 @@ All in `playbooks/scripts/pick-up.test.mjs`. Each fails at base, where neither e
 |---|---|---|
 | 0, 1, 2 earlier additions | `attemptFromTimeline counts factory-failed additions only` | 0, 1, 2 `labeled factory-failed` give 1, 2, 3. An `unlabeled factory-failed`, a `labeled factory` and a `commented` event with no `label` change nothing |
 | same, through claim | `claim returns attempt 1, 2 and 3 from the timeline` | `cmdClaim` with fake timelines of 0, 1, 2 additions. `out.attempt` is 1, 2, 3 |
-| unreadable timeline | `claim with an unreadable timeline …` | fake `timeline` throws. Asserts the behaviour decision 1 picks: lock, labels, comment, output, `stale` kept |
+| unreadable timeline | `claim with an unreadable timeline …` | fake `timeline` throws. Asserts the behaviour decision 1 picks: no lock, no label, no comment, the reason in the output, `stale` kept (A or B); or `attempt: 1` with `attempt_error` (C) |
 | `--dry-run` shows attempt | `dry-run claim returns attempt` | `dryRun: true`, timeline with one addition, `out.attempt === 2`, `out.dry_run === true` |
 | `claim.json` and output | `claim writes attempt to claim.json, the output and the claimed event` | one addition. `claim.json.attempt`, `out.attempt` and `events[0].attempt` are all 2 |
 | boundary | `makeGh timeline flattens pages and rejects bad output` | fake `run` in the style of `:450`. Args are `['api', '--paginate', '--slurp', 'repos/o/r/issues/2/timeline?per_page=100']`. Two pages flatten. Empty output, non-JSON and a non-array throw |
@@ -136,11 +138,13 @@ Live probe, read-only: `makeGh().timeline` plus `attemptFromTimeline` on codysse
 
 ## Open decisions
 
-1. The timeline cannot be read.
-   - **A. Skip the issue and report a reason (Recommended).** The read runs before `mkdirSync` (`:530`), so a failure leaves no lock, no label and no comment. Claim stops there and returns `{ status: 'none', reason: 'attempt unknown for <repo>#<n>: <short error>', stale }`, the shape `--only` already uses (`:524`). It does not try the next issue, since a timeline failure is most likely gh-wide. The issue stays eligible for the next tick. The stale entries still reach the session. Cost: today step 4 of the task prompt prints only the status, so the reason shows once the step 4 follow-up lands. Reason: a wrong number is worse than a lost hour.
-   - **B. Claim with attempt 1 and say so.** Lock, label and comment as today, plus `attempt: 1` and `attempt_error: '<short error>'` in `claim.json` and the output. Cost: on a real retry the session reuses `factory/<issue>`, which exists on origin (for #26, `factory/26`), and the attempt 1 evidence dir. That breaks stage 1's "stay blind to its diff" (`factory.md:74`) and overwrites the first `evidence.json`.
-   - **C. Throw, as a label failure does.** The read runs inside the `try` (`:537-552`). The catch removes the lock (`:549-551`), no label is added, exit 1. Task step 2 ends the run with "pick-up error" and quotes it, so the owner sees it. Cost: step 2 reports nothing, so this tick's `stale` entries, already marked `factory-failed` at `:484`, get no `failed` event. Today's label failure has the same cost (test `:555`).
-2. The attempt for an `archive` claim. A crashed archive run gets `factory-failed` from the sweep. After the owner removes it, claim counts 2, but the merged PR came from `factory/<issue>` (attempt 1). `factory.md:94` reads the attempt from the merged PR's head branch.
+1. The timeline cannot be read. Unreadable means gh throws, the output does not parse, or it is not an array. In A and B the read runs before `mkdirSync` (`:530`), so a failure leaves no lock, no label and no comment, and the issue stays eligible for the next tick.
+   - **A. Skip the issue and move on (Recommended).** Claim tries the next eligible issue and lists the skip as `skipped: [{ repo, issue, reason: 'attempt unknown: <short error>' }]` in its output, claimed or `none`. Under `--only` it returns `{ status: 'none', reason, stale }`, the shape `:524` uses. Reason: rows sort by issue number (`:403`), so one issue whose timeline keeps failing would otherwise hold back every higher issue.
+   - **B. Skip the issue and stop.** Claim returns `{ status: 'none', reason: 'attempt unknown for <repo>#<n>: <short error>', stale }` at once. No new field. A timeline failure is most likely gh-wide, so trying the next issue may fail too. Cost: the head-of-line block above.
+   - **C. Claim with attempt 1 and say so.** Lock, label and comment as today, plus `attempt: 1` and `attempt_error: '<short error>'` in `claim.json` and the output. Cost: on a real retry the session reuses `factory/<issue>`, which exists on origin (for #26, `factory/26`), and the attempt 1 evidence dir. That breaks stage 1's "stay blind to its diff" (`factory.md:74`) and overwrites the first `evidence.json`.
+
+   For A and B, step 4 of the task prompt prints only the status today, so the reason reaches the final message once the step 4 follow-up lands. Not offered: throwing inside the `try` (`:537-552`), as a label failure does (test `:555`). The lock is removed and the run ends with "pick-up error", but task step 2 then reports nothing, so this tick's `stale` entries, already marked `factory-failed` at `:484`, get no `failed` event.
+2. The attempt for an `archive` claim. A crashed archive run gets `factory-failed` from the sweep. After the owner removes it, claim counts 2, but the merged PR came from `factory/<issue>` (attempt 1). `factory.md:94` already tells the archive session to read the attempt from the merged PR's head branch. The open part is what `claim` emits for archive.
    - **A. The branch wins for archive (Recommended).** Claim returns the count for every action. Stage 8 adds one sentence: for `archive`, use the attempt from the merged PR's head branch in every `report_stage` event and for the evidence dir, not the claim's number. No code branch on action. Reason: the evidence dir to remove belongs to the attempt that merged.
    - **B. No attempt for archive.** Claim omits `attempt` when the action is `archive`. The output shape then depends on the action, and the `claimed` event for archive has none.
    - **C. Claim reads the branch for archive.** Claim calls `closedByPullRequestsReferences` and parses the head branch. One more gh call and parser for a case `:94` already covers.
