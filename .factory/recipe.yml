@@ -3,6 +3,8 @@ setup: []
 checks:
   - name: pick-up-tests
     run: node --test playbooks/scripts/pick-up.test.mjs
+  - name: post-merge-tests
+    run: node --test playbooks/scripts/post-merge.test.mjs
   - name: capture-ui-tests
     run: node --test playbooks/scripts/capture-ui.test.mjs
   - name: trial-decision-tests

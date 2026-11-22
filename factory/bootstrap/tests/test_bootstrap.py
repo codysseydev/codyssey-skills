@@ -71,7 +71,7 @@ class BootstrapTest(unittest.TestCase):
         repo = os.path.join(self.root, "acme-app")
         playbook = open(os.path.join(repo, ".factory", "playbook.md")).read()
         self.assertEqual([l[3:] for l in playbook.splitlines() if l.startswith("## ")],
-                         ["Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes"])
+                         ["Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes", "Post-merge"])
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout, "")
         repo_log = subprocess.run(["git", "log", "--format=%s"], cwd=repo, capture_output=True, text=True).stdout.splitlines()
         self.assertEqual(repo_log[0], "Add the factory project file")

@@ -122,6 +122,25 @@ test('untrusted author is skipped for closed archive candidates and --only', asy
   assert.match(out.reason, /untrusted author/);
 });
 
+test('evaluateIssue: an open plan-approved issue with post-merge-check is archive', () => {
+  const open = (labels, extra) => issue(1, ['factory', 'plan-approved', ...labels], extra);
+  assert.equal(evaluateIssue(open(['post-merge-check']), R, ok).action, 'archive');
+  // checked before the Depends on rule: an open dependency does not hold it back
+  const dep = open(['post-merge-check'], { body: 'Depends on: #9' });
+  assert.equal(evaluateIssue(dep, R, { hasLock: false, depState: () => 'OPEN' }).action, 'archive');
+  // the skip labels still win, so a pending owner answer is not picked up
+  for (const label of SKIP_LABELS) {
+    const r = evaluateIssue(open(['post-merge-check', label]), R, ok);
+    assert.equal(r.eligible, false, label);
+    assert.equal(r.reason, `has label ${label}`);
+  }
+  assert.equal(evaluateIssue(open(['post-merge-check']), R, { ...ok, hasLock: true }).eligible, false);
+  // without plan-approved the label alone is not enough
+  assert.equal(evaluateIssue(issue(1, ['factory', 'post-merge-check']), R, ok).action, 'plan');
+  // after a revert the issue keeps plan-approved and factory-failed: skipped until the owner retries
+  assert.equal(evaluateIssue(open(['factory-failed']), R, ok).eligible, false);
+});
+
 test('evaluateIssue: lock, open dependency, plan, implement, archive', () => {
   assert.equal(evaluateIssue(issue(1), R, { ...ok, hasLock: true }).eligible, false);
   const dep = issue(1, ['factory'], { body: 'Depends on: #2' });
@@ -425,20 +444,20 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
 
 // ---------- factory labels ----------
 
-const OTHER_SIX = FACTORY_LABELS.filter((l) => l.name !== 'factory');
+const OTHER_LABELS = FACTORY_LABELS.filter((l) => l.name !== 'factory');
 
-test('FACTORY_LABELS holds seven unique names and factory-failed is b60205', () => {
+test('FACTORY_LABELS holds eight unique names and factory-failed is b60205', () => {
   const names = FACTORY_LABELS.map((l) => l.name);
-  assert.equal(names.length, 7);
-  assert.equal(new Set(names.map((n) => n.toLowerCase())).size, 7);
+  assert.equal(names.length, 8);
+  assert.equal(new Set(names.map((n) => n.toLowerCase())).size, 8);
   assert.equal(FACTORY_LABELS.find((l) => l.name === 'factory-failed').color, 'b60205');
 });
 
-test('claim creates the six missing factory labels with the table values, then none on the next claim', async () => {
+test('claim creates the seven missing factory labels with the table values, then none on the next claim', async () => {
   const { d, calls, labelState } = fake({ issues: { [R]: [issue(1), issue(2)] }, labels: FACTORY_ONLY });
   await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
-  assert.deepEqual(created(calls), OTHER_SIX.map((l) => l.name));
-  assert.deepEqual(labelState[R].filter((l) => l.name !== 'factory'), OTHER_SIX);
+  assert.deepEqual(created(calls), OTHER_LABELS.map((l) => l.name));
+  assert.deepEqual(labelState[R].filter((l) => l.name !== 'factory'), OTHER_LABELS);
   calls.length = 0;
   await cmdClaim(d, { repos: [R], runId: 'b', dryRun: false });
   assert.deepEqual(created(calls), []);
@@ -464,14 +483,14 @@ test('claim matches existing label names case-insensitively', async () => {
   const { d, calls } = fake({ issues: { [R]: [issue(1)] }, labels });
   await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
   assert.ok(!created(calls).includes('factory-running'));
-  assert.equal(created(calls).length, 5);
+  assert.equal(created(calls).length, 6);
 });
 
 test('dry-run claim still creates labels because it adds factory-running for real', async () => {
   const { d, calls } = fake({ issues: { [R]: [issue(1)] }, labels: FACTORY_ONLY });
   const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: true });
   assert.equal(out.status, 'claimed');
-  assert.equal(created(calls).length, 6);
+  assert.equal(created(calls).length, 7);
   assert.ok(calls.some(([n, , , l]) => n === 'addLabel' && l === 'factory-running'));
 });
 
@@ -487,7 +506,7 @@ test('stale sweep creates missing labels before it adds factory-failed', async (
   writeLock(stateDir, R, 4, 'old', ISO0);
   await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
   const writes = calls.filter(([n]) => GH_WRITES.includes(n)).map(([n]) => n);
-  assert.deepEqual(created(calls), OTHER_SIX.map((l) => l.name));
+  assert.deepEqual(created(calls), OTHER_LABELS.map((l) => l.name));
   assert.ok(writes.lastIndexOf('createLabel') < writes.indexOf('addLabel'));
 });
 
@@ -512,7 +531,7 @@ test('ensureLabels returns the created names and creates nothing when all exist'
   assert.deepEqual(ensureLabels(d.gh, R), []);
 });
 
-test('ensureLabels on a factory-only repo returns the other six names in table order', () => {
+test('ensureLabels on a factory-only repo returns the other seven names in table order', () => {
   const { d } = fake({ labels: FACTORY_ONLY });
   assert.deepEqual(ensureLabels(d.gh, R), FACTORY_LABELS.slice(1).map((l) => l.name));
 });

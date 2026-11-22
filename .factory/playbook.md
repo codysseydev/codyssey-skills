@@ -4,7 +4,7 @@ Holds codyssey-skills' specifics for the factory playbook in codysseydev/codysse
 
 ## Checks
 
-The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests` and `install-tests`. They are the test files the repo ships. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there is no CI to copy. GitHub Actions on the org is blocked by billing, so these local runs stand in for CI. Gates the recipe lacks:
+The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `post-merge-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests` and `install-tests`. They are the test files the repo ships. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there is no CI to copy. GitHub Actions on the org is blocked by billing, so these local runs stand in for CI. Gates the recipe lacks:
 
 None yet.
 
@@ -28,3 +28,10 @@ Setup starts no containers or servers. Nothing to remove.
 
 - `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
 - The factory runs the installed copies, not this repo: `~/.agents/playbooks/` and the five factory skills in `~/.claude/skills/`. `node playbooks/scripts/install.mjs --source <checkout>` syncs them from `origin/main` (README "Install"), and the scheduled pick-up runs it before `claim` when the factory is armed. A merged change to `playbooks/` or `factory/` takes effect on the next install, not at merge. The install never deletes, so a file removed from the repo stays installed. A run on this repo edits its worktree, never the installed copies.
+
+## Post-merge
+
+The archive run checks main after the PR merges. This repo ships no deployed service, so there is nothing to watch.
+
+- Deploy check: none
+- Sentry: none
