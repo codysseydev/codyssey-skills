@@ -5,6 +5,8 @@ checks:
     run: node --test playbooks/scripts/pick-up.test.mjs
   - name: capture-ui-tests
     run: node --test playbooks/scripts/capture-ui.test.mjs
+  - name: trial-decision-tests
+    run: node --test playbooks/scripts/trial-decision.test.mjs
   - name: test-first-tests
     run: node --test playbooks/scripts/test-first.test.mjs
   - name: bootstrap-tests
