@@ -82,7 +82,7 @@ Dashboard (no request sent). `codyssey-factory-dashboard` origin/main c7706b3, r
 - `:30`, last sentence. "The next claim then counts it as attempt 2 (see the attempt bullet above)."
 - Stage 5, `:88`. "A retry is the next attempt, numbered by `claim` (Scheduled pick-up). Attempt n from 2 works on a new branch `factory/<issue>-a<n>` and reports `attempt: n`. Its first message quotes the last failure and the owner's note."
 - Stage 2, `:77`, and stage 5, `:82`. The `capture-ui.mjs` steps pass `--attempt <attempt>`, so a retry writes its own evidence dir.
-- Stage 8, `:94`, per decision 2.
+- Stage 8, `:94`. One sentence: for `archive`, use the attempt from the merged PR's head branch in every `report_stage` event and for the evidence dir, not the claim's number.
 
 ### Task prompt (owner follow-up in the PR body)
 
@@ -127,7 +127,6 @@ Live probe, read-only: `makeGh().timeline` plus `attemptFromTimeline` on codysse
 ## Out of scope
 
 - The give-up rule and dashboard changes, per the issue. Storing `attempt` needs a dashboard column; a follow-up issue there if the owner wants it on `/runs`.
-- `attempt` in `claimed` comments, `released` and `expired` events. Not asked.
 - How attempt n carries an approved plan from `factory/<issue>` to its new branch. `factory/26-a2` re-committed the plan (55c785c).
 - Event model and UI evidence. This repo has no journey file, and origin/main has no `.factory/ui-capture.json`.
 
@@ -135,6 +134,12 @@ Live probe, read-only: `makeGh().timeline` plus `attemptFromTimeline` on codysse
 
 - A re-added label. When an `expired/` folder is retaken while the issue still has `factory-failed` (test `:1002`), the sweep calls `addLabel` for it again (`:484`). Whether GitHub records a second `labeled` event was not checked, since that writes to GitHub. If it does, that attempt counts one too many. Counting absent-to-present transitions instead would close it.
 - The timeline call runs once per claim, 1 or 2 pages at `per_page=100`.
+
+## Choices made (object at approval)
+
+- The attempt for an `archive` claim. Claim returns the timeline count for every action. Stage 8 of factory.md gains one sentence: for `archive`, the session uses the attempt from the merged PR's head branch (as `factory.md:94` already says) in every `report_stage` event and for the evidence dir, not the claim's number. Reason: the evidence dir to remove belongs to the attempt that merged, and no code branch on action is needed.
+- The claim comment text (`:547`) stays the same.
+- `release` and `expired` events get no `attempt`. Not asked.
 
 ## Open decisions
 
@@ -144,7 +149,3 @@ Live probe, read-only: `makeGh().timeline` plus `attemptFromTimeline` on codysse
    - **C. Claim with attempt 1 and say so.** Lock, label and comment as today, plus `attempt: 1` and `attempt_error: '<short error>'` in `claim.json` and the output. Cost: on a real retry the session reuses `factory/<issue>`, which exists on origin (for #26, `factory/26`), and the attempt 1 evidence dir. That breaks stage 1's "stay blind to its diff" (`factory.md:74`) and overwrites the first `evidence.json`.
 
    For A and B, step 4 of the task prompt prints only the status today, so the reason reaches the final message once the step 4 follow-up lands. Not offered: throwing inside the `try` (`:537-552`), as a label failure does (test `:555`). The lock is removed and the run ends with "pick-up error", but task step 2 then reports nothing, so this tick's `stale` entries, already marked `factory-failed` at `:484`, get no `failed` event.
-2. The attempt for an `archive` claim. A crashed archive run gets `factory-failed` from the sweep. After the owner removes it, claim counts 2, but the merged PR came from `factory/<issue>` (attempt 1). `factory.md:94` already tells the archive session to read the attempt from the merged PR's head branch. The open part is what `claim` emits for archive.
-   - **A. The branch wins for archive (Recommended).** Claim returns the count for every action. Stage 8 adds one sentence: for `archive`, use the attempt from the merged PR's head branch in every `report_stage` event and for the evidence dir, not the claim's number. No code branch on action. Reason: the evidence dir to remove belongs to the attempt that merged.
-   - **B. No attempt for archive.** Claim omits `attempt` when the action is `archive`. The output shape then depends on the action, and the `claimed` event for archive has none.
-   - **C. Claim reads the branch for archive.** Claim calls `closedByPullRequestsReferences` and parses the head branch. One more gh call and parser for a case `:94` already covers.
