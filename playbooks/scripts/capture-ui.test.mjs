@@ -14,6 +14,8 @@ import {
 const T0 = Date.parse('2026-01-01T12:00:00Z');
 const SHA = 'a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0';
 
+const MAIN_FRAME = { main: true };
+
 function fakePlaywright({
   consoleErrors = [], failed = [], pageErrors = [], gotoError, launchError, height = 500, cookieBanner = false, signInLandings = 0,
   signInPath = '/sign-in', redirectTo, driftAfterClick, fillError, contextError, screenshotError, reloadConsoleErrors, reloadFailed, driftAfterFill, proofMisses = 0, proofMissName = 'Manage account', menuStuck = false,
@@ -32,6 +34,7 @@ function fakePlaywright({
       for (const f of failedList) handlers.response?.({ url: () => f.url, status: () => f.status, request: () => ({ method: () => f.method ?? 'GET' }) });
     };
     return {
+      mainFrame: () => MAIN_FRAME,
       on: (evt, fn) => void (handlers[evt] = fn),
       url: () => current,
       goto: async (url) => {
@@ -1395,7 +1398,7 @@ test('onSignIn matches the exact path or a path below it, not a sibling prefix',
   assert.equal(onSignIn({}, 'http://localhost:3000/sign-in'), false);
 });
 
-test('sign-in: waits 30 s after submit, aborts non-local requests, and saves nothing when the origin drifted', async () => {
+test('sign-in: waits 30 s after submit, aborts only off-host main-frame navigations, and saves nothing when the origin drifted', async () => {
   const pw = fakePlaywright();
   const { d } = deps({ pw });
   await cmdCapture(d, { ...capArgs(['--sign-in']), project: signInProject() });
@@ -1404,9 +1407,18 @@ test('sign-in: waits 30 s after submit, aborts non-local requests, and saves not
   assert.equal(pw.log.contexts[0].bypassCSP, true);
   const { handler } = pw.log.routes[0];
   const seen = [];
-  const route = (url) => ({ request: () => ({ url: () => url }), continue: () => void seen.push(['continue', url]), abort: () => void seen.push(['abort', url]) });
-  for (const u of ['http://localhost:3000/a', 'https://evil.example.com/x', 'http://127.0.0.1:3000/y', 'data:text/plain,hi']) await handler(route(u));
-  assert.deepEqual(seen.map(([k]) => k), ['continue', 'abort', 'continue', 'continue']);
+  const route = (url, { nav = false, frame = MAIN_FRAME } = {}) => ({
+    request: () => ({ url: () => url, isNavigationRequest: () => nav, frame: () => frame }),
+    continue: () => void seen.push(['continue', url]),
+    abort: () => void seen.push(['abort', url]),
+  });
+  const sub = { main: false };
+  await handler(route('http://localhost:3000/a', { nav: true }));
+  await handler(route('https://challenges.cloudflare.com/turnstile/v0/api.js'));
+  await handler(route('https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x', { nav: true, frame: sub }));
+  await handler(route('https://evil.example.com/x', { nav: true }));
+  await handler(route('data:text/plain,hi', { nav: true }));
+  assert.deepEqual(seen.map(([k]) => k), ['continue', 'continue', 'continue', 'abort', 'continue']);
 
   const drift = fakePlaywright({ driftAfterClick: 'https://evil.example.com/' });
   const b = deps({ pw: drift });

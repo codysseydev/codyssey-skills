@@ -534,12 +534,15 @@ async function ensureAuth(ctx, browser) {
   let context;
   try {
     context = await browser.newContext({ viewport: { width: DESKTOP.width, height: DESKTOP.height }, bypassCSP: true });
-    // Nothing leaves the local host while credentials are typed.
-    await context.route('**', (route) => {
-      const url = route.request().url();
-      return isLocalHost(url) || /^(data|blob|about):/.test(url) ? route.continue() : route.abort();
-    });
     const page = await context.newPage();
+    // The page itself never navigates off the local host while credentials are typed. Subframes,
+    // scripts and XHR (a Turnstile widget, for one) pass through.
+    await context.route('**', (route) => {
+      const req = route.request();
+      const url = req.url();
+      const offHost = !isLocalHost(url) && !/^(data|blob|about):/.test(url);
+      return offHost && req.isNavigationRequest() && req.frame() === page.mainFrame() ? route.abort() : route.continue();
+    });
     const base = new URL(o.baseUrl);
     const signInUrl = new URL(s.path, base);
     if (signInUrl.origin !== base.origin) return undefined;
