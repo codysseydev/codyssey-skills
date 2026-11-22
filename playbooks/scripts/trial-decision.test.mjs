@@ -21,6 +21,9 @@ function input(over = {}) {
     },
     confidence: 'high',
     adr_open: false,
+    ui: { changed: false, not_exercised: 0 },
+    kind: 'feature',
+    requires_kanon_audit: false,
     reviews: [
       { name: 'codyssey-reviewer', fan_out_complete: true, open_findings: 0 },
       { name: 'kanon-audit', fan_out_complete: true, open_findings: 0 },
@@ -121,6 +124,41 @@ test('open findings hand over and name the review', () => {
   handsOver(input({ reviews: [{ name: 'kanon-audit', fan_out_complete: true, open_findings: 1 }] }), 'Review kanon-audit has 1 open finding.');
 });
 
+test('mergeable is accepted in any case', () => {
+  assert.equal(decide(input({ mergeable: 'MERGEABLE' })).would_merge, true);
+  handsOver(input({ mergeable: 'CONFLICTING' }), 'The PR is conflicting, not mergeable.');
+  handsOver(input({ mergeable: 'UNKNOWN' }), 'The PR is unknown, not mergeable.');
+});
+
+test('bug fix with no test-first gate row hands over', () => {
+  handsOver(input({ kind: 'bug_fix' }), 'Bug fix with no test-first gate row.');
+});
+
+test('bug fix with a test-first gate row can merge', () => {
+  const gates = [{ gate: 'test-first', command: 'x', exit_code: 0, result: 'pass' }, ...input().evidence.gates];
+  assert.equal(decide(input({ kind: 'bug_fix', evidence: { ...input().evidence, gates } })).would_merge, true);
+});
+
+test('feature needs no test-first row', () => {
+  assert.equal(decide(input({ kind: 'feature' })).would_merge, true);
+});
+
+test('required Kanon audit missing hands over', () => {
+  const reviews = [{ name: 'codyssey-reviewer', fan_out_complete: true, open_findings: 0 }];
+  handsOver(input({ requires_kanon_audit: true, reviews }), 'No Kanon audit recorded.');
+});
+
+test('required Kanon audit present in any case can merge', () => {
+  const reviews = [{ name: 'Kanon-Audit', fan_out_complete: true, open_findings: 0 }];
+  assert.equal(decide(input({ requires_kanon_audit: true, reviews })).would_merge, true);
+});
+
+test('output carries reasons, empty when it would merge', () => {
+  assert.deepEqual(decide(input()).reasons, []);
+  const r = decide(input({ adr_open: true, confidence: 'low' }));
+  assert.deepEqual(r.reasons, ['An ADR is open and needs the owner.', 'Confidence is low, not high.']);
+});
+
 test('conflicting and unknown mergeability hand over', () => {
   handsOver(input({ mergeable: 'conflicting' }), 'The PR is conflicting, not mergeable.');
   handsOver(input({ mergeable: 'unknown' }), 'The PR is unknown, not mergeable.');
@@ -145,11 +183,18 @@ test('malformed input throws InputError', () => {
     input({ head_sha: 'zz' }),
     input({ clean_tree: 'true' }),
     input({ evidence: undefined }),
-    withEvidence({ gates: [{ gate: 'a', result: 'ok' }] }),
+    withEvidence({ gates: [{ gate: 'a', command: 'c', exit_code: 0, result: 'ok' }] }),
     withEvidence({ trusted_commands: undefined }),
     input({ confidence: 'certain' }),
     input({ adr_open: undefined }),
+    input({ ui: undefined }),
     input({ ui: { changed: true } }),
+    input({ kind: 'chore' }),
+    input({ kind: undefined }),
+    input({ requires_kanon_audit: undefined }),
+    withEvidence({ gates: [{ gate: 'a', command: 'c', result: 'pass' }] }),
+    withEvidence({ gates: [{ gate: 'a', command: 'c', exit_code: '0', result: 'pass' }] }),
+    withEvidence({ gates: [{ gate: 'a', command: 'c', exit_code: 1, result: 'pass' }] }),
     input({ reviews: [{ name: 'r', fan_out_complete: true }] }),
     input({ mergeable: 'yes' }),
   ];

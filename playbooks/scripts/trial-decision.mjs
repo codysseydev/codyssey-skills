@@ -6,7 +6,7 @@
 //   node trial-decision.mjs <input.json>     read the input from a file
 //   node trial-decision.mjs -                read the input from stdin
 //
-// Prints {"would_merge": bool, "why": "..."} on stdout and exits 0. Malformed or missing
+// Prints {"would_merge": bool, "why": "...", "reasons": [...]} on stdout and exits 0. Malformed or missing
 // input fields: one message on stderr, exit 2, no verdict (fail closed).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ export const WHY_LIMIT = 2000;
 export const MIN_SHA_LENGTH = 7;
 const GATE_RESULTS = ['pass', 'fail', 'flaky', 'not_exercised'];
 const CONFIDENCE = ['low', 'medium', 'high'];
+const KINDS = ['bug_fix', 'feature'];
 const MERGEABLE = ['mergeable', 'conflicting', 'unknown'];
 const MAX_LISTED_PATHS = 10;
 
@@ -51,6 +52,8 @@ export function validate(input) {
     need(isObject(g), `evidence.gates[${i}] must be an object`);
     need(typeof g.gate === 'string' && g.gate !== '', `evidence.gates[${i}].gate must be a non-empty string`);
     need(GATE_RESULTS.includes(g.result), `evidence.gates[${i}].result must be one of ${GATE_RESULTS.join(', ')}`);
+    need(Number.isInteger(g.exit_code), `evidence.gates[${i}].exit_code must be an integer`);
+    need(g.result !== 'pass' || g.exit_code === 0, `evidence.gates[${i}] has result pass but exit_code ${g.exit_code}`);
     return { gate: g.gate, result: g.result };
   });
   need(isObject(ev.trusted_commands), 'evidence.trusted_commands must be an object');
@@ -58,12 +61,11 @@ export function validate(input) {
   need(Array.isArray(flagged) && flagged.every((p) => typeof p === 'string'), 'evidence.trusted_commands.flagged must be an array of strings');
   need(CONFIDENCE.includes(input.confidence), `confidence must be one of ${CONFIDENCE.join(', ')}`);
   need(typeof input.adr_open === 'boolean', 'adr_open must be a boolean');
-  let ui = { changed: false, not_exercised: 0 };
-  if (input.ui !== undefined) {
-    need(isObject(input.ui), 'ui must be an object when present');
-    need(typeof input.ui.changed === 'boolean', 'ui.changed must be a boolean');
-    ui = { changed: input.ui.changed, not_exercised: count(input.ui.not_exercised, 'ui.not_exercised') };
-  }
+  need(isObject(input.ui), 'ui must be an object ({"changed": false, "not_exercised": 0} when the UI did not change)');
+  need(typeof input.ui.changed === 'boolean', 'ui.changed must be a boolean');
+  const ui = { changed: input.ui.changed, not_exercised: count(input.ui.not_exercised, 'ui.not_exercised') };
+  need(KINDS.includes(input.kind), `kind must be one of ${KINDS.join(', ')}`);
+  need(typeof input.requires_kanon_audit === 'boolean', 'requires_kanon_audit must be a boolean');
   need(Array.isArray(input.reviews), 'reviews must be an array');
   const reviews = input.reviews.map((r, i) => {
     need(isObject(r), `reviews[${i}] must be an object`);
@@ -71,10 +73,12 @@ export function validate(input) {
     need(typeof r.fan_out_complete === 'boolean', `reviews[${i}].fan_out_complete must be a boolean`);
     return { name: r.name, fan_out_complete: r.fan_out_complete, open_findings: count(r.open_findings, `reviews[${i}].open_findings`) };
   });
-  need(MERGEABLE.includes(input.mergeable), `mergeable must be one of ${MERGEABLE.join(', ')}`);
+  const mergeable = typeof input.mergeable === 'string' ? input.mergeable.toLowerCase() : input.mergeable;
+  need(MERGEABLE.includes(mergeable), `mergeable must be one of ${MERGEABLE.join(', ')} (any case)`);
   return {
     head, evSha, clean_tree: input.clean_tree, gates, flagged, confidence: input.confidence,
-    adr_open: input.adr_open, ui, reviews, mergeable: input.mergeable,
+    adr_open: input.adr_open, ui, reviews, mergeable, kind: input.kind,
+    requires_kanon_audit: input.requires_kanon_audit,
   };
 }
 
@@ -91,7 +95,7 @@ function truncate(s) {
   return s.length > WHY_LIMIT ? `${s.slice(0, WHY_LIMIT - 3)}...` : s;
 }
 
-// Pure. Returns {would_merge, why}. Throws InputError on malformed input.
+// Pure. Returns {would_merge, why, reasons} (reasons is empty when it would merge). Throws InputError on malformed input.
 export function decide(input) {
   const v = validate(input);
   const short = v.head.slice(0, 7);
@@ -120,7 +124,13 @@ export function decide(input) {
     reasons.push(`The UI changed and ${plural(v.ui.not_exercised, 'capture')} not exercised.`);
   }
 
+  if (v.kind === 'bug_fix' && !v.gates.some((g) => g.gate === 'test-first')) {
+    reasons.push('Bug fix with no test-first gate row.');
+  }
   if (v.reviews.length === 0) reasons.push('No review is recorded.');
+  if (v.requires_kanon_audit && !v.reviews.some((r) => r.name.toLowerCase().includes('kanon'))) {
+    reasons.push('No Kanon audit recorded.');
+  }
   for (const r of v.reviews) {
     if (!r.fan_out_complete) reasons.push(`Review ${r.name} did not complete its fan-out.`);
     if (r.open_findings !== 0) reasons.push(`Review ${r.name} has ${plural(r.open_findings, 'open finding')}.`);
@@ -129,9 +139,9 @@ export function decide(input) {
 
   if (reasons.length === 0) {
     const why = `Every check holds at ${short}: ${plural(v.gates.length, 'gate')} pass, no trusted files changed, confidence high, ${plural(v.reviews.length, 'review')} complete.`;
-    return { would_merge: true, why: truncate(why) };
+    return { would_merge: true, why: truncate(why), reasons: [] };
   }
-  return { would_merge: false, why: truncate(`Would hand over, because:\n${reasons.map((r) => `- ${r}`).join('\n')}`) };
+  return { would_merge: false, why: truncate(`Would hand over, because:\n${reasons.map((r) => `- ${r}`).join('\n')}`), reasons };
 }
 
 export function main(argv, readStdin = () => readFileSync(0, 'utf8')) {
