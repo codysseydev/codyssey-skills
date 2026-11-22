@@ -25,9 +25,20 @@ What `gh issue view --json state` returns (gh 2.105.0, run for this plan):
 | codyssey-skills#19 | issue closed as completed | `CLOSED` |
 | codyssey#554 | issue closed as not planned | `CLOSED` |
 
-So a merged PR blocks forever, and a PR closed without merging clears. `gh issue view` has no field that marks a PR (`--json isPullRequest` gives `Unknown JSON field`), so this command cannot tell #886 from #19.
+So a merged PR blocks forever, and a PR closed without merging clears. The `state` field cannot tell #886 from #19. `gh issue view` has no PR flag in its `--json` field list (`--json isPullRequest` gives `Unknown JSON field`). Only `url` differs: `--json state,url` gives `{"state":"CLOSED","url":"https://github.com/codysseydev/codyssey/pull/886"}` and `{"state":"CLOSED","url":"https://github.com/codysseydev/codyssey-skills/issues/19"}`.
 
 `playbooks/factory.md:72` already says the dependencies must be "merged or closed".
+
+## Behaviour
+
+| Dependency | Today | After |
+|---|---|---|
+| issue, open | blocks, `open dependency X` | same |
+| issue, closed (completed or not planned) | clears | same |
+| PR, open | blocks, `open dependency X` | same |
+| PR, merged | blocks forever, `open dependency X` | clears |
+| PR, closed without merging | clears | blocks, `dependency X is a PR closed without merging` (open decision 1) |
+| unreadable (`gh` error, 404) | blocks, `dependency X unreadable` | same |
 
 ## Data shape
 
@@ -41,17 +52,27 @@ So a merged PR blocks forever, and a PR closed without merging clears. `gh issue
 undefined         // gh failed (404, network, auth), as today
 ```
 
-The boundary decides issue vs PR. `issueState` switches to the REST endpoint `getIssue` already uses (`:153-156`), `gh api repos/<repo>/issues/<n>`. One call returns `state` (`open` or `closed`), a `pull_request` key on PRs only, and `pull_request.merged_at`. Recorded:
+The boundary decides issue vs PR. `issueState` switches to the REST endpoint `getIssue` already uses (`:153-156`), `gh api repos/<repo>/issues/<n>`. The script already tells PRs apart by the `pull_request` key there (`:135`, `:148`, `:155`). One call returns `state` (`open` or `closed`), `pull_request` (an object on PRs, absent on issues, so the `--jq` below prints `null`; `has("pull_request")` on #19 gives `false`) and `pull_request.merged_at`. Output of `gh api repos/<repo>/issues/<n> --jq '{state, state_reason, pull_request}'`, with the `pull_request` object cut to `merged_at` (its other keys are `diff_url`, `html_url`, `patch_url`, `url`):
 
 ```
 codyssey-frontend#1005  {"pull_request":{"merged_at":"2026-11-17T01:22:26Z"},"state":"closed","state_reason":null}
 codyssey#886            {"pull_request":{"merged_at":null},"state":"closed","state_reason":null}
 codyssey-skills#69      {"pull_request":{"merged_at":null},"state":"open","state_reason":null}
-codyssey-skills#19      {"state":"closed","state_reason":"completed"}   (no pull_request key)
-codyssey#554            {"state":"closed","state_reason":"not_planned"} (no pull_request key)
+codyssey-skills#19      {"pull_request":null,"state":"closed","state_reason":"completed"}
+codyssey#554            {"pull_request":null,"state":"closed","state_reason":"not_planned"}
 ```
 
-Mapping. `open` gives `OPEN`. `closed` with no `pull_request` gives `CLOSED`. `closed` with `merged_at` set gives `MERGED`. `closed` with `merged_at` null gives `CLOSED_UNMERGED`. Any other `state` throws, which `evaluateRows` already turns into `undefined`. A scratchpad probe of this mapping against the six refs above plus `codyssey-skills#999999` printed `OPEN`, `CLOSED`, `CLOSED`, `OPEN`, `MERGED`, `CLOSED_UNMERGED` and `throws (gh: Not Found (HTTP 404))`.
+Mapping. `open` gives `OPEN`. `closed` with no `pull_request` gives `CLOSED`. `closed` with `merged_at` set gives `MERGED`. `closed` with `merged_at` null gives `CLOSED_UNMERGED`. Any other `state` throws, which `evaluateRows` already turns into `undefined`. A scratchpad probe of this mapping against live GitHub printed:
+
+| Ref | Probe result |
+|---|---|
+| codyssey-skills#29 (open issue) | `OPEN` |
+| codyssey-skills#19 (issue, completed) | `CLOSED` |
+| codyssey#554 (issue, not planned) | `CLOSED` |
+| codyssey-skills#69 (open PR) | `OPEN` |
+| codyssey-frontend#1005 (merged PR) | `MERGED` |
+| codyssey#886 (PR closed without merging) | `CLOSED_UNMERGED` |
+| codyssey-skills#999999 (missing) | `throws (gh: Not Found (HTTP 404))` |
 
 `evaluateIssue` stays pure and owns the policy:
 
@@ -115,7 +136,7 @@ Baseline at 0e53c6f, all exit 0. Pick-up 74 pass, capture-ui 115 pass, bootstrap
 - Surfacing skip reasons in a scheduled claim. `cmdClaim` returns `{ status: 'none', stale }` with no reasons (`:517`). See open decision 1.
 - The workaround issues codysseydev/codyssey#926, #947, #948 and codysseydev/codyssey-skills#26. They can name PRs again once this ships. Not edited here.
 - `brief-to-backlog`. It writes `Depends on:` lines with issue numbers only, so it is unaffected.
-- Event model and brain vault. Skip, no journey for internal tooling. In `codyssey-docs`, `grep -rln -e pick-up.mjs -e "Depends on:" Architecture` finds nothing. The hits are under `Ideas/` and `Technical/Research Notes/`, and none describes the dependency check's states.
+- Event model and brain vault. Skip, no journey for internal tooling. In `codyssey-docs`, `grep -rln -e pick-up.mjs -e "Depends on:" Architecture` finds nothing. The hits are under `Ideas/` and `Technical/Research Notes/`. They name `pick-up.mjs` or show draft `Depends on:` lines, and none states which dependency states clear.
 
 ## Owner follow-ups
 
@@ -132,4 +153,5 @@ Baseline at 0e53c6f, all exit 0. Pick-up 74 pass, capture-ui 115 pass, bootstrap
    - **A. Block with `dependency X is a PR closed without merging` (recommended).** The dependent was written on the premise that the PR's code lands, and a PR closed without merging did not land it. A run that starts anyway builds on missing code and fails later, at a cost of a full run. A also matches the workaround the owner uses now. Those issues name the issue a PR closes, and when such a PR closes without merging that issue stays open, so the dependent blocks. Cost: in a scheduled claim the block is silent, since `cmdClaim` returns `none` with no reasons (`:517`). This is the same silence this issue reports, bounded by a reason that names the fix. The owner sees it in `node playbooks/scripts/pick-up.mjs list --repo <repo>` under `skipped`, or in `claim --only`. To unblock, edit the `Depends on:` line to name the replacement PR or the issue.
    - **B. Clear, as today.** Delta: no boundary change. `issueState` keeps `gh issue view`, which already returns `MERGED`, and line 126 accepts `CLOSED` or `MERGED`. `factory.md:72` already says "merged or closed". Tests cover `OPEN`, `MERGED` and `CLOSED` only. Smallest diff, and consistent with not planned issues clearing. Cost: the factory can start work whose premise never landed.
    - **C. Block and surface it.** Delta: A, plus `cmdClaim` returns the blocked dependents (for example a `blocked: [{ repo, issue, reason }]` field), and the scheduled task's prompt reports them. Fixes the silence for every block reason, not only this one. Wider scope. It touches the claim result shape and the scheduled task outside this repo, so it fits better as its own issue.
-2. Keep the name `issueState` (chosen) or rename it to `depState` at the boundary. A rename touches the fake at test `:39` and the override at `:182` for no behavior change.
+2. How the boundary tells PRs apart under A. Chosen, REST `gh api repos/<repo>/issues/<n>`. It is the signal the script already uses for PRs (`:135`, `:148`, `:155`), and `merged_at` is a field, not a parsed string. Alternative, keep `gh issue view` with `--json state,url`. `MERGED` stays as gh gives it, and `CLOSED` with `/pull/` in the URL becomes `CLOSED_UNMERGED`. One line smaller, but it reads PR-ness from a URL path.
+3. Keep the name `issueState` (chosen) or rename it to `depState` at the boundary. A rename touches the fake at test `:39` and the override at `:182` for no behavior change.
