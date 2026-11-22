@@ -4,7 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
+  ConfigUnreadableError, LOCK_STALE_MS, LOCK_WAIT_MS, ManifestLockedError, makeDeps, normConsole, onSignIn, readCredentials,
   RefusalError, UsageError, cmdCapture, cmdCompose, cmdDetect, cmdMarkdown, deriveRoute, detect, evidenceDir, fileSlug, globToRegex,
   isLocalHost, main, parseArgs, parseConfig, parseEnvFile, readManifest, slugify, upsertEntries, withManifest,
 } from './capture-ui.mjs';
@@ -14,9 +16,9 @@ const SHA = 'a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0';
 
 function fakePlaywright({
   consoleErrors = [], failed = [], pageErrors = [], gotoError, launchError, height = 500, cookieBanner = false, signInLandings = 0,
-  signInPath = '/sign-in', redirectTo, fillError, contextError, screenshotError, reloadConsoleErrors, reloadFailed, driftAfterFill, proofMisses = 0, proofMissName = 'Manage account', menuStuck = false,
+  signInPath = '/sign-in', redirectTo, driftAfterClick, fillError, contextError, screenshotError, reloadConsoleErrors, reloadFailed, driftAfterFill, proofMisses = 0, proofMissName = 'Manage account', menuStuck = false,
 } = {}) {
-  const log = { contexts: [], screenshots: [], gotos: [], fills: [], styles: [], clicks: [], waits: [], html: [], reloads: 0, evals: [], keys: [], submitClicks: 0, browserClosed: false };
+  const log = { contexts: [], screenshots: [], gotos: [], fills: [], styles: [], clicks: [], waits: [], html: [], reloads: 0, evals: [], keys: [], firsts: [], routes: [], submitClicks: 0, browserClosed: false };
   let landings = signInLandings;
   let misses = proofMisses;
   const makePage = () => {
@@ -27,7 +29,7 @@ function fakePlaywright({
         const { text, url: location = '' } = typeof m === 'string' ? { text: m } : m;
         handlers.console?.({ type: () => 'error', text: () => text, location: () => ({ url: location }) });
       }
-      for (const f of failedList) handlers.response?.({ url: () => f.url, status: () => f.status });
+      for (const f of failedList) handlers.response?.({ url: () => f.url, status: () => f.status, request: () => ({ method: () => f.method ?? 'GET' }) });
     };
     return {
       on: (evt, fn) => void (handlers[evt] = fn),
@@ -51,10 +53,14 @@ function fakePlaywright({
       keyboard: { press: async (key) => void log.keys.push(key) },
       getByRole: (role, { name } = {}) => {
         const loc = {
-          isVisible: async () => cookieBanner && name === 'Reject all',
           click: async () => void log.clicks.push(name),
           waitFor: async (opts) => {
             const onShot = !current.includes(signInPath);
+            if (name === 'Reject all') {
+              log.waits.push(['consent', opts.timeout]);
+              if (!cookieBanner) throw new Error('no banner');
+              return;
+            }
             if (role === 'dialog') {
               log.waits.push(['dialog', opts.state]);
               if (menuStuck) throw new Error('menu still open');
@@ -64,9 +70,12 @@ function fakePlaywright({
               misses -= 1;
               throw new Error('proof not visible');
             }
-            log.waits.push([name, opts.state, onShot ? 'shot' : 'sign-in']);
+            log.waits.push([name, opts.state, onShot ? 'shot' : 'sign-in', opts.timeout]);
           },
-          first: () => loc,
+          first: () => {
+            log.firsts.push(name);
+            return loc;
+          },
         };
         return loc;
       },
@@ -88,8 +97,11 @@ function fakePlaywright({
         log.fills.push([sel, value]);
         if (driftAfterFill) current = driftAfterFill;
       },
-      click: async () => void (log.submitClicks += 1),
-      waitForURL: async () => {},
+      click: async () => {
+        log.submitClicks += 1;
+        if (driftAfterClick) current = driftAfterClick;
+      },
+      waitForURL: async (fn, opts) => void log.waits.push(['url', opts.timeout]),
       screenshot: async (opts) => {
         if (screenshotError) throw new Error(screenshotError);
         log.screenshots.push(opts);
@@ -99,6 +111,7 @@ function fakePlaywright({
     };
   };
   const context = {
+    route: async (pattern, handler) => void log.routes.push({ pattern, handler }),
     newPage: async () => makePage(),
     storageState: async () => ({ cookies: [{ name: 's', value: 'secret-cookie' }] }),
     close: async () => {},
@@ -160,6 +173,15 @@ function deps({ pw, env = {}, loadError, config = CONFIG, isPrivate = true, priv
       },
     },
   };
+}
+
+const BASE_ORIGIN = 'http://localhost:3000';
+function seedState(home, content = '{"stale":true}', origin = BASE_ORIGIN) {
+  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
+  mkdirSync(join(state, '..'), { recursive: true });
+  writeFileSync(state, content);
+  if (origin) writeFileSync(join(state, '..', 'state.meta.json'), JSON.stringify({ origin }));
+  return state;
 }
 
 const capArgs = (extra = []) => parseArgs([
@@ -487,11 +509,11 @@ const manifestOf = (home) => readManifest(evidenceDir({ FACTORY_HOME: home }, 'o
 test('hygiene: rejects the cookie banner, injects CSS and ignores matching requests and console errors', async () => {
   const pw = fakePlaywright({
     cookieBanner: true,
-    consoleErrors: ['geo failed', { text: 'boom', url: 'http://localhost:3000/_edge/geo' }, 'real'],
+    consoleErrors: [{ text: 'geo failed', url: 'http://localhost:3000/_edge/geo' }, { text: 'boom', url: 'http://localhost:3000/_edge/geo' }, 'real'],
     failed: [{ url: 'http://localhost:3000/_edge/geo', status: 500 }, { url: 'http://localhost:3000/api/y', status: 404 }],
   });
   const { d, home } = deps({ pw });
-  await cmdCapture(d, capArgs(['--ignore-request', '/_edge/geo', '--ignore-request', 'geo failed']));
+  await cmdCapture(d, capArgs(['--ignore-request', '/_edge/geo']));
   assert.deepEqual(pw.log.clicks, ['Reject all', 'Reject all']);
   assert.ok(pw.log.styles[0].includes('nextjs-portal{display:none!important}'));
   assert.ok(pw.log.styles[0].includes('transition:none!important'));
@@ -560,9 +582,7 @@ test('stale auth: a signed-in shot on /sign-in deletes the state, signs in again
   writeFileSync(join(project, '.env'), 'FACTORY_TEST_EMAIL=me@example.com\nFACTORY_TEST_PASSWORD=hunter2\n');
   const pw = fakePlaywright({ signInLandings: 1 });
   const { d, home } = deps({ pw });
-  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
-  mkdirSync(join(state, '..'), { recursive: true });
-  writeFileSync(state, '{"stale":true}');
+  const state = seedState(home);
   const r = await cmdCapture(d, { ...capArgs(['--sign-in']), project });
   assert.equal(r.shots[0].result, 'pass');
   assert.equal(pw.log.fills.length, 2);
@@ -735,17 +755,28 @@ test('an unexpected error mid-capture marks the remaining shots and still closes
   assert.equal(pw.log.browserClosed, true);
 });
 
-test('a sign-in failure is cached: later shots are not-exercised without retrying', async () => {
-  const project = mkdtempSync(join(tmpdir(), 'capture-ui-proj-'));
-  writeFileSync(join(project, '.env'), 'FACTORY_TEST_EMAIL=a@b.c\nFACTORY_TEST_PASSWORD=pw\n');
+test('a failing ensureAuth is cached: later shots are not-exercised without visiting them', async () => {
   const pw = fakePlaywright({ signInLandings: 99 });
-  const { d } = deps({ pw });
-  const state = join(evidenceDir({ FACTORY_HOME: d.env.FACTORY_HOME }, 'o/r', 7, 1), 'auth', 'state.json');
-  mkdirSync(join(state, '..'), { recursive: true });
-  writeFileSync(state, '{}');
-  await cmdCapture(d, { ...capArgs(['--sign-in', '--route', '/b', '--route', '/c']), project });
-  const signIns = pw.log.gotos.filter((u) => u.endsWith('/sign-in')).length;
-  assert.equal(signIns, 1);
+  const { d, home } = deps({ pw });
+  seedState(home, '{}');
+  const r = await cmdCapture(d, { ...capArgs(['--sign-in', '--route', '/b', '--route', '/c']), project: mkdtempSync(join(tmpdir(), 'capture-ui-proj-')) });
+  assert.deepEqual(r.shots.map((s2) => s2.reason), ['sign-in failed', 'sign-in failed', 'sign-in failed']);
+  assert.equal(pw.log.gotos.some((u) => u.endsWith('/c')), false);
+});
+
+test('a proof miss or sign-in redirect on the retry fails that shot only, the next shot still runs', async () => {
+  const project = signInProject();
+  const pw = fakePlaywright({ signInLandings: 1 });
+  const { d, home } = deps({ pw });
+  seedState(home);
+  const r = await cmdCapture(d, { ...capArgs(['--sign-in', '--route', '/b']), project });
+  assert.deepEqual(r.shots.map((x) => x.result), ['pass', 'pass']);
+  const pw2 = fakePlaywright({ signInLandings: 2 });
+  const b = deps({ pw: pw2 });
+  seedState(b.home);
+  const r2 = await cmdCapture(b.d, { ...capArgs(['--sign-in', '--route', '/b']), project });
+  assert.deepEqual(r2.shots.map((x) => [x.result, x.reason ?? '']), [['not-exercised', 'sign-in failed'], ['pass', '']]);
+  assert.ok(pw2.log.gotos.some((u) => u.endsWith('/b')));
 });
 
 test('compose drops compare entries and PNGs that no longer have a current pair', async () => {
@@ -987,12 +1018,43 @@ test('sign-in: a same-host, other-port page is not the base origin', async () =>
   assert.equal(pw.log.fills.length, 0);
 });
 
-test('config: sign_in.path must be a single-slash path without control characters', async () => {
-  for (const path of ['//evil.com', '/\\evil.com', '/a\nb', 'sign-in']) {
+test('config: sign_in.path must be a single-slash path without control characters, ?, # or a bare /', async () => {
+  for (const path of ['//evil.com', '/\\evil.com', '/a\nb', 'sign-in', '/', '/sign-in?x=1', '/sign-in#top']) {
     assert.throws(() => parseConfig(JSON.stringify({ sign_in: { ...CONFIG.sign_in, path } })), UsageError, path);
   }
-  const { d } = deps({ pw: fakePlaywright(), config: { ...CONFIG, sign_in: { ...CONFIG.sign_in, path: '//evil.com' } } });
-  await assert.rejects(() => cmdCapture(d, { ...capArgs(['--sign-in']), project: signInProject() }), UsageError);
+});
+
+test('an invalid config records every shot as not-exercised without values and exits 0', async () => {
+  const pw = fakePlaywright();
+  const { d, home } = deps({ pw, config: { ...CONFIG, sign_in: { ...CONFIG.sign_in, path: '//evil.com' } } });
+  const out = JSON.parse(await main(['capture', '--repo', 'o/r', '--issue', '7', '--phase', 'before', '--route', '/', '--project', signInProject(), '--sign-in'], d));
+  assert.match(out.shots[0].reason, /^ui-capture\.json invalid: sign_in\.path/);
+  assert.equal(out.shots[0].result, 'not-exercised');
+  assert.equal(pw.log.screenshots.length, 0);
+  assert.equal(manifestOf(home).length, 1);
+  for (const text of ['{', '{"base_url":"ftp://secret-host"}', '{"nope":1}']) {
+    const bad = { ...deps({ pw }).d, readConfigText: () => text };
+    const r = await cmdCapture(bad, capArgs());
+    assert.match(r.shots[0].reason, /^ui-capture\.json invalid: /);
+    assert.ok(!r.shots[0].reason.includes('secret-host'));
+  }
+});
+
+test('a config with no base_url and no --base-url records invalid, no config at all is still a usage error', async () => {
+  const { d } = deps({ pw: fakePlaywright(), config: { masks: ['#a'] } });
+  const o = parseArgs(['capture', '--repo', 'o/r', '--issue', '7', '--phase', 'before', '--route', '/', '--project', tmpdir()]);
+  const r = await cmdCapture(d, o);
+  assert.equal(r.shots[0].reason, 'ui-capture.json invalid: base_url missing');
+});
+
+test('compose records pairs as not-exercised when the config is invalid', async () => {
+  const pw = fakePlaywright();
+  const { d, home } = deps({ pw });
+  d.readConfigText = () => '{';
+  const dir = seed(home, [entry({ phase: 'before', file: 'before/home-aaaaaa-desktop.png' }), entry({ file: 'after/home-aaaaaa-desktop.png' })]);
+  const r = await cmdCompose(d, { repo: 'o/r', issue: 7, attempt: 1, project: tmpdir() });
+  assert.equal(r.composed[0].reason, 'ui-capture.json invalid: not valid JSON');
+  assert.equal(readManifest(dir).find((e) => e.phase === 'compare').result, 'not-exercised');
 });
 
 test('config: env names must match FACTORY_TEST_[A-Z0-9_]+ so a config cannot name other secrets', () => {
@@ -1011,7 +1073,7 @@ test('before: each page loads twice, one screenshot, baseline is the union of bo
   assert.equal(pw.log.reloads, 1);
   assert.equal(pw.log.screenshots.length, 1);
   assert.deepEqual(e.raw.console, ['a', 'shared', 'b']);
-  assert.deepEqual(e.raw.failed, ['/api/p|404', '/api/q|500']);
+  assert.deepEqual(e.raw.failed, ['GET /api/p 404', 'GET /api/q 500']);
   assert.equal(e.console_errors.count, 3);
   assert.equal(e.failed_requests.count, 2);
   assert.equal(e.result, 'fail');
@@ -1042,9 +1104,7 @@ test('signed-in proof missing once: stale auth, sign in again, retry passes', as
   const project = signInProject();
   const pw = fakePlaywright({ proofMisses: 1 });
   const { d, home } = deps({ pw });
-  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
-  mkdirSync(join(state, '..'), { recursive: true });
-  writeFileSync(state, '{"stale":true}');
+  const state = seedState(home);
   const r = await cmdCapture(d, { ...capArgs(['--sign-in']), project });
   assert.equal(r.shots[0].result, 'pass');
   assert.equal(pw.log.fills.length, 2);
@@ -1090,33 +1150,24 @@ test('phone without signed_in_phone falls back to signed_in and clicks no menu',
   assert.ok(!pw.log.clicks.includes('Open main menu'));
 });
 
-test('open: the menu button is clicked before the proof and closed with Escape before the screenshot', async () => {
+test('open: the menu button is clicked before the proof, then the page is always reloaded with hygiene re-run', async () => {
   const pw = fakePlaywright();
   const { d } = deps({ pw, config: PHONE_CONFIG });
   await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
   assert.deepEqual(pw.log.clicks, ['Open main menu']);
-  assert.deepEqual(pw.log.keys, ['Escape']);
-  assert.equal(pw.log.evals.filter((f) => f.includes('blur')).length, 1);
-  assert.ok(pw.log.waits.some(([n, st]) => n === 'dialog' && st === 'hidden'));
-  assert.equal(pw.log.reloads, 0);
-  assert.equal(pw.log.screenshots.length, 2);
-});
-
-test('open: a menu that stays open triggers a reload with hygiene re-run before the screenshot', async () => {
-  const pw = fakePlaywright({ menuStuck: true });
-  const { d } = deps({ pw, config: PHONE_CONFIG });
-  await cmdCapture(d, { ...phoneArgs(), project: signInProject() });
+  assert.deepEqual(pw.log.keys, []);
   assert.equal(pw.log.reloads, 1);
   assert.equal(pw.log.styles.length, 3);
+  assert.ok(!pw.log.waits.some(([n]) => n === 'dialog'));
+  assert.equal(pw.log.screenshots.length, 2);
+  assert.ok(pw.log.firsts.includes('Open main menu'));
 });
 
 test('missing phone proof follows the stale-auth path, then records signed-in state not confirmed', async () => {
   const project = signInProject();
   const pw = fakePlaywright({ proofMisses: 99, proofMissName: 'Sign out' });
   const { d, home } = deps({ pw, config: PHONE_CONFIG });
-  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
-  mkdirSync(join(state, '..'), { recursive: true });
-  writeFileSync(state, '{"stale":true}');
+  const state = seedState(home);
   const r = await cmdCapture(d, { ...phoneArgs(), project });
   assert.deepEqual(r.shots.map((s) => [s.viewport, s.result, s.reason ?? '']), [['desktop', 'pass', ''], ['phone', 'not-exercised', 'signed-in state not confirmed']]);
   assert.equal(pw.log.fills.length, 2);
@@ -1127,9 +1178,7 @@ test('missing phone proof once recovers after a fresh sign-in', async () => {
   const project = signInProject();
   const pw = fakePlaywright({ proofMisses: 1, proofMissName: 'Sign out' });
   const { d, home } = deps({ pw, config: PHONE_CONFIG });
-  const state = join(evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1), 'auth', 'state.json');
-  mkdirSync(join(state, '..'), { recursive: true });
-  writeFileSync(state, '{"stale":true}');
+  const state = seedState(home);
   const r = await cmdCapture(d, { ...phoneArgs(), project });
   assert.deepEqual(r.shots.map((s) => s.result), ['pass', 'pass']);
   assert.equal(pw.log.fills.length, 2);
@@ -1188,4 +1237,217 @@ test('markdown treats a failed visibility check as not private', () => {
   assert.match(md, /not exercised, repository visibility unknown, images not attached/);
   assert.deepEqual(r.attach, []);
   assert.ok(!r.stdout.includes('--attach'));
+});
+
+test('ignore patterns match request and location URLs only, never console or pageerror text', async () => {
+  const pw = fakePlaywright({ consoleErrors: ['/_edge/geo exploded', { text: 'x', url: 'http://localhost:3000/_edge/geo' }], pageErrors: ['/_edge/geo threw'] });
+  const { d, home } = deps({ pw });
+  await cmdCapture(d, capArgs(['--ignore-request', '/_edge/geo']));
+  const [e] = manifestOf(home);
+  assert.equal(e.console_errors.count, 2);
+  assert.equal(e.ignored.console_errors.count, 1);
+});
+
+test('an empty --ignore-request is a usage error', () => {
+  for (const v of ['', '  ']) {
+    assert.throws(() => capArgs(['--ignore-request', v]), UsageError, JSON.stringify(v));
+  }
+});
+
+test('console text is normalised: query strings, ports, digits and hex runs do not make an error new', async () => {
+  assert.equal(normConsole('GET http://localhost:3000/a?id=9 failed after 1234ms id deadbeef01'), 'GET http://localhost:<port>/a failed after <n>ms id <hex>');
+  const a = deps({ pw: fakePlaywright({ consoleErrors: ['timeout 120ms http://localhost:3000/x?t=1 req 1a2b3c4d'] }) });
+  await cmdCapture(a.d, capArgs());
+  const pw = fakePlaywright({ consoleErrors: ['timeout 98ms http://localhost:3000/x?t=7 req ffeeddcc'] });
+  await cmdCapture({ ...a.d, loadPlaywright: async () => pw }, afterArgs());
+  const e = manifestOf(a.home).find((x) => x.phase === 'after');
+  assert.equal(e.result, 'pass');
+  assert.equal(e.pre_existing, 1);
+  assert.equal(pw.log.reloads, 0);
+});
+
+test('failed requests are keyed on method, pathname, status and sorted query keys', async () => {
+  const get = (url) => ({ url, status: 500 });
+  const a = deps({ pw: fakePlaywright({ failed: [get('http://localhost:3000/api/a?b=1&a=2')] }) });
+  await cmdCapture(a.d, capArgs());
+  assert.deepEqual(manifestOf(a.home)[0].raw.failed, ['GET /api/a 500 ?a,b']);
+  const same = fakePlaywright({ failed: [get('http://localhost:3000/api/a?a=9&b=8')] });
+  await cmdCapture({ ...a.d, loadPlaywright: async () => same }, afterArgs());
+  assert.equal(manifestOf(a.home).find((x) => x.phase === 'after').result, 'pass');
+  const diff = fakePlaywright({ failed: [{ ...get('http://localhost:3000/api/a?a=9&b=8'), method: 'POST' }], reloadFailed: [{ ...get('http://localhost:3000/api/a?a=9&b=8'), method: 'POST' }] });
+  await cmdCapture({ ...a.d, loadPlaywright: async () => diff }, afterArgs());
+  const e = manifestOf(a.home).find((x) => x.phase === 'after');
+  assert.equal(e.result, 'fail');
+  assert.deepEqual(e.new_errors, { console_errors: 0, failed_requests: 1 });
+});
+
+test('flaky: a normalised key in one load only is flaky, in both loads it fails', async () => {
+  const pw = fakePlaywright({ consoleErrors: ['boom 1', 'blip 2'], reloadConsoleErrors: ['boom 7'] });
+  const { d, home } = deps({ pw });
+  await cmdCapture(d, afterArgs());
+  const [e] = manifestOf(home);
+  assert.deepEqual(e.new_errors, { console_errors: 1, failed_requests: 0 });
+  assert.equal(e.flaky.count, 1);
+});
+
+test('manifest lock: the lock holds a token and is removed only by its owner', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'capture-ui-m-'));
+  const lock = join(dir, 'manifest.lock');
+  withManifest(dir, (m) => {
+    assert.match(readFileSync(lock, 'utf8'), /^\d+\.[0-9a-f]{16}$/);
+    return m;
+  });
+  assert.equal(existsSync(lock), false);
+  withManifest(dir, (m) => {
+    writeFileSync(lock, '1.someoneelse');
+    return m;
+  });
+  assert.equal(readFileSync(lock, 'utf8'), '1.someoneelse');
+});
+
+test('manifest lock: stale takeover renames the old lock and leaves no .stale files behind', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'capture-ui-m-'));
+  const lock = join(dir, 'manifest.lock');
+  writeFileSync(lock, '');
+  const old = new Date(Date.now() - 120_000);
+  utimesSync(lock, old, old);
+  withManifest(dir, () => [entry()], { waitMs: 60, staleMs: 60_000 });
+  assert.deepEqual(readdirSync(dir).sort(), ['manifest.json']);
+});
+
+test('manifest lock: a lock whose owner pid is dead is stale at once, a live owner blocks', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'capture-ui-m-'));
+  const lock = join(dir, 'manifest.lock');
+  const dead = spawnSync(process.execPath, ['-e', '']).pid;
+  writeFileSync(lock, `${dead}.abcd`);
+  withManifest(dir, () => [entry()], { waitMs: 60, staleMs: 60_000 });
+  assert.equal(readManifest(dir).length, 1);
+  writeFileSync(lock, `${process.pid}.abcd`);
+  assert.throws(() => withManifest(dir, (m) => m, { waitMs: 60, staleMs: 60_000 }), ManifestLockedError);
+});
+
+test('the lock wait outlasts the stale age', () => {
+  assert.ok(LOCK_WAIT_MS > LOCK_STALE_MS);
+});
+
+test('capture and compose record manifest locked instead of throwing', async () => {
+  const pw = fakePlaywright();
+  const { d, home } = deps({ pw });
+  d.lockOpts = { waitMs: 50, staleMs: 60_000 };
+  const dir = evidenceDir({ FACTORY_HOME: home }, 'o/r', 7, 1);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'manifest.lock'), `${process.pid}.abcd`);
+  const r = await cmdCapture(d, capArgs());
+  assert.deepEqual(r.shots.map((x) => [x.result, x.reason]), [['not-exercised', 'manifest locked']]);
+  const out = JSON.parse(await main(['capture', '--repo', 'o/r', '--issue', '7', '--phase', 'before', '--base-url', 'http://localhost:3000', '--route', '/', '--project', tmpdir()], d));
+  assert.equal(out.shots[0].reason, 'manifest locked');
+  rmSync(join(dir, 'manifest.lock'));
+  seed(home, [entry({ phase: 'before', file: 'before/home-aaaaaa-desktop.png' }), entry({ file: 'after/home-aaaaaa-desktop.png' })]);
+  writeFileSync(join(dir, 'manifest.lock'), `${process.pid}.abcd`);
+  const c = await cmdCompose(d, { repo: 'o/r', issue: 7, attempt: 1, project: tmpdir() });
+  assert.deepEqual(c.composed.map((x) => [x.result, x.reason]), [['not-exercised', 'manifest locked']]);
+});
+
+function gitRepo({ withConfig = true, originRef = 'refs/remotes/origin/main', head } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'capture-ui-git-'));
+  const git = (...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t.t', ...a], { stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  mkdirSync(join(dir, '.factory'));
+  writeFileSync(join(dir, withConfig ? '.factory/ui-capture.json' : '.factory/other.json'), '{"phone":true}');
+  git('add', '.');
+  git('commit', '-q', '-m', 'init');
+  if (originRef) git('update-ref', originRef, 'HEAD');
+  if (head) git('symbolic-ref', 'refs/remotes/origin/HEAD', head);
+  return dir;
+}
+
+test('config read: origin/main holds the file, a missing path means no config, other failures are unreadable', () => {
+  const real = makeDeps({});
+  assert.equal(real.readConfigText(gitRepo(), undefined), '{"phone":true}');
+  assert.equal(real.readConfigText(gitRepo({ withConfig: false }), undefined), undefined);
+  assert.throws(() => real.readConfigText(gitRepo({ originRef: null }), undefined), ConfigUnreadableError);
+  assert.throws(() => real.readConfigText(mkdtempSync(join(tmpdir(), 'capture-ui-nogit-')), undefined), ConfigUnreadableError);
+});
+
+test('config read: origin/HEAD is resolved first, like gitInfo', () => {
+  const real = makeDeps({});
+  const dir = gitRepo({ originRef: 'refs/remotes/origin/trunk', head: 'refs/remotes/origin/trunk' });
+  assert.equal(real.readConfigText(dir, undefined), '{"phone":true}');
+});
+
+test('an unreadable config records every shot not-exercised', async () => {
+  const pw = fakePlaywright();
+  const { d } = deps({ pw });
+  d.readConfigText = () => {
+    throw new ConfigUnreadableError('x');
+  };
+  const r = await cmdCapture(d, capArgs(['--phone']));
+  assert.ok(r.shots.every((x) => x.result === 'not-exercised' && x.reason === 'ui-capture.json unreadable'));
+  assert.equal(pw.log.screenshots.length, 0);
+});
+
+test('onSignIn matches the exact path or a path below it, not a sibling prefix', () => {
+  const cfg = { sign_in: { path: '/sign-in' } };
+  assert.equal(onSignIn(cfg, 'http://localhost:3000/sign-in'), true);
+  assert.equal(onSignIn(cfg, 'http://localhost:3000/sign-in/'), true);
+  assert.equal(onSignIn(cfg, 'http://localhost:3000/sign-in/verify?x=1'), true);
+  assert.equal(onSignIn(cfg, 'http://localhost:3000/sign-in-help'), false);
+  assert.equal(onSignIn({}, 'http://localhost:3000/sign-in'), false);
+});
+
+test('sign-in: waits 30 s after submit, aborts non-local requests, and saves nothing when the origin drifted', async () => {
+  const pw = fakePlaywright();
+  const { d } = deps({ pw });
+  await cmdCapture(d, { ...capArgs(['--sign-in']), project: signInProject() });
+  assert.ok(pw.log.waits.some(([n, t]) => n === 'url' && t === 30000));
+  assert.ok(pw.log.waits.some(([n, st, where, t]) => n === 'Manage account' && where === 'sign-in' && t === 30000));
+  assert.equal(pw.log.contexts[0].bypassCSP, true);
+  const { handler } = pw.log.routes[0];
+  const seen = [];
+  const route = (url) => ({ request: () => ({ url: () => url }), continue: () => void seen.push(['continue', url]), abort: () => void seen.push(['abort', url]) });
+  for (const u of ['http://localhost:3000/a', 'https://evil.example.com/x', 'http://127.0.0.1:3000/y', 'data:text/plain,hi']) await handler(route(u));
+  assert.deepEqual(seen.map(([k]) => k), ['continue', 'abort', 'continue', 'continue']);
+
+  const drift = fakePlaywright({ driftAfterClick: 'https://evil.example.com/' });
+  const b = deps({ pw: drift });
+  const r = await cmdCapture(b.d, { ...capArgs(['--sign-in']), project: signInProject() });
+  assert.equal(r.shots[0].reason, 'sign-in failed');
+  assert.equal(existsSync(join(evidenceDir({ FACTORY_HOME: b.home }, 'o/r', 7, 1), 'auth', 'state.json')), false);
+});
+
+test('parseEnvFile strips inline comments and matching outer quotes only', () => {
+  const env = parseEnvFile('A=plain # note\nB="quoted # keep" # note\nC=a#b\nD="mixed\'\nE=\'single\'\nF=pa"ss\n');
+  assert.deepEqual(env, { A: 'plain', B: 'quoted # keep', C: 'a#b', D: '"mixed\'', E: 'single', F: 'pa"ss' });
+});
+
+test('credentials: .env.local wins over .env, process env wins over both, other names are refused', () => {
+  const project = mkdtempSync(join(tmpdir(), 'capture-ui-proj-'));
+  writeFileSync(join(project, '.env'), 'FACTORY_TEST_EMAIL=env@x.y\nFACTORY_TEST_PASSWORD=envpw\n');
+  writeFileSync(join(project, '.env.local'), 'FACTORY_TEST_PASSWORD=localpw\n');
+  const names = { email: 'FACTORY_TEST_EMAIL', password: 'FACTORY_TEST_PASSWORD' };
+  assert.deepEqual(readCredentials({}, project, names), { email: 'env@x.y', password: 'localpw' });
+  assert.deepEqual(readCredentials({ FACTORY_TEST_PASSWORD: 'shellpw' }, project, names), { email: 'env@x.y', password: 'shellpw' });
+  assert.equal(readCredentials({}, project, { email: 'HOME', password: 'FACTORY_TEST_PASSWORD' }), undefined);
+});
+
+test('consent: waits up to 2 s for the button, uses first(), and contexts bypass CSP', async () => {
+  const pw = fakePlaywright({ cookieBanner: true });
+  const { d } = deps({ pw });
+  await cmdCapture(d, capArgs());
+  assert.ok(pw.log.firsts.includes('Reject all'));
+  assert.ok(pw.log.waits.some(([n, t]) => n === 'consent' && t === 2000));
+  assert.equal(pw.log.contexts[0].bypassCSP, true);
+});
+
+test('reused state.json is discarded when its recorded origin differs or the sidecar is missing', async () => {
+  for (const origin of ['http://localhost:4000', null]) {
+    const pw = fakePlaywright();
+    const { d, home } = deps({ pw });
+    const state = seedState(home, '{"old":true}', origin);
+    const r = await cmdCapture(d, { ...capArgs(['--sign-in']), project: signInProject() });
+    assert.equal(r.shots[0].result, 'pass');
+    assert.equal(pw.log.fills.length, 2);
+    assert.notEqual(readFileSync(state, 'utf8'), '{"old":true}');
+    assert.deepEqual(JSON.parse(readFileSync(join(state, '..', 'state.meta.json'), 'utf8')), { origin: 'http://localhost:3000' });
+  }
 });

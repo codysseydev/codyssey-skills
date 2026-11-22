@@ -22,7 +22,7 @@
 // record every failure as `not-exercised` and still exit 0. Exit 1 when markdown refuses or on an
 // unexpected error (for example a corrupt manifest), 2 on bad usage.
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
@@ -52,8 +52,10 @@ const NAV_TIMEOUT_MS = 180_000;
 const IDLE_TIMEOUT_MS = 3_000;
 const SUBMIT_ENABLED_TIMEOUT_MS = 15_000;
 const IMAGES_TIMEOUT_MS = 30_000;
-const LOCK_STALE_MS = 30_000;
-const LOCK_WAIT_MS = 10_000;
+export const LOCK_STALE_MS = 30_000;
+export const LOCK_WAIT_MS = 45_000;
+const POST_SUBMIT_TIMEOUT_MS = 30_000;
+const CONSENT_TIMEOUT_MS = 2_000;
 
 export const USAGE = `usage:
   capture-ui.mjs detect   --files <path|-> [--glob <pattern> ...] [--project <dir>] [--config <path>]
@@ -66,6 +68,9 @@ example base url: http://codyssey.test:3000`;
 
 export class UsageError extends Error {}
 export class RefusalError extends Error {}
+export class ConfigError extends UsageError {}
+export class ConfigUnreadableError extends Error {}
+export class ManifestLockedError extends Error {}
 
 // ---------- config ----------
 
@@ -83,9 +88,9 @@ export function parseBaseUrl(value, what = '--base-url') {
   try {
     u = new URL(value);
   } catch {
-    throw new UsageError(`bad ${what}: ${value}`);
+    throw new UsageError(what === '--base-url' ? `bad ${what}: ${value}` : `bad ${what}`);
   }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new UsageError(`${what} must be http or https: ${value}`);
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new UsageError(what === '--base-url' ? `${what} must be http or https: ${value}` : `${what} must be http or https`);
   return value;
 }
 
@@ -94,17 +99,21 @@ export function parseConfig(text) {
   try {
     raw = JSON.parse(text);
   } catch (e) {
-    throw new UsageError(`ui-capture.json is not valid JSON: ${errorText(e)}`);
+    throw new ConfigError('ui-capture.json: not valid JSON');
   }
-  if (!isObject(raw)) throw new UsageError('ui-capture.json must be a JSON object');
   const bad = (msg) => {
-    throw new UsageError(`ui-capture.json: ${msg}`);
+    throw new ConfigError(`ui-capture.json: ${msg}`);
   };
+  if (!isObject(raw)) bad('must be a JSON object');
   for (const k of Object.keys(raw)) if (!CONFIG_KEYS.includes(k)) bad(`unknown key ${k}`);
   const cfg = {};
   if (raw.base_url !== undefined) {
     if (typeof raw.base_url !== 'string') bad('base_url must be a string');
-    cfg.base_url = parseBaseUrl(raw.base_url, 'base_url');
+    try {
+      cfg.base_url = parseBaseUrl(raw.base_url, 'base_url');
+    } catch (e) {
+      bad(e.message);
+    }
   }
   if (raw.consent_button !== undefined) {
     if (typeof raw.consent_button !== 'string' || !raw.consent_button) bad('consent_button must be a non-empty string');
@@ -129,6 +138,7 @@ export function parseConfig(text) {
       if (typeof s[k] !== 'string' || !s[k]) bad(`sign_in.${k} must be a non-empty string`);
     }
     if (!isSafePath(s.path)) bad('sign_in.path must start with a single / and hold no control characters');
+    if (s.path === '/' || /[?#]/.test(s.path)) bad('sign_in.path must not be / and must not hold ? or #');
     for (const k of ['env_email', 'env_password']) {
       if (!ENV_NAME_RE.test(s[k])) bad(`sign_in.${k} must match ${ENV_NAME_RE}`);
     }
@@ -146,6 +156,17 @@ export function loadConfig(d, { project, config }) {
   if (!project && !config) return {};
   const text = d.readConfigText(project, config);
   return text === undefined ? {} : parseConfig(text);
+}
+
+// A config that cannot be read or is invalid never stops a run: every shot is recorded as not exercised.
+function tryConfig(d, o) {
+  try {
+    return { cfg: loadConfig(d, o), failure: '' };
+  } catch (e) {
+    if (e instanceof ConfigUnreadableError) return { cfg: {}, failure: 'ui-capture.json unreadable' };
+    if (e instanceof ConfigError) return { cfg: {}, failure: `ui-capture.json invalid: ${e.message.replace(/^ui-capture\.json:?\s*/, '')}` };
+    throw e;
+  }
 }
 
 // ---------- pure logic ----------
@@ -231,17 +252,22 @@ export function parseEnvFile(text) {
   for (const raw of String(text).split(/\r?\n/)) {
     const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(raw);
     if (!m || raw.trim().startsWith('#')) continue;
-    out[m[1]] = m[2].replace(/^(["'])(.*)\1$/, '$2');
+    const quoted = /^(["'])(.*?)\1\s*(?:#.*)?$/.exec(m[2]);
+    out[m[1]] = quoted ? quoted[2] : m[2].replace(/\s+#.*$/, '');
   }
   return out;
 }
 
 export function readCredentials(env, project, names) {
-  let file = {};
-  try {
-    file = parseEnvFile(readFileSync(join(project, '.env'), 'utf8'));
-  } catch {
-    /* no .env */
+  if (!ENV_NAME_RE.test(names.email) || !ENV_NAME_RE.test(names.password)) return undefined;
+  const file = {};
+  // .env.local wins over .env, as in Next.js.
+  for (const name of ['.env', '.env.local']) {
+    try {
+      Object.assign(file, parseEnvFile(readFileSync(join(project, name), 'utf8')));
+    } catch {
+      /* file missing */
+    }
   }
   const email = env[names.email] || file[names.email];
   const password = env[names.password] || file[names.password];
@@ -257,6 +283,17 @@ const sha7 = (sha) => (sha ? String(sha).slice(0, 7) : 'unknown');
 
 export function makeDeps(env = process.env) {
   const git = (project, ...args) => execFileSync('git', ['-C', project, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  // origin/HEAD first, then origin/main: the refs gitInfo and the config read both resolve against.
+  const originRefs = (project) => {
+    const refs = [];
+    try {
+      refs.push(git(project, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'));
+    } catch {
+      /* origin/HEAD not set */
+    }
+    refs.push('origin/main');
+    return refs;
+  };
   return {
     env,
     now: () => Date.now(),
@@ -267,14 +304,7 @@ export function makeDeps(env = process.env) {
         const branch = git(project, 'rev-parse', '--abbrev-ref', 'HEAD');
         let ref = 'HEAD';
         let baseSha = sha;
-        const candidates = [];
-        try {
-          candidates.push(git(project, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'));
-        } catch {
-          /* origin/HEAD not set */
-        }
-        candidates.push('origin/main');
-        for (const c of candidates) {
+        for (const c of originRefs(project)) {
           try {
             baseSha = git(project, 'merge-base', 'HEAD', c);
             ref = c;
@@ -302,10 +332,21 @@ export function makeDeps(env = process.env) {
           throw new UsageError(`cannot read --config ${configPath}: ${e.code ?? errorText(e)}`);
         }
       }
+      // Only "the path is not in that ref" means no config. Every other failure is unreadable.
       try {
-        return git(project, 'show', 'origin/main:.factory/ui-capture.json');
+        const ref = originRefs(project).find((c) => {
+          try {
+            git(project, 'rev-parse', '--verify', '--quiet', `${c}^{commit}`);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+        if (!ref) throw new Error('no origin ref');
+        if (!git(project, 'ls-tree', '--name-only', ref, '--', '.factory/ui-capture.json')) return undefined;
+        return git(project, 'show', `${ref}:.factory/ui-capture.json`);
       } catch {
-        return undefined;
+        throw new ConfigUnreadableError('ui-capture.json unreadable');
       }
     },
   };
@@ -334,26 +375,46 @@ export function readManifest(dir) {
   return value;
 }
 
-// Read-modify-write under an O_EXCL lockfile; the new manifest lands through a tmp file and a rename.
+// A lock is stale when its owner pid is gone or it is older than staleMs.
+function lockIsStale(lock, staleMs) {
+  try {
+    const pid = Number(/^(\d+)\./.exec(readFileSync(lock, 'utf8'))?.[1]);
+    if (pid) {
+      try {
+        process.kill(pid, 0);
+      } catch (e) {
+        if (e.code === 'ESRCH') return true;
+      }
+    }
+    return Date.now() - statSync(lock).mtimeMs > staleMs;
+  } catch {
+    return true;
+  }
+}
+
+// Read-modify-write under an O_EXCL lockfile holding our token; the new manifest lands through a tmp file and a rename.
 export function withManifest(dir, fn, { staleMs = LOCK_STALE_MS, waitMs = LOCK_WAIT_MS } = {}) {
   mkdirSync(dir, { recursive: true });
   const lock = join(dir, 'manifest.lock');
+  const token = `${process.pid}.${randomBytes(8).toString('hex')}`;
   const deadline = Date.now() + waitMs;
   for (;;) {
     try {
-      closeSync(openSync(lock, 'wx'));
+      writeFileSync(lock, token, { flag: 'wx' });
       break;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
-      try {
-        if (Date.now() - statSync(lock).mtimeMs > staleMs) {
-          rmSync(lock, { force: true });
-          continue;
+      if (lockIsStale(lock, staleMs)) {
+        const moved = `${lock}.stale.${token}`;
+        try {
+          renameSync(lock, moved);
+          rmSync(moved, { force: true });
+        } catch {
+          /* someone else took it over first */
         }
-      } catch {
         continue;
       }
-      if (Date.now() > deadline) throw new Error(`manifest is locked: ${lock}`);
+      if (Date.now() > deadline) throw new ManifestLockedError(`manifest is locked: ${lock}`);
       sleepSync(25);
     }
   }
@@ -364,7 +425,11 @@ export function withManifest(dir, fn, { staleMs = LOCK_STALE_MS, waitMs = LOCK_W
     renameSync(tmp, manifestPath(dir));
     return next;
   } finally {
-    rmSync(lock, { force: true });
+    try {
+      if (readFileSync(lock, 'utf8') === token) rmSync(lock, { force: true });
+    } catch {
+      /* lock already gone */
+    }
   }
 }
 
@@ -414,18 +479,29 @@ class ProofMissingError extends StaleAuthError {}
 const PROOF_TIMEOUT_MS = 10_000;
 
 const unfilled = (route) => /\[[^\]]+\]/.test(route.split('?')[0]);
-const requestKey = (url, status) => {
+// Request keys: method, pathname, status and the sorted query KEYS, so ids in values do not matter.
+const requestKey = (method, url, status) => {
   let path = url;
+  let keys = [];
   try {
-    path = new URL(url).pathname;
+    const u = new URL(url);
+    path = u.pathname;
+    keys = [...new Set(u.searchParams.keys())].sort();
   } catch {
     /* keep the raw string */
   }
-  return `${path}|${status}`;
+  return `${method} ${path} ${status}${keys.length ? ` ?${keys.join(',')}` : ''}`;
 };
 
+// Console text with the parts that change between loads removed: query strings, ports, hex and digit runs.
+export const normConsole = (text) => String(text)
+  .replace(/(https?:\/\/[^\s?#'")]+)\?[^\s#'")]*/g, '$1')
+  .replace(/:\d{2,5}\b/g, ':<port>')
+  .replace(/\b[0-9a-f]{6,}\b/gi, '<hex>')
+  .replace(/\d+/g, '<n>');
+
 // An error is new when the matching before entry did not have it: console errors compare by text,
-// failed requests by URL path plus status. Without a usable before entry every error is new.
+// failed requests by method, path, status and query keys. Without a usable before entry every error is new.
 export function newErrors(raw, before) {
   const known = before && before.result !== 'not-exercised' && before.raw ? before.raw : { console: [], failed: [] };
   const consoleNew = raw.console.filter((t) => !known.console.includes(t));
@@ -440,13 +516,29 @@ export function newErrors(raw, before) {
 async function ensureAuth(ctx, browser) {
   const { d, o, cfg, dir } = ctx;
   const file = join(dir, 'auth', 'state.json');
-  if (existsSync(file)) return file;
+  const metaFile = join(dir, 'auth', 'state.meta.json');
+  if (existsSync(file)) {
+    let sameOrigin = false;
+    try {
+      sameOrigin = JSON.parse(readFileSync(metaFile, 'utf8')).origin === new URL(o.baseUrl).origin;
+    } catch {
+      /* no usable sidecar */
+    }
+    if (sameOrigin) return file;
+    rmSync(file, { force: true });
+    rmSync(metaFile, { force: true });
+  }
   const s = cfg.sign_in;
   const creds = readCredentials(d.env, o.project, { email: s.env_email, password: s.env_password });
   if (!creds) return undefined;
   let context;
   try {
-    context = await browser.newContext({ viewport: { width: DESKTOP.width, height: DESKTOP.height } });
+    context = await browser.newContext({ viewport: { width: DESKTOP.width, height: DESKTOP.height }, bypassCSP: true });
+    // Nothing leaves the local host while credentials are typed.
+    await context.route('**', (route) => {
+      const url = route.request().url();
+      return isLocalHost(url) || /^(data|blob|about):/.test(url) ? route.continue() : route.abort();
+    });
     const page = await context.newPage();
     const base = new URL(o.baseUrl);
     const signInUrl = new URL(s.path, base);
@@ -466,13 +558,15 @@ async function ensureAuth(ctx, browser) {
     );
     if (!onBase()) return undefined;
     await page.click(s.submit_selector);
-    await page.waitForURL((u) => !onSignIn(cfg, String(u)), { timeout: NAV_TIMEOUT_MS });
+    await page.waitForURL((u) => !onSignIn(cfg, String(u)), { timeout: POST_SUBMIT_TIMEOUT_MS });
     const proof = typeof s.signed_in === 'string' ? page.locator(s.signed_in) : page.getByRole(s.signed_in.role, { name: s.signed_in.name });
-    await proof.waitFor({ state: 'visible', timeout: NAV_TIMEOUT_MS });
+    await proof.waitFor({ state: 'visible', timeout: POST_SUBMIT_TIMEOUT_MS });
+    if (!onBase()) return undefined;
     const state = await context.storageState();
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     writeFileSync(file, JSON.stringify(state), { mode: 0o600 });
     chmodSync(file, 0o600);
+    writeFileSync(metaFile, JSON.stringify({ origin: base.origin }), { mode: 0o600 });
     return file;
   } catch {
     return undefined;
@@ -481,10 +575,13 @@ async function ensureAuth(ctx, browser) {
   }
 }
 
-function onSignIn(cfg, url) {
+// The sign-in page itself or anything below it, never a sibling that shares the prefix.
+export function onSignIn(cfg, url) {
   if (!cfg.sign_in) return false;
   try {
-    return new URL(url).pathname.startsWith(cfg.sign_in.path);
+    const path = cfg.sign_in.path;
+    const pathname = new URL(url).pathname;
+    return pathname === path || pathname.startsWith(path.endsWith('/') ? path : `${path}/`);
   } catch {
     return false;
   }
@@ -493,8 +590,9 @@ function onSignIn(cfg, url) {
 async function dismissConsent(cfg, page) {
   if (!cfg.consent_button) return;
   try {
-    const button = page.getByRole('button', { name: cfg.consent_button });
-    if (await button.isVisible()) await button.click();
+    const button = page.getByRole('button', { name: cfg.consent_button }).first();
+    await button.waitFor({ state: 'visible', timeout: CONSENT_TIMEOUT_MS });
+    await button.click();
   } catch {
     /* no banner */
   }
@@ -505,21 +603,18 @@ async function shootOne(ctx, context, shot, before) {
   const page = await context.newPage();
   const collect = () => ({ consoleErrors: [], failed: [], ignoredConsole: [], ignoredFailed: [] });
   let cur = collect();
-  const ignore = (...parts) => ctx.ignoreRequests.some((s) => parts.some((p) => String(p ?? '').includes(s)));
+  // Ignore patterns match request URLs and console message location URLs, never message text.
+  const ignoreUrl = (url) => Boolean(url) && ctx.ignoreRequests.some((s) => String(url).includes(s));
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
-    const text = m.text();
-    (ignore(text, m.location?.()?.url) ? cur.ignoredConsole : cur.consoleErrors).push(text);
+    (ignoreUrl(m.location?.()?.url) ? cur.ignoredConsole : cur.consoleErrors).push(m.text());
   });
-  page.on('pageerror', (err) => {
-    const text = errorText(err);
-    (ignore(text) ? cur.ignoredConsole : cur.consoleErrors).push(text);
-  });
-  const noteFailure = (url, status) => (ignore(url) ? cur.ignoredFailed : cur.failed).push({ url, status });
+  page.on('pageerror', (err) => void cur.consoleErrors.push(errorText(err)));
+  const noteFailure = (url, status, method) => (ignoreUrl(url) ? cur.ignoredFailed : cur.failed).push({ url, status, method: method || 'GET' });
   page.on('response', (r) => {
-    if (r.status() >= 400) noteFailure(r.url(), r.status());
+    if (r.status() >= 400) noteFailure(r.url(), r.status(), r.request?.().method?.());
   });
-  page.on('requestfailed', (r) => noteFailure(r.url(), 0));
+  page.on('requestfailed', (r) => noteFailure(r.url(), 0, r.method?.()));
   try {
     const target = new URL(shot.route, o.baseUrl);
     if (target.origin !== new URL(o.baseUrl).origin) throw new Error('route resolves off-host');
@@ -539,19 +634,15 @@ async function shootOne(ctx, context, shot, before) {
       const proof = typeof si === 'string' ? page.locator(si) : page.getByRole(si.role, { name: si.name });
       const opener = phone && cfg.sign_in.open;
       try {
-        if (opener) await page.getByRole('button', { name: opener }).click({ timeout: PROOF_TIMEOUT_MS });
+        if (opener) await page.getByRole('button', { name: opener }).first().click({ timeout: PROOF_TIMEOUT_MS });
         await proof.first().waitFor({ state: 'visible', timeout: PROOF_TIMEOUT_MS });
       } catch {
         throw new ProofMissingError('signed-in state not confirmed');
       }
       if (opener) {
-        await page.keyboard.press('Escape');
-        await page.evaluate(() => document.activeElement?.blur?.());
-        const closed = await page.getByRole('dialog').first().waitFor({ state: 'hidden', timeout: 3_000 }).then(() => true, () => false);
-        if (!closed) {
-          await page.reload({ waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
-          await settle();
-        }
+        // A menu that failed to close cannot be told from one that never opened, so always start from a fresh load.
+        await page.reload({ waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
+        await settle();
       }
     }
     const height = Number(await page.evaluate(() => document.documentElement.scrollHeight));
@@ -576,14 +667,15 @@ async function shootOne(ctx, context, shot, before) {
       const union = (a, b, key) => [...a, ...b.filter((x) => !a.some((y) => key(y) === key(x)))];
       const second = cur;
       cur = {
-        consoleErrors: union(first.consoleErrors, second.consoleErrors, (t) => t),
-        failed: union(first.failed, second.failed, (f) => requestKey(f.url, f.status)),
+        consoleErrors: union(first.consoleErrors, second.consoleErrors, normConsole),
+        failed: union(first.failed, second.failed, (f) => requestKey(f.method, f.url, f.status)),
         ignoredConsole: union(first.ignoredConsole, second.ignoredConsole, (t) => t),
         ignoredFailed: union(first.ignoredFailed, second.ignoredFailed, (f) => `${f.url}|${f.status}`),
       };
     }
     const { consoleErrors, failed, ignoredConsole, ignoredFailed } = cur;
-    const toRaw = (c) => ({ console: c.consoleErrors, failed: c.failed.map((f) => requestKey(f.url, f.status)) });
+    const toRaw = (c) => ({ console: c.consoleErrors.map(normConsole), failed: c.failed.map((f) => requestKey(f.method, f.url, f.status)) });
+    const urlStatus = (list) => list.slice(0, 3).map(({ url, status }) => ({ url, status }));
     const raw = toRaw(cur);
     let gate = o.phase === 'after' ? newErrors(raw, before) : undefined;
     let flaky;
@@ -612,10 +704,10 @@ async function shootOne(ctx, context, shot, before) {
       file,
       truncated,
       console_errors: { count: consoleErrors.length, first: consoleErrors.slice(0, 3) },
-      failed_requests: { count: failed.length, first: failed.slice(0, 3) },
+      failed_requests: { count: failed.length, first: urlStatus(failed) },
       ignored: {
         console_errors: { count: ignoredConsole.length, first: ignoredConsole.slice(0, 3) },
-        failed_requests: { count: ignoredFailed.length, first: ignoredFailed.slice(0, 3) },
+        failed_requests: { count: ignoredFailed.length, first: urlStatus(ignoredFailed) },
       },
       raw,
       ...gate,
@@ -628,9 +720,14 @@ async function shootOne(ctx, context, shot, before) {
 }
 
 export async function cmdCapture(d, o0) {
-  const cfg = loadConfig(d, o0);
+  const loaded = tryConfig(d, o0);
+  const { cfg } = loaded;
+  let configFailure = loaded.failure;
   const baseUrl = o0.baseUrl ?? cfg.base_url;
-  if (!baseUrl) throw new UsageError('--base-url is required when ui-capture.json has no base_url');
+  if (!baseUrl && !configFailure) {
+    if (!Object.keys(cfg).length) throw new UsageError('--base-url is required when ui-capture.json has no base_url');
+    configFailure = 'ui-capture.json invalid: base_url missing';
+  }
   const o = { ...o0, baseUrl, phone: o0.phone || cfg.phone === true };
   const dir = evidenceDir(d.env, o.repo, o.issue, o.attempt);
   const git = d.gitInfo(o.project);
@@ -667,6 +764,7 @@ export async function cmdCapture(d, o0) {
 
   const runShots = async () => {
     if (!shots.length) return;
+    if (configFailure) return fillRest(configFailure);
     if (!isLocalHost(o.baseUrl)) return fillRest('host not local');
     if (o.signIn && !cfg.sign_in) return fillRest('no sign-in config');
     let pw;
@@ -689,6 +787,7 @@ export async function cmdCapture(d, o0) {
     const openContext = (viewport) => browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       reducedMotion: 'reduce',
+      bypassCSP: true,
       ...(storageState ? { storageState } : {}),
     });
     for (const viewport of viewports) {
@@ -725,8 +824,8 @@ export async function cmdCapture(d, o0) {
             context = await openContext(viewport);
             entries.push(await shoot());
           } catch (e2) {
+            // Only ensureAuth failing stops the run. A proof miss or a sign-in redirect here fails this shot alone.
             const reason = e2 instanceof ProofMissingError ? 'signed-in state not confirmed' : e2 instanceof StaleAuthError ? 'sign-in failed' : errorText(e2);
-            if (e2 instanceof StaleAuthError) authFailed = reason;
             entries.push(makeEntry(d, o, git, shot, { reason }));
           }
         }
@@ -742,10 +841,20 @@ export async function cmdCapture(d, o0) {
   } finally {
     await browser?.close().catch(() => {});
   }
-  saveEntries(dir, entries);
+  let saveFailure = '';
+  try {
+    saveEntries(dir, entries, d.lockOpts);
+  } catch (e) {
+    saveFailure = e instanceof ManifestLockedError ? 'manifest locked' : errorText(e);
+  }
   return {
     evidence_dir: dir,
-    shots: entries.map((e) => ({ phase: e.phase, route: e.route, viewport: e.viewport.name, result: e.result, ...(e.reason ? { reason: e.reason } : {}) })),
+    shots: entries.map((e) => ({
+      phase: e.phase,
+      route: e.route,
+      viewport: e.viewport.name,
+      ...(saveFailure ? { result: 'not-exercised', reason: saveFailure } : { result: e.result, ...(e.reason ? { reason: e.reason } : {}) }),
+    })),
   };
 }
 
@@ -777,14 +886,30 @@ img{display:block;width:100%}
 export async function cmdCompose(d, o) {
   const dir = evidenceDir(d.env, o.repo, o.issue, o.attempt);
   const git = d.gitInfo(o.project);
-  const kept = withManifest(dir, (m) => {
-    const live = new Set(composePairs(m, dir).map((p) => pairKey(p.after)));
-    return m.filter((e) => {
-      if (e.phase !== 'compare' || live.has(pairKey(e))) return true;
-      if (e.file && FILE_RE.test(e.file)) rmSync(join(dir, e.file), { force: true });
-      return false;
-    });
-  });
+  const { failure: configFailure } = tryConfig(d, o);
+  const lockedResult = (e) => {
+    const reason = e instanceof ManifestLockedError ? 'manifest locked' : errorText(e);
+    let found = [];
+    try {
+      found = composePairs(readManifest(dir), dir);
+    } catch {
+      /* nothing readable to list */
+    }
+    return { evidence_dir: dir, composed: found.map((p) => ({ route: p.after.route, viewport: p.after.viewport.name, result: 'not-exercised', reason })) };
+  };
+  let kept;
+  try {
+    kept = withManifest(dir, (m) => {
+      const live = new Set(composePairs(m, dir).map((p) => pairKey(p.after)));
+      return m.filter((e) => {
+        if (e.phase !== 'compare' || live.has(pairKey(e))) return true;
+        if (e.file && FILE_RE.test(e.file)) rmSync(join(dir, e.file), { force: true });
+        return false;
+      });
+    }, d.lockOpts);
+  } catch (e) {
+    return lockedResult(e);
+  }
   const pairs = composePairs(kept, dir);
   if (!pairs.length) return { evidence_dir: dir, composed: [] };
   const mk = (pair, extra) => ({
@@ -810,6 +935,7 @@ export async function cmdCompose(d, o) {
   let browser;
   let tmp;
   const runPairs = async () => {
+    if (configFailure) return fillRest(configFailure);
     let pw;
     try {
       pw = await d.loadPlaywright(o.project);
@@ -850,7 +976,11 @@ export async function cmdCompose(d, o) {
     await browser?.close().catch(() => {});
     if (tmp) rmSync(tmp, { recursive: true, force: true });
   }
-  saveEntries(dir, entries);
+  try {
+    saveEntries(dir, entries, d.lockOpts);
+  } catch (e) {
+    return lockedResult(e);
+  }
   return {
     evidence_dir: dir,
     composed: entries.map((e) => ({ route: e.route, viewport: e.viewport.name, result: e.result, ...(e.reason ? { reason: e.reason } : {}) })),
@@ -1025,7 +1155,10 @@ export function parseArgs(argv) {
       if (!isSafePath(v)) throw new UsageError(`bad --route: ${JSON.stringify(v)}`);
       o.routes.push(v);
     } else if (f === '--mask') o.masks.push(v);
-    else if (f === '--ignore-request') o.ignoreRequests.push(v);
+    else if (f === '--ignore-request') {
+      if (!v.trim()) throw new UsageError('--ignore-request must not be empty');
+      o.ignoreRequests.push(v);
+    }
     else if (f === '--caption') o.captions.push(v);
     else if (f === '--project') o.project = v;
     else if (f === '--config') o.config = v;
