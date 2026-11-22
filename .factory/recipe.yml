@@ -3,12 +3,20 @@ setup: []
 checks:
   - name: pick-up-tests
     run: node --test playbooks/scripts/pick-up.test.mjs
+  - name: post-merge-tests
+    run: node --test playbooks/scripts/post-merge.test.mjs
   - name: capture-ui-tests
     run: node --test playbooks/scripts/capture-ui.test.mjs
+  - name: trial-decision-tests
+    run: node --test playbooks/scripts/trial-decision.test.mjs
+  - name: test-first-tests
+    run: node --test playbooks/scripts/test-first.test.mjs
   - name: bootstrap-tests
     run: python3 -m unittest discover -s factory/bootstrap/tests
   - name: event-model-tests
     run: python3 -m unittest discover -s factory/event-model/tests
   - name: factory-onboard-tests
     run: python3 -m unittest discover -s factory/factory-onboard/tests
+  - name: install-tests
+    run: node --test playbooks/scripts/install.test.mjs
 teardown: []
