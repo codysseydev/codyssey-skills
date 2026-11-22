@@ -996,12 +996,14 @@ test('expired: dry-run neither lists nor removes a folder whose issue moved on',
   assert.deepEqual(ghWrites(calls), []);
 });
 
-test('expired: a release that finishes during the issue read does not make the issue look stuck', async () => {
+test('expired: a lock seen before the issue read wins over a release that finishes during the read', async () => {
   const { d, calls, stateDir } = fake({ nowMs: LATER, issues: stuck() });
   const live = writeLock(stateDir, R, 4, 'live', new Date(LATER - H).toISOString());
   const dir = expiredLock(stateDir, 'o-r-4', TAKEN, CLAIM4);
   const getIssue = d.gh.getIssue;
-  // The read returns the labels from before the release; the release removes the lock meanwhile.
+  // Covers the lock check before the issue read: it sees the live lock and returns, so this read never
+  // runs. Without that check, the read would return the labels from before the release while the
+  // release removes the lock, and the issue would look stuck.
   d.gh.getIssue = (...a) => {
     const found = structuredClone(getIssue(...a));
     rmSync(live, { recursive: true, force: true });
@@ -1011,4 +1013,24 @@ test('expired: a release that finishes during the issue read does not make the i
   assert.deepEqual(out.stale, []);
   assert.equal(existsSync(dir), false);
   assert.deepEqual(ghWrites(calls), []);
+});
+
+test('expired: a claim that locks the issue during the issue read is not marked failed', async () => {
+  const { d, calls, stateDir, events } = fake({ nowMs: LATER, issues: stuck() });
+  const dir = expiredLock(stateDir, 'o-r-4', TAKEN, CLAIM4);
+  const getIssue = d.gh.getIssue;
+  // No lock before the read, so the read runs. A new claim locks the issue meanwhile; the read still
+  // shows factory-running, and only the lock check after the read sees the claim.
+  d.gh.getIssue = (...a) => {
+    const found = structuredClone(getIssue(...a));
+    writeLock(stateDir, R, 4, 'live', new Date(LATER).toISOString());
+    return found;
+  };
+  const out = await cmdClaim(d, { repos: [R], runId: 'new', dryRun: false });
+  assert.deepEqual(out.stale, []);
+  assert.equal(existsSync(dir), false);
+  assert.deepEqual(readdirSync(join(stateDir, 'expired')), []);
+  assert.equal(JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 4), 'claim.json'), 'utf8')).run_id, 'live');
+  assert.deepEqual(ghWrites(calls), []);
+  assert.deepEqual(events, []);
 });
