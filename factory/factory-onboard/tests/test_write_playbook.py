@@ -2,7 +2,7 @@ import importlib.util, json, os, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "..", "scripts", "write-playbook.py")
-SECTIONS = ["Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes"]
+SECTIONS = ["Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes", "Post-merge"]
 
 RECIPE = """version: 1
 setup:
@@ -82,6 +82,9 @@ class FreshTest(unittest.TestCase):
         self.assertIn("2. `env`: `cp .env.example .env`", section(text, "Local setup"))
         self.assertIn("1. `down`: `docker compose down`", section(text, "Cleanup"))
         self.assertEqual(section(text, "Notes"), "None yet.")
+        post = section(text, "Post-merge")
+        self.assertIn("archive run", post.splitlines()[0])
+        self.assertEqual(post.splitlines()[-2:], ["- Deploy check: none", "- Sentry: none"])
         self.assertEqual(out["unresolved"], [])
         # nothing committed by the script
         self.assertIn("??", subprocess.run(["git", "status", "--short"], cwd=repo, capture_output=True, text=True).stdout)
@@ -173,6 +176,11 @@ Drop the databases.
 ## Notes
 
 Mind the `docs/gone.md` file.
+
+## Post-merge
+
+- Deploy check: none
+- Sentry: none
 """
 
 
@@ -198,11 +206,22 @@ class ExistingTest(unittest.TestCase):
     def test_missing_last_section_is_appended_at_end(self):
         repo = make_repo({".factory/playbook.md": EXISTING.split("## Notes")[0]})
         code, out, _ = run(repo)
-        self.assertEqual(out["added_sections"], ["Local setup", "Notes"])
-        self.assertEqual(out["placement"], {"Local setup": "before Cleanup", "Notes": "end"})
+        self.assertEqual(out["added_sections"], ["Local setup", "Notes", "Post-merge"])
+        self.assertEqual(out["placement"], {"Local setup": "before Cleanup", "Notes": "end", "Post-merge": "end"})
         new = read(repo)
         self.assertTrue(new.startswith(EXISTING.split("## Notes")[0].split("## Cleanup")[0]))
-        self.assertTrue(new.endswith("## Notes\n\nNone yet.\n\n"))
+        self.assertIn("## Notes\n\nNone yet.\n\n## Post-merge\n\n", new)
+        self.assertTrue(new.endswith("- Deploy check: none\n- Sentry: none\n\n"))
+
+    def test_missing_post_merge_gets_the_stub_not_none_yet(self):
+        old = EXISTING.replace("## Cleanup", "## Local setup\n\nx\n\n## Cleanup").split("## Post-merge")[0]
+        repo = make_repo({".factory/playbook.md": old})
+        code, out, _ = run(repo)
+        self.assertEqual((code, out["added_sections"]), (0, ["Post-merge"]))
+        post = section(read(repo), "Post-merge")
+        self.assertEqual(post.splitlines()[-2:], ["- Deploy check: none", "- Sentry: none"])
+        self.assertNotIn("None yet.", post)
+        self.assertTrue(read(repo).startswith(old))
 
     def test_complete_file_is_untouched(self):
         repo = make_repo({".factory/playbook.md": EXISTING.replace("## Cleanup", "## Local setup\n\nx\n\n## Cleanup")})
@@ -265,6 +284,9 @@ class CheckTest(unittest.TestCase):
         repo = make_repo({".factory/playbook.md": EXISTING})
         code, out, _ = run(repo, "--check")
         self.assertEqual((code, out["missing_sections"]), (1, ["Local setup"]))
+        old = EXISTING.replace("## Cleanup", "## Local setup\n\nx\n\n## Cleanup").split("## Post-merge")[0]
+        repo2 = make_repo({".factory/playbook.md": old})
+        self.assertEqual(run(repo2, "--check")[1]["missing_sections"], ["Post-merge"])
         self.assertEqual(read(repo), EXISTING)
         run(repo)
         code, out, _ = run(repo, "--check")
