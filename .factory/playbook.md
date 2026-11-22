@@ -4,7 +4,7 @@ Holds codyssey-skills' specifics for the factory playbook in codysseydev/codysse
 
 ## Checks
 
-The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `bootstrap-tests`, `event-model-tests` and `factory-onboard-tests`. They are the test files the repo ships. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there is no CI to copy. GitHub Actions on the org is blocked by billing, so these local runs stand in for CI. Gates the recipe lacks:
+The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `post-merge-tests`, `capture-ui-tests`, `bootstrap-tests`, `event-model-tests` and `factory-onboard-tests`. They are the test files the repo ships. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there is no CI to copy. GitHub Actions on the org is blocked by billing, so these local runs stand in for CI. Gates the recipe lacks:
 
 None yet.
 
@@ -23,6 +23,13 @@ The recipe has no setup steps. The checks need `node` (for `node --test`) and `p
 ## Cleanup
 
 Setup starts no containers or servers. Nothing to remove.
+
+## Post-merge
+
+The archive run checks main after the PR merges. This repo ships no deployed service, so there is nothing to watch.
+
+- Deploy check: none
+- Sentry: none
 
 ## Notes
 
