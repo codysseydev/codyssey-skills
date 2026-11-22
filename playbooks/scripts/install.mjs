@@ -63,7 +63,7 @@ export function liveLocks(d) {
   if (!existsSync(locksDir(d))) return [];
   return readdirSync(locksDir(d))
     .filter((name) => {
-      const lock = inspectLock(d, name);
+      const lock = inspectLock(join(locksDir(d), name));
       return lock.kind !== 'gone' && !lockIsStale(lock, d.now());
     })
     .sort()
