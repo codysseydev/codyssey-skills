@@ -67,9 +67,9 @@ rulebook's `references/` folder, so the two folders must sit next to each other.
   clone. Local only: it never creates GitHub repositories or pushes. Needs a
   brain template and a stack pack (Laravel today).
 - `factory-onboard`: writes or updates a repository's `.factory/recipe.yml` (setup, checks,
-  teardown) from its CI config and docs, proves it from a clean clone with
-  `prove-recipe.py`, and opens a PR with the evidence. It also writes a starter
-  `.factory/playbook.md` (the project file the factory playbook reads) with
+  teardown) from its documented gates (workflow files, scripts, docs), proves it from a
+  clean clone with `prove-recipe.py`, and opens a PR with the evidence. It also writes a
+  starter `.factory/playbook.md` (the project file the factory playbook reads) with
   `write-playbook.py`, keeping an existing one and changing only drifted facts. Works on
   any repo.
 
