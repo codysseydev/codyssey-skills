@@ -99,6 +99,10 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   claim creates a lock dir in `~/.factory/locks/`, creates any missing factory labels in the
   repo, and labels the issue `factory-running`.
   `claim` does nothing unless the arm file `~/.factory/armed` exists.
+- `scripts/capture-ui.mjs`: detect, capture, compose and markdown for UI evidence on factory
+  plan comments and PRs. Reads a project's `.factory/ui-capture.json` and loads Playwright
+  from the project worktree, so it needs no install of its own. Its test
+  `scripts/capture-ui.test.mjs` runs in this repo's recipe.
 - `scripts/send-stage.mjs`: the fallback for reporting a stage to the factory dashboard
   when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
