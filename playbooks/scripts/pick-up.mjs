@@ -48,6 +48,7 @@ export const FACTORY_LABELS = [
   { name: 'plan-approved', color: '0e8a16', description: 'Factory: owner approved the plan; the build may start' },
   { name: 'needs-decision', color: 'd93f0b', description: 'Factory: blocked on a question for the owner' },
   { name: 'needs-pr-read', color: 'FBCA04', description: "Factory: the PR waits for the owner's diff read" },
+  { name: 'post-merge-check', color: '5319e7', description: 'Factory: a post-merge check found new Sentry issues; the archive run reads the answer' },
 ];
 
 export class UsageError extends Error {}
@@ -116,6 +117,11 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
   if (closed) {
     if (labels.includes('plan-approved')) return { eligible: true, action: 'archive' };
     return { eligible: false, reason: 'closed' };
+  }
+  // An open issue that the post-merge check reopened for an owner answer. The dashboard removed
+  // `needs-decision` (a skip label) once the owner answered, so the archive run reads the answer.
+  if (labels.includes('plan-approved') && labels.includes('post-merge-check')) {
+    return { eligible: true, action: 'archive' };
   }
   const { refs, invalid } = parseDependsOn(issue.body, repo);
   if (invalid.length) return { eligible: false, reason: `unparseable Depends on: ${invalid.join(' ')}` };
