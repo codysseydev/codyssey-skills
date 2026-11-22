@@ -24,14 +24,14 @@ The recipe has no setup steps. The checks need `node` (for `node --test`) and `p
 
 Setup starts no containers or servers. Nothing to remove.
 
+## Notes
+
+- `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
+- The factory runs the installed copies, not this repo. `~/.agents/playbooks/` and the skills in `~/.claude/skills/` are plain copies made by hand (README "Install"), and nothing syncs them. A merged change to `playbooks/` or `factory/` takes effect only after the owner copies it there from `main`. A run on this repo edits its worktree, never the installed copies.
+
 ## Post-merge
 
 The archive run checks main after the PR merges. This repo ships no deployed service, so there is nothing to watch.
 
 - Deploy check: none
 - Sentry: none
-
-## Notes
-
-- `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
-- The factory runs the installed copies, not this repo. `~/.agents/playbooks/` and the skills in `~/.claude/skills/` are plain copies made by hand (README "Install"), and nothing syncs them. A merged change to `playbooks/` or `factory/` takes effect only after the owner copies it there from `main`. A run on this repo edits its worktree, never the installed copies.
