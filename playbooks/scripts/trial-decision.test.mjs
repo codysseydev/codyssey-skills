@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decide, InputError, WHY_LIMIT } from './trial-decision.mjs';
+import { decide, InputError, parseRecipeChecks, NO_RECIPE_NOTE, WHY_LIMIT } from './trial-decision.mjs';
 
 const SCRIPT = fileURLToPath(new URL('./trial-decision.mjs', import.meta.url));
 const SHA = 'abc1234def5678abc1234def5678abc1234def56';
@@ -47,9 +47,41 @@ function handsOver(i, fragment) {
 }
 
 test('would merge when every check holds', () => {
-  const r = decide(input());
+  const r = decide(input(), ['g1', 'g2']);
   assert.equal(r.would_merge, true);
   assert.equal(r.why, 'Every check holds at abc1234: 6 gates pass, no trusted files changed, confidence high, 2 reviews complete.');
+});
+
+test('without a recipe the why carries a note and the verdict is unchanged', () => {
+  const r = decide(input());
+  assert.equal(r.would_merge, true);
+  assert.ok(r.why.endsWith(` ${NO_RECIPE_NOTE}`));
+  assert.deepEqual(r.reasons, []);
+  const h = decide(input({ adr_open: true }));
+  assert.ok(h.why.endsWith(`\n${NO_RECIPE_NOTE}`));
+  assert.equal(h.reasons.length, 1);
+});
+
+test('a recipe check missing from the evidence hands over and names the check', () => {
+  const r = decide(input(), ['g1', 'trial-decision-tests', 'other']);
+  assert.equal(r.would_merge, false);
+  assert.deepEqual(r.reasons, ['Recipe check trial-decision-tests is missing from the evidence.', 'Recipe check other is missing from the evidence.']);
+  assert.ok(!r.why.includes(NO_RECIPE_NOTE));
+});
+
+test('parseRecipeChecks reads only the checks list', () => {
+  const text = [
+    'version: 1', 'setup:', '  - name: install', '    run: npm ci', 'checks:', '  - name: unit',
+    '    run: npm test', '  - name: "lint"', '    run: npm run lint', 'teardown:', '  - name: stop', '    run: x', '',
+  ].join('\n');
+  assert.deepEqual(parseRecipeChecks(text), ['unit', 'lint']);
+  assert.deepEqual(parseRecipeChecks('version: 1\nsetup: []\nchecks: []\nteardown: []\n'), []);
+});
+
+test('parseRecipeChecks rejects a recipe with no checks list or a nameless check', () => {
+  assert.throws(() => parseRecipeChecks('version: 1\nsetup: []\n'), InputError);
+  assert.throws(() => parseRecipeChecks('checks:\n  - run: x\n'), InputError);
+  assert.throws(() => parseRecipeChecks('checks:\n  - name:\n    run: x\n'), InputError);
 });
 
 test('ui changed with nothing unexercised still merges', () => {
@@ -165,7 +197,7 @@ test('conflicting and unknown mergeability hand over', () => {
 });
 
 test('several misses give one line each', () => {
-  const r = decide(input({ adr_open: true, confidence: 'low', mergeable: 'conflicting' }));
+  const r = decide(input({ adr_open: true, confidence: 'low', mergeable: 'conflicting' }), []);
   assert.equal(r.why.split('\n').length, 4);
 });
 
@@ -225,4 +257,38 @@ test('CLI: malformed input exits 2 with a message and no verdict', () => {
   const missing = spawnSync('node', [SCRIPT, '/nonexistent/in.json'], { encoding: 'utf8' });
   assert.equal(missing.status, 2);
   assert.equal(missing.stdout, '');
+});
+
+test('CLI: --recipe hands over for a missing check', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'trial-'));
+  const recipe = join(dir, 'recipe.yml');
+  writeFileSync(recipe, 'version: 1\nsetup: []\nchecks:\n  - name: g1\n    run: x\n  - name: absent\n    run: y\nteardown: []\n');
+  const r = spawnSync('node', [SCRIPT, '--recipe', recipe, '-'], { input: JSON.stringify(input()), encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.would_merge, false);
+  assert.deepEqual(out.reasons, ['Recipe check absent is missing from the evidence.']);
+});
+
+test('CLI: --recipe with every check present can merge', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'trial-'));
+  const recipe = join(dir, 'recipe.yml');
+  writeFileSync(recipe, 'version: 1\nsetup: []\nchecks:\n  - name: g1\n    run: x\nteardown: []\n');
+  const r = spawnSync('node', [SCRIPT, '--recipe', recipe, '-'], { input: JSON.stringify(input()), encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.equal(JSON.parse(r.stdout).would_merge, true);
+});
+
+test('CLI: an unreadable or malformed recipe exits 2 with no verdict', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'trial-'));
+  const bad = join(dir, 'bad.yml');
+  writeFileSync(bad, 'version: 1\n');
+  for (const path of [bad, join(dir, 'missing.yml')]) {
+    const r = spawnSync('node', [SCRIPT, '--recipe', path, '-'], { input: JSON.stringify(input()), encoding: 'utf8' });
+    assert.equal(r.status, 2);
+    assert.equal(r.stdout, '');
+    assert.match(r.stderr, /^trial-decision: /);
+  }
+  const noValue = spawnSync('node', [SCRIPT, '-', '--recipe'], { input: '{}', encoding: 'utf8' });
+  assert.equal(noValue.status, 2);
 });

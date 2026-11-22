@@ -3,8 +3,11 @@
 // (stage 7 of playbooks/factory.md: the run merges only on the owner's word).
 //
 // Usage:
-//   node trial-decision.mjs <input.json>     read the input from a file
-//   node trial-decision.mjs -                read the input from stdin
+//   node trial-decision.mjs [--recipe <.factory/recipe.yml>] <input.json>   read the input from a file
+//   node trial-decision.mjs [--recipe <.factory/recipe.yml>] -              read the input from stdin
+//
+// With --recipe, every check named in the recipe's `checks` list must appear in evidence.gates,
+// or the verdict is hand over. Without it, `why` notes that there was no recipe to check against.
 //
 // Prints {"would_merge": bool, "why": "...", "reasons": [...]} on stdout and exits 0. Malformed or missing
 // input fields: one message on stderr, exit 2, no verdict (fail closed).
@@ -20,6 +23,31 @@ const MERGEABLE = ['mergeable', 'conflicting', 'unknown'];
 const MAX_LISTED_PATHS = 10;
 
 export class InputError extends Error {}
+
+export const NO_RECIPE_NOTE = 'No recipe to check the gate list against.';
+
+// Reads the check names from the restricted recipe YAML: top-level `version`, `setup`, `checks`
+// and `teardown`, each a list of `- name:` / `run:` steps. Only `checks` is read.
+// Throws InputError when there is no `checks` key or a check has no name.
+export function parseRecipeChecks(text) {
+  const lines = String(text).split(/\r?\n/);
+  const start = lines.findIndex((l) => /^checks:\s*(\[\s*\])?\s*(#.*)?$/.test(l));
+  need(start !== -1, 'recipe has no top-level `checks:` list');
+  if (/\[\s*\]/.test(lines[start])) return [];
+  const names = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break;
+    const item = /^\s*-\s+name:\s*(.*?)\s*$/.exec(line);
+    if (item) {
+      const name = item[1].replace(/^(['"])(.*)\1$/, '$2');
+      need(name !== '', 'recipe has a check with an empty name');
+      names.push(name);
+    } else if (/^\s*-\s/.test(line)) {
+      throw new InputError('recipe check must start with `- name:`');
+    }
+  }
+  return names;
+}
 
 function isObject(v) {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -96,7 +124,7 @@ function truncate(s) {
 }
 
 // Pure. Returns {would_merge, why, reasons} (reasons is empty when it would merge). Throws InputError on malformed input.
-export function decide(input) {
+export function decide(input, recipeChecks) {
   const v = validate(input);
   const short = v.head.slice(0, 7);
   const reasons = [];
@@ -107,6 +135,11 @@ export function decide(input) {
   if (!v.clean_tree) reasons.push('The evidence was not taken from a clean tree.');
 
   if (v.gates.length === 0) reasons.push('The evidence lists no gates.');
+  if (recipeChecks) {
+    for (const name of recipeChecks) {
+      if (!v.gates.some((g) => g.gate === name)) reasons.push(`Recipe check ${name} is missing from the evidence.`);
+    }
+  }
   for (const g of v.gates) {
     if (g.result === 'fail') reasons.push(`Gate ${g.gate} failed.`);
     else if (g.result === 'flaky') reasons.push(`Gate ${g.gate} was flaky.`);
@@ -139,16 +172,36 @@ export function decide(input) {
 
   if (reasons.length === 0) {
     const why = `Every check holds at ${short}: ${plural(v.gates.length, 'gate')} pass, no trusted files changed, confidence high, ${plural(v.reviews.length, 'review')} complete.`;
-    return { would_merge: true, why: truncate(why), reasons: [] };
+    return { would_merge: true, why: truncate(recipeChecks ? why : `${why} ${NO_RECIPE_NOTE}`), reasons: [] };
   }
-  return { would_merge: false, why: truncate(`Would hand over, because:\n${reasons.map((r) => `- ${r}`).join('\n')}`), reasons };
+  const lines = reasons.map((r) => `- ${r}`).join('\n');
+  return { would_merge: false, why: truncate(`Would hand over, because:\n${lines}${recipeChecks ? '' : `\n${NO_RECIPE_NOTE}`}`), reasons };
 }
 
 export function main(argv, readStdin = () => readFileSync(0, 'utf8')) {
-  if (argv.length !== 1) throw new InputError('usage: node trial-decision.mjs <input.json | ->');
+  const usage = 'usage: node trial-decision.mjs [--recipe <recipe.yml>] <input.json | ->';
+  let recipePath;
+  const rest = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--recipe') {
+      need(recipePath === undefined && i + 1 < argv.length, usage);
+      recipePath = argv[++i];
+    } else rest.push(argv[i]);
+  }
+  if (rest.length !== 1) throw new InputError(usage);
+  let recipeChecks;
+  if (recipePath !== undefined) {
+    let recipeText;
+    try {
+      recipeText = readFileSync(recipePath, 'utf8');
+    } catch (e) {
+      throw new InputError(`cannot read recipe: ${e.message}`);
+    }
+    recipeChecks = parseRecipeChecks(recipeText);
+  }
   let text;
   try {
-    text = argv[0] === '-' ? readStdin() : readFileSync(argv[0], 'utf8');
+    text = rest[0] === '-' ? readStdin() : readFileSync(rest[0], 'utf8');
   } catch (e) {
     throw new InputError(`cannot read input: ${e.message}`);
   }
@@ -158,7 +211,7 @@ export function main(argv, readStdin = () => readFileSync(0, 'utf8')) {
   } catch (e) {
     throw new InputError(`input is not valid JSON: ${e.message}`);
   }
-  return decide(input);
+  return decide(input, recipeChecks);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
