@@ -282,7 +282,7 @@ export function makeDeps(env = process.env) {
   };
 }
 
-const locksDir = (d) => join(d.stateDir, 'locks');
+export const locksDir = (d) => join(d.stateDir, 'locks');
 const expiredDir = (d) => join(d.stateDir, 'expired');
 const lockPath = (d, repo, issue) => join(locksDir(d), lockName(repo, issue));
 const iso = (d) => new Date(d.now()).toISOString();
@@ -297,7 +297,7 @@ function parseTaken(name) {
 
 // {kind: 'gone'} | {kind: 'unreadable', reason, mtimeMs} | {kind: 'readable', claim}.
 // `gone` is an entry that vanished after the listing or is not a folder.
-function inspectLock(dir) {
+export function inspectLock(dir) {
   let st;
   try {
     st = statSync(dir);
@@ -321,6 +321,13 @@ function inspectLock(dir) {
   }
   if (Number.isNaN(Date.parse(claim?.claimed_at))) return unreadable('claimed_at is not a date');
   return { kind: 'readable', claim };
+}
+
+// Stale = a readable claim older than 4 hours, or an unreadable lock folder untouched for 4 hours.
+export function lockIsStale(lock, nowMs) {
+  if (lock.kind === 'readable') return isStale(lock.claim.claimed_at, nowMs);
+  if (lock.kind === 'unreadable') return nowMs - lock.mtimeMs > STALE_MS;
+  return false;
 }
 
 // Moves a folder to expired/<lock>.<now>.<uuid> so only one claim handles it. The name carries the
@@ -430,17 +437,16 @@ async function handleStale(d, repos, dryRun) {
   for (const { path, name, takenAtMs } of found) {
     const lock = inspectLock(path);
     if (lock.kind === 'gone') continue;
+    // A folder in locks/ is stale by its claim or mtime; one left in expired/ by its take time.
     const retake = takenAtMs !== undefined;
-    if (retake && d.now() - takenAtMs <= STALE_MS) continue;
+    if (retake ? d.now() - takenAtMs <= STALE_MS : !lockIsStale(lock, d.now())) continue;
     let entry;
     let body;
     if (lock.kind === 'readable') {
       const { claim } = lock;
-      if (!retake && !isStale(claim.claimed_at, d.now())) continue;
       entry = { lock: name, repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at };
       body = `Factory run ${claim.run_id} claimed this issue at ${claim.claimed_at} and did not release it within 4 hours. Marked factory-failed. Remove the label to retry.`;
     } else {
-      if (!retake && d.now() - lock.mtimeMs <= STALE_MS) continue;
       const changedAt = new Date(lock.mtimeMs).toISOString();
       entry = { lock: name, ...matchLockName(name, repos), reason: lock.reason, changed_at: changedAt };
       body = `A factory run left an unreadable lock on this issue (${lock.reason}), last changed at ${changedAt}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
