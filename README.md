@@ -99,6 +99,10 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   claim creates a lock dir in `~/.factory/locks/`, creates any missing factory labels in the
   repo, and labels the issue `factory-running`.
   `claim` does nothing unless the arm file `~/.factory/armed` exists.
+- `scripts/capture-ui.mjs`: detect, capture, compose and markdown for UI evidence on factory
+  plan comments and PRs. Reads a project's `.factory/ui-capture.json` and loads Playwright
+  from the project worktree, so it needs no install of its own. Its test
+  `scripts/capture-ui.test.mjs` runs in this repo's recipe.
 - `scripts/send-stage.mjs`: the fallback for reporting a stage to the factory dashboard
   when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
@@ -110,10 +114,26 @@ to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
 side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
 files from `laravel-kanon`'s `references/` folder.
 
-For the playbook, copy the contents of `playbooks/` into `~/.agents/playbooks/` (or a
-repository's `.agents/playbooks/`). After each PStack upgrade, run PStack's
-`check-playbooks.mjs` from the repository root. It fails when an upgrade rewrote a step the
-playbook quotes.
+For the playbook and the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
+`event-model`, `factory-onboard`), run the install script from a checkout of this repo:
+
+```
+node playbooks/scripts/install.mjs --source .
+```
+
+The first install runs the script from the checkout. Later runs use the installed copy,
+`node ~/.agents/playbooks/scripts/install.mjs --source <checkout>`. It fetches the checkout's
+`origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
+from the commit, not the working tree, so a dirty checkout does not matter. It copies
+`playbooks/` into `~/.agents/playbooks/` and each factory skill into `~/.claude/skills/<name>/`,
+writes the commit sha to `~/.agents/playbooks/.installed-sha`, rewrites only files that
+changed, and never deletes a file. It refuses with exit 3 while a claim lock in
+`~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR` or `FACTORY_HOME` to
+install somewhere else. For a single repository, copy `playbooks/` into its `.agents/playbooks/`
+by hand instead.
+
+After each PStack upgrade, run PStack's `check-playbooks.mjs` from the repository root. It
+fails when an upgrade rewrote a step the playbook quotes.
 
 For unattended runs:
 

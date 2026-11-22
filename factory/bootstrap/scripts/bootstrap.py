@@ -92,7 +92,7 @@ def setup_event_model(brain, name):
 
 
 def write_playbook(repo):
-    """Write .factory/playbook.md with factory-onboard's script, check its six sections, commit it."""
+    """Write .factory/playbook.md with factory-onboard's script, check its seven sections, commit it."""
     script = sibling_or_installed("factory-onboard", os.path.join("scripts", "write-playbook.py"))
     p = run([sys.executable, script, repo], what="write-playbook.py")
     run([sys.executable, script, repo, "--check"], what="write-playbook.py --check")

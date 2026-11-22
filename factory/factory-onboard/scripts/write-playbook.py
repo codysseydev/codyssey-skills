@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write a starter .factory/playbook.md, or check that one has all six sections.
+"""Write a starter .factory/playbook.md, or check that one has all seven sections.
 
 Usage: python3 write-playbook.py REPO [--check] [--out FILE]
 
@@ -19,8 +19,16 @@ The script never commits.
 import argparse, importlib.util, json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SECTIONS = ("Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes")
+SECTIONS = ("Checks", "Review", "Scaffolding", "Local setup", "Cleanup", "Notes", "Post-merge")
 NONE_LINE = "None yet."
+# The archive run reads these two lines after a merge. `none` means the signal is not exercised.
+POST_MERGE_BODY = (
+    "After the PR merges, the archive run reads the deploy check on the merge commit and looks for new Sentry issues. "
+    "Name the check run and the Sentry project here, or leave `none`.\n"
+    "\n"
+    "- Deploy check: none\n"
+    "- Sentry: none"
+)
 GATE_WORDS = {"lint", "check", "analyse", "analyze", "typecheck", "test", "phpstan", "pint", "arkitect", "rector", "build"}
 NOT_GATE_WORDS = {"fix", "watch"}
 # Subcommands that are not project scripts, so they never count as an unresolved script.
@@ -135,6 +143,8 @@ def subdirs(repo, rel, pred):
 
 def section_body(name, repo, recipe):
     lines = []
+    if name == "Post-merge":
+        return POST_MERGE_BODY
     if name == "Checks":
         gates = find_gates(repo)
         if recipe is not None:
@@ -189,7 +199,7 @@ def add_missing(text):
         found = headings("".join(lines))
         if s in found:
             continue
-        block = [f"## {s}\n", "\n", NONE_LINE + "\n", "\n"]
+        block = [f"## {s}\n", "\n", (POST_MERGE_BODY if s == "Post-merge" else NONE_LINE) + "\n", "\n"]
         later = [found[t] for t in SECTIONS[SECTIONS.index(s) + 1:] if t in found]
         if later:
             at = min(later)
