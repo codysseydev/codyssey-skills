@@ -7,8 +7,9 @@
 //   node pick-up.mjs release --repo <owner/name> --issue <n> --run-id <id>
 //
 // State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file),
-// `locks/<owner>-<repo>-<issue>/claim.json`, and `expired/`, where the stale sweep moves a lock
-// before it handles it. One JSON object on stdout, errors on stderr.
+// `locks/<owner>-<repo>-<issue>/claim.json`, and `expired/<lock>.<takenAtMs>.<uuid>`, where the
+// stale sweep moves a lock before it handles it. The sweep also finishes folders a killed sweep
+// left there. One JSON object on stdout, errors on stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
 //
 // claim, release and the stale sweep also POST run events (claimed, released, expired) to the
@@ -282,13 +283,21 @@ export function makeDeps(env = process.env) {
 }
 
 const locksDir = (d) => join(d.stateDir, 'locks');
+const expiredDir = (d) => join(d.stateDir, 'expired');
 const lockPath = (d, repo, issue) => join(locksDir(d), lockName(repo, issue));
 const iso = (d) => new Date(d.now()).toISOString();
 
+// expired/ name `<lock>.<takenAtMs>.<uuid>` -> {lock, takenAtMs}. A #10 name `<lock>.<uuid>` has no
+// take time and counts as taken at 0. Any other name -> null. Lock names may contain dots.
+const TAKEN_RE = /^(.+?)(?:\.(\d+))?\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function parseTaken(name) {
+  const m = TAKEN_RE.exec(name);
+  return m && { lock: m[1], takenAtMs: Number(m[2] ?? 0) };
+}
+
 // {kind: 'gone'} | {kind: 'unreadable', reason, mtimeMs} | {kind: 'readable', claim}.
 // `gone` is an entry that vanished after the listing or is not a folder.
-function inspectLock(d, name) {
-  const dir = join(locksDir(d), name);
+function inspectLock(dir) {
   let st;
   try {
     st = statSync(dir);
@@ -314,18 +323,28 @@ function inspectLock(d, name) {
   return { kind: 'readable', claim };
 }
 
-// Moves the lock out of locks/ so only one claim handles it. Undefined when another claim took it first.
-function takeLock(d, name) {
-  const expiredDir = join(d.stateDir, 'expired');
-  mkdirSync(expiredDir, { recursive: true });
-  const taken = join(expiredDir, `${name}.${randomUUID()}`);
+// Moves a folder to expired/<lock>.<now>.<uuid> so only one claim handles it. The name carries the
+// take time, since a rename keeps the folder mtime. Undefined when another claim took it first.
+function takeLock(d, from, lock) {
+  mkdirSync(expiredDir(d), { recursive: true });
+  const taken = join(expiredDir(d), `${lock}.${d.now()}.${randomUUID()}`);
   try {
-    renameSync(join(locksDir(d), name), taken);
+    renameSync(from, taken);
   } catch (e) {
     if (e.code === 'ENOENT') return undefined;
     throw e;
   }
   return taken;
+}
+
+// A folder left in expired/ is still a stuck issue only while the issue keeps factory-running and no
+// claim holds it. Lock, labels, lock again: a claim makes its lock before it adds the label, and a
+// release removes the label before the lock.
+function stillStuck(d, { repo, issue }) {
+  const held = () => existsSync(lockPath(d, repo, issue));
+  if (held()) return false;
+  const found = d.gh.getIssue(repo, issue);
+  return Boolean(found) && labelNames(found).includes(RUNNING) && !held();
 }
 
 export function ensureLabels(gh, repo) {
@@ -396,48 +415,66 @@ export function cmdList(d, { repos }) {
   };
 }
 
-// Inspect, staleness check and take run back to back with no await or gh call between them,
-// so two claims sweeping at once handle each lock once.
+// Sweeps locks/ and the folders a killed sweep left in expired/. Inspect, staleness check and take
+// run back to back with no await or gh call between them, so two claims handle each folder once.
 async function handleStale(d, repos, dryRun) {
   const stale = [];
-  if (!existsSync(locksDir(d))) return stale;
-  for (const name of readdirSync(locksDir(d))) {
-    const lock = inspectLock(d, name);
+  const list = (dir) => (existsSync(dir) ? readdirSync(dir) : []);
+  const found = [
+    ...list(locksDir(d)).map((name) => ({ path: join(locksDir(d), name), name })),
+    ...list(expiredDir(d)).flatMap((n) => {
+      const t = parseTaken(n);
+      return t ? [{ path: join(expiredDir(d), n), name: t.lock, takenAtMs: t.takenAtMs }] : [];
+    }),
+  ];
+  for (const { path, name, takenAtMs } of found) {
+    const lock = inspectLock(path);
     if (lock.kind === 'gone') continue;
+    const retake = takenAtMs !== undefined;
+    if (retake && d.now() - takenAtMs <= STALE_MS) continue;
     let entry;
     let body;
     if (lock.kind === 'readable') {
       const { claim } = lock;
-      if (!isStale(claim.claimed_at, d.now())) continue;
+      if (!retake && !isStale(claim.claimed_at, d.now())) continue;
       entry = { lock: name, repo: claim.repo, issue: claim.issue, run_id: claim.run_id, claimed_at: claim.claimed_at };
       body = `Factory run ${claim.run_id} claimed this issue at ${claim.claimed_at} and did not release it within 4 hours. Marked factory-failed. Remove the label to retry.`;
     } else {
-      if (d.now() - lock.mtimeMs <= STALE_MS) continue;
+      if (!retake && d.now() - lock.mtimeMs <= STALE_MS) continue;
       const changedAt = new Date(lock.mtimeMs).toISOString();
       entry = { lock: name, ...matchLockName(name, repos), reason: lock.reason, changed_at: changedAt };
       body = `A factory run left an unreadable lock on this issue (${lock.reason}), last changed at ${changedAt}, more than 4 hours ago. Marked factory-failed. Remove the label to retry.`;
     }
-    if (dryRun) {
-      stale.push(entry);
-      continue;
+    let taken;
+    if (!dryRun) {
+      taken = takeLock(d, path, name);
+      if (!taken) continue;
     }
-    const taken = takeLock(d, name);
-    if (!taken) continue;
-    stale.push(entry);
-    if (entry.repo) {
-      try {
-        ignoreFailure(() => d.gh.removeLabel(entry.repo, entry.issue, RUNNING));
+    try {
+      if (retake && entry.repo && !stillStuck(d, entry)) {
+        if (taken) rmSync(taken, { recursive: true, force: true });
+        continue;
+      }
+      stale.push(entry);
+      if (dryRun) continue;
+      if (entry.repo) {
+        // factory-running goes last: stillStuck reads it, so a retry after any partial run finishes the issue.
         ensureLabels(d.gh, entry.repo);
         d.gh.addLabel(entry.repo, entry.issue, FAILED);
         d.gh.comment(entry.repo, entry.issue, body);
-      } catch (err) {
+        ignoreFailure(() => d.gh.removeLabel(entry.repo, entry.issue, RUNNING));
+        const after = d.gh.getIssue(entry.repo, entry.issue);
+        if (after && labelNames(after).includes(RUNNING)) throw new Error(`${RUNNING} is still on ${entry.repo}#${entry.issue}`);
+      }
+    } catch (err) {
+      if (taken) {
         try {
-          renameSync(taken, join(locksDir(d), name)); // the next tick retries, as before the take
+          renameSync(taken, path); // the next tick retries, as before the take
         } catch {
           /* another claim relocked the issue; keep its lock */
         }
-        throw err;
       }
+      throw err;
     }
     rmSync(taken, { recursive: true, force: true });
     if (entry.run_id) {
