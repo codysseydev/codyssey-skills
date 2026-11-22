@@ -34,6 +34,7 @@ export const SKIP_LABELS = [
   'needs-pr-read',
 ];
 export const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+const DONE_DEP_STATES = new Set(['CLOSED', 'MERGED']);
 export const STALE_MS = 4 * 60 * 60 * 1000;
 export const DEFAULT_DASHBOARD_URL = 'https://factory.codyssey.dev';
 export const KEYCHAIN_SERVICE = 'codyssey-factory-ingest';
@@ -102,7 +103,7 @@ export function labelNames(issue) {
 // Returns {eligible: true, action} or {eligible: false, reason}.
 // issue: {number, title, state: 'OPEN'|'CLOSED', labels, body, author: {login}, authorAssociation}
 // A missing authorAssociation fails closed.
-// hasLock: boolean. depState: (ref) => 'OPEN' | 'CLOSED' | undefined.
+// hasLock: boolean. depState: (ref) => 'OPEN' | 'CLOSED' | 'MERGED' | 'CLOSED_UNMERGED' | undefined.
 export function evaluateIssue(issue, repo, { hasLock, depState }) {
   const labels = labelNames(issue);
   if (!labels.includes('factory')) return { eligible: false, reason: 'missing label factory' };
@@ -129,8 +130,10 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
   for (const ref of refs) {
     const s = depState(ref);
     const name = `${ref.repo}#${ref.number}`;
-    if (s === undefined) return { eligible: false, reason: `dependency ${name} unreadable` };
-    if (String(s).toUpperCase() !== 'CLOSED') return { eligible: false, reason: `open dependency ${name}` };
+    if (DONE_DEP_STATES.has(s)) continue;
+    if (s === 'OPEN') return { eligible: false, reason: `open dependency ${name}` };
+    if (s === 'CLOSED_UNMERGED') return { eligible: false, reason: `dependency ${name} is a PR closed without merging` };
+    return { eligible: false, reason: `dependency ${name} unreadable` };
   }
   return { eligible: true, action: labels.includes('plan-approved') ? 'implement' : 'plan' };
 }
@@ -161,7 +164,13 @@ export function makeGh(run = defaultRun) {
       const i = JSON.parse(run(['api', `repos/${repo}/issues/${n}`]));
       return i.pull_request ? null : normalize(i);
     },
-    issueState: (repo, n) => JSON.parse(run(['issue', 'view', String(n), '--repo', repo, '--json', 'state'])).state,
+    issueState(repo, n) {
+      const i = JSON.parse(run(['api', `repos/${repo}/issues/${n}`]));
+      if (i.state === 'open') return 'OPEN';
+      if (i.state !== 'closed') throw new Error(`unknown state ${i.state} for ${repo}#${n}`);
+      if (!i.pull_request) return 'CLOSED';
+      return i.pull_request.merged_at ? 'MERGED' : 'CLOSED_UNMERGED';
+    },
     listLabels: (repo) => JSON.parse(run(['label', 'list', '--repo', repo, '--limit', '1000', '--json', 'name']) || '[]').map((l) => l.name),
     createLabel(repo, { name, color, description }) {
       try {
