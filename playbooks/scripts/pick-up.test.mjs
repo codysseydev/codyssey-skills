@@ -152,11 +152,33 @@ test('evaluateIssue: lock, open dependency, plan, implement, archive', () => {
   assert.equal(evaluateIssue(issue(1, ['plan-approved']), R, ok).eligible, false);
 });
 
+test('evaluateIssue: each dependency state', () => {
+  const dep = issue(1, ['factory'], { body: 'Depends on: #2' });
+  const run = (s) => evaluateIssue(dep, R, { hasLock: false, depState: () => s });
+  assert.deepEqual(run('OPEN'), { eligible: false, reason: 'open dependency o/r#2' });
+  assert.deepEqual(run('CLOSED'), { eligible: true, action: 'plan' });
+  assert.deepEqual(run('MERGED'), { eligible: true, action: 'plan' });
+  assert.deepEqual(run('CLOSED_UNMERGED'), { eligible: false, reason: 'dependency o/r#2 is a PR closed without merging' });
+  assert.deepEqual(run(undefined), { eligible: false, reason: 'dependency o/r#2 unreadable' });
+});
+
 test('list reports candidates and skipped', () => {
   const { d } = fake({ issues: { [R]: [issue(5), issue(6, ['factory', 'needs-decision'])] } });
   const out = cmdList(d, { repos: [R] });
   assert.deepEqual(out.candidates, [{ repo: R, issue: 5, title: 't5', action: 'plan' }]);
   assert.equal(out.skipped[0].issue, 6);
+});
+
+test('list: a merged PR dependency clears, a PR closed without merging blocks', () => {
+  const { d } = fake({ issues: { [R]: [
+    issue(1, ['factory'], { body: 'Depends on: #2' }),
+    issue(2, [], { state: 'MERGED' }),
+    issue(3, ['factory'], { body: 'Depends on: #4' }),
+    issue(4, [], { state: 'CLOSED_UNMERGED' }),
+  ] } });
+  const out = cmdList(d, { repos: [R] });
+  assert.deepEqual(out.candidates, [{ repo: R, issue: 1, title: 't1', action: 'plan' }]);
+  assert.deepEqual(out.skipped, [{ repo: R, issue: 3, reason: 'dependency o/r#4 is a PR closed without merging' }]);
 });
 
 test('claim: not armed returns not_armed and makes no gh call', async () => {
@@ -440,6 +462,26 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
   assert.equal(out[0].state, 'OPEN');
   assert.equal(out[0].authorAssociation, 'OWNER');
   assert.ok(seen[0].includes('--paginate') && seen[0].includes('--slurp'));
+});
+
+test('makeGh issueState maps the REST issue to a dependency state', () => {
+  const pr = (merged_at) => ({ pull_request: { merged_at } });
+  const cases = [
+    [{ state: 'open', state_reason: null }, 'OPEN'],
+    [{ state: 'closed', state_reason: 'completed' }, 'CLOSED'],
+    [{ state: 'closed', state_reason: 'not_planned' }, 'CLOSED'],
+    [{ state: 'open', state_reason: null, ...pr(null) }, 'OPEN'],
+    [{ state: 'closed', state_reason: null, ...pr('2026-11-17T01:22:26Z') }, 'MERGED'],
+    [{ state: 'closed', state_reason: null, ...pr(null) }, 'CLOSED_UNMERGED'],
+  ];
+  for (const [payload, want] of cases) {
+    const seen = [];
+    const gh = makeGh((args) => (seen.push(args), JSON.stringify({ number: 2, ...payload })));
+    const got = gh.issueState(R, 2);
+    assert.deepEqual(seen, [['api', 'repos/o/r/issues/2']]);
+    assert.equal(got, want);
+  }
+  assert.throws(() => makeGh(() => JSON.stringify({ number: 2, state: 'unknown' })).issueState(R, 2), /unknown/);
 });
 
 // ---------- factory labels ----------
