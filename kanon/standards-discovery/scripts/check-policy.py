@@ -214,8 +214,9 @@ def client_record(registry, repo_name, repo):
             break
     if mode not in MODES:
         return mode, None, [{"field": "mode", "reason": f"not an allowed value: {mode}"}]
-    if repo_name in registry:
-        return mode, registry[repo_name], []
+    by_name = {name.casefold(): path for name, path in registry.items()}
+    if repo_name.casefold() in by_name:
+        return mode, os.path.expanduser(by_name[repo_name.casefold()]), []
     if mode == "project-first":
         return mode, None, [{"field": "record", "reason": "missing, no registry entry"}]
     return mode, None, []
@@ -285,9 +286,14 @@ def main(argv=None):
         parser.error("give exactly one of --record and --registry")
     if args.registry and not args.repo_name:
         parser.error("--registry needs --repo-name")
+    if args.record:
+        args.record = os.path.expanduser(args.record)
+    if args.registry:
+        args.registry = os.path.expanduser(args.registry)
 
     result = {"result": "stop", "step": args.step, "record": args.record, "blocking": [], "warnings": []}
     if args.registry:
+        result["mode"] = None
         registry = {}
         try:
             if os.path.exists(args.registry):

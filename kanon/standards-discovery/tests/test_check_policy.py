@@ -203,6 +203,17 @@ class ClientDetection(TempDirs):
         repo = self.origin_repo()
         self.assertEqual(cp.client_record({"o/r": "/x.md"}, "o/r", repo), ("canon-first", "/x.md", []))
 
+    def test_registry_names_match_without_regard_to_case(self):
+        repo = self.origin_repo()
+        self.assertEqual(cp.client_record({"Acme/Shop": "/x.md"}, "acme/shop", repo), ("canon-first", "/x.md", []))
+        self.assertEqual(cp.client_record({"acme/shop": "/x.md"}, "Acme/Shop", repo), ("canon-first", "/x.md", []))
+
+    def test_a_record_path_in_the_registry_expands_the_home_folder(self):
+        repo = self.origin_repo()
+        path = cp.client_record({"o/r": "~/x.md"}, "o/r", repo)[1]
+        self.assertEqual(path, os.path.expanduser("~/x.md"))
+        self.assertFalse(path.startswith("~"))
+
     def test_project_first_without_an_entry_stops_on_record(self):
         repo = self.origin_repo("mode: project-first\n")
         mode, rec, blocking = cp.client_record({"other/repo": "/x.md"}, "o/r", repo)
@@ -368,8 +379,8 @@ class Scan(TempDirs):
 
 
 class Cli(TempDirs):
-    def run_cli(self, *args):
-        proc = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env=GIT_ENV)
+    def run_cli(self, *args, env=None):
+        proc = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env={**GIT_ENV, **(env or {})})
         try:
             out = json.loads(proc.stdout)
         except ValueError:
@@ -429,6 +440,16 @@ class Cli(TempDirs):
         self.assertEqual((code, fields(out["blocking"])), (1, ["mode"]))
         self.assertTrue(out["blocking"][0]["reason"].startswith("unreadable"))
 
+    def test_tilde_paths_expand_to_the_home_folder(self):
+        home = self.tmp()
+        shutil.copy(os.path.join(RECORDS, "allowing.md"), os.path.join(home, "record.md"))
+        put(home, "ai-policy.json", json.dumps({"o/r": "~/record.md"}))
+        common = ["--repo", self.origin_repo(), "--model", "claude-opus-5-5"]
+        for args in (("--record", "~/record.md"), ("--registry", "~/ai-policy.json", "--repo-name", "o/r")):
+            with self.subTest(args[0]):
+                code, out, _ = self.run_cli(*args, *common, env={"HOME": home})
+                self.assertEqual((code, out["result"], out["blocking"]), (0, "continue", []))
+
     def test_usage_errors_exit_2(self):
         common = ["--repo", self.tmp(), "--model", "m"]
         record_path = os.path.join(RECORDS, "allowing.md")
@@ -444,6 +465,8 @@ class Cli(TempDirs):
             "--repo", self.origin_repo(), "--model", "m",
         )
         self.assertEqual((code, fields(out["blocking"])), (1, ["record"]))
+        self.assertIn("mode", out)
+        self.assertIsNone(out["mode"])
 
 
 if __name__ == "__main__":
