@@ -6,10 +6,13 @@
 //   node pick-up.mjs claim   --repo <owner/name> [--repo ...] --run-id <id> [--only <owner/name#n>] [--dry-run]
 //   node pick-up.mjs release --repo <owner/name> --issue <n> --run-id <id>
 //
+// claim returns the issue's `attempt`: 1 plus the number of times factory-failed was added to it.
+//
 // State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file),
-// `locks/<owner>-<repo>-<issue>/claim.json`, and `expired/<lock>.<takenAtMs>.<uuid>`, where the
-// stale sweep moves a lock before it handles it. The sweep also finishes folders a killed sweep
-// left there. One JSON object on stdout, errors on stderr.
+// `locks/<owner>-<repo>-<issue>/claim.json` (it holds the attempt), and
+// `expired/<lock>.<takenAtMs>.<uuid>`, where the stale sweep moves a lock before it handles it.
+// The sweep also finishes folders a killed sweep left there. One JSON object on stdout, errors on
+// stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
 //
 // claim, release and the stale sweep also POST run events (claimed, released, expired) to the
@@ -138,6 +141,11 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
   return { eligible: true, action: labels.includes('plan-approved') ? 'implement' : 'plan' };
 }
 
+// Issue timeline events -> attempt number. Removals of factory-failed do not count.
+export function attemptFromTimeline(events) {
+  return 1 + events.filter((e) => e.event === 'labeled' && e.label?.name === FAILED).length;
+}
+
 // ---------- boundary (gh + filesystem + clock) ----------
 
 export function makeGh(run = defaultRun) {
@@ -160,6 +168,12 @@ export function makeGh(run = defaultRun) {
   return {
     listOpen: (repo) => list(repo, 'factory', 'open'),
     listClosedApproved: (repo) => list(repo, 'factory,plan-approved', 'closed'),
+    // Empty output throws: an empty timeline would read as attempt 1.
+    timeline(repo, n) {
+      const pages = JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/timeline?per_page=100`]));
+      if (!Array.isArray(pages)) throw new Error(`timeline of ${repo}#${n} is not an array`);
+      return pages.flat();
+    },
     getIssue(repo, n) {
       const i = JSON.parse(run(['api', `repos/${repo}/issues/${n}`]));
       return i.pull_request ? null : normalize(i);
@@ -224,11 +238,11 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const shortError = (e) => {
   if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'timeout';
-  return String(e?.cause?.code ?? e?.message ?? e).replace(/\s+/g, ' ').slice(0, 80);
+  return String(e?.cause?.code ?? (e?.stderr || e?.message) ?? e).replace(/\s+/g, ' ').trim().slice(0, 80);
 };
 
 // post(event) resolves to the `dashboard` field value and writes one stderr line on anything but "sent".
-// event: {event, run_id, repo, issue_number, action?, occurred_at}.
+// event: {event, run_id, repo, issue_number, action?, attempt?, occurred_at}.
 export function makeDashboard({
   env = process.env, fetchImpl = globalThis.fetch, sleep = defaultSleep, runSecurity = defaultSecurity,
   timeoutMs = POST_TIMEOUT_MS, retryWaitsMs = RETRY_WAITS_MS,
@@ -523,9 +537,22 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
   const eligible = evaluated.filter((e) => e.result.eligible);
   if (only && !eligible.length) return { status: 'none', reason: evaluated[0].result.reason, stale };
 
+  // An issue whose timeline cannot be read is skipped before its lock, so it stays eligible for
+  // the next tick and does not hold back the issues after it.
+  const skipped = [];
+  const withSkipped = (out) => (skipped.length ? { ...out, skipped } : out);
   mkdirSync(locksDir(d), { recursive: true });
   for (const e of eligible) {
     const dir = lockPath(d, e.repo, e.issue.number);
+    let attempt;
+    try {
+      attempt = attemptFromTimeline(d.gh.timeline(e.repo, e.issue.number));
+    } catch (err) {
+      const reason = `attempt unknown: ${shortError(err)}`;
+      if (only) return { status: 'none', reason, stale };
+      skipped.push({ repo: e.repo, issue: e.issue.number, reason });
+      continue;
+    }
     try {
       mkdirSync(dir); // atomic claim: fails with EEXIST when another run holds it
     } catch (err) {
@@ -537,7 +564,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
     try {
       writeFileSync(
         join(dir, 'claim.json'),
-        JSON.stringify({ repo: e.repo, issue: e.issue.number, action, run_id: runId, claimed_at: claimedAt }, null, 2)
+        JSON.stringify({ repo: e.repo, issue: e.issue.number, action, attempt, run_id: runId, claimed_at: claimedAt }, null, 2)
       );
       ensureLabels(d.gh, e.repo);
       d.gh.addLabel(e.repo, e.issue.number, RUNNING);
@@ -553,21 +580,22 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
     const dashboard = dryRun
       ? 'skipped: dry run'
       : await sendEvent(d, {
-          run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, occurred_at: claimedAt,
+          run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, attempt, occurred_at: claimedAt,
         });
-    return {
+    return withSkipped({
       status: 'claimed',
       repo: e.repo,
       issue: e.issue.number,
       title: e.issue.title,
       action,
+      attempt,
       run_id: runId,
       dry_run: dryRun,
       dashboard,
       stale,
-    };
+    });
   }
-  return { status: 'none', stale };
+  return withSkipped({ status: 'none', stale });
 }
 
 export async function cmdRelease(d, { repo, issue, runId }) {
