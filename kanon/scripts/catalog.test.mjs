@@ -444,6 +444,20 @@ test('a line break in a rendered text field fails check', (t) => {
   }
 });
 
+// The line pattern must stay linear: a long line that ends in a line break used to cost quadratic time.
+test('a long text field with a line break is rejected quickly', async () => {
+  const { validate } = await import('./catalog.mjs');
+  const schema = JSON.parse(readFileSync(path.join(repoRoot, 'kanon', 'catalog', 'schema.json'), 'utf8'));
+  const line = { $ref: '#/$defs/line', $defs: schema.$defs };
+  const started = performance.now();
+  const errors = validate(line, 'a'.repeat(40000) + '\n');
+  const took = performance.now() - started;
+  assert.equal(errors.length, 1);
+  assert.ok(took < 500, `took ${took.toFixed(0)} ms`);
+  assert.deepEqual(validate(line, '  ok  '), []);
+  assert.equal(validate(line, '   ').length, 1);
+});
+
 test('the validator throws on a schema keyword it does not implement', async () => {
   const { validate } = await import('./catalog.mjs');
   assert.throws(() => validate({ type: 'string', minLength: 1 }, 'x'), /minLength/);

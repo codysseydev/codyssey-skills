@@ -9,7 +9,7 @@
     "sections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/section" } }
   },
   "$defs": {
-    "line": { "type": "string", "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*$" },
+    "line": { "type": "string", "pattern": "^[^\\S\\n\\r]*\\S[^\\n\\r]*$" },
     "section": {
       "type": "object",
       "required": ["heading", "intro", "list", "entries"],
