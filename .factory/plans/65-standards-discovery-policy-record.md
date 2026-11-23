@@ -164,9 +164,9 @@ Runs only after a `continue`. It never lists a folder except the three below, an
 
 ### `kanon/standards-discovery/scripts/check-policy.py` (new)
 
-- Stdlib only (`argparse`, `json`, `os`, `re`, `sys`). The repo has no PyYAML (`grep -rn "import yaml" .` finds nothing, and `python3 -c "import yaml"` fails here). `factory/factory-onboard/scripts/prove-recipe.py:46` parses `recipe.yml` by hand the same way.
-- Pieces: `parse_frontmatter(text)`, `FIELDS`, `STEPS`, `check(raw, step, ctx) -> blocking`, `client_record(registry, repo_name, kanon_yml_text) -> (record path | not-client | blocking)`, `policy_files(repo)`, `scan(repo)`, `main(argv)`.
-- The boundary is `main`: it reads files and prints. `check` and the field rules take parsed values, so tests call them without a filesystem.
+- Stdlib only (`argparse`, `json`, `os`, `re`, `subprocess`, `sys`). `subprocess` runs the two git reads of the mode. The repo has no PyYAML (`grep -rn "import yaml" .` finds nothing, and `python3 -c "import yaml"` fails here). `factory/factory-onboard/scripts/prove-recipe.py:46` parses `recipe.yml` by hand the same way.
+- Pieces: `parse_frontmatter(text)`, `FIELDS`, `STEPS`, `check(raw, step, ctx) -> blocking`, `kanon_yml_at(repo, ref)` (the git read, text or absent, raises on a git error), `client_record(registry, repo_name, repo) -> (mode, record path | not-client | blocking)`, `policy_files(repo)`, `scan(repo)`, `main(argv)`.
+- The boundary is `main` with `kanon_yml_at`: they read files, run git and print. `check` and the field rules take parsed values, so tests call them without a filesystem.
 
 ### `kanon/standards-discovery/tests/test_check_policy.py` and `tests/fixtures/records/` (new)
 
