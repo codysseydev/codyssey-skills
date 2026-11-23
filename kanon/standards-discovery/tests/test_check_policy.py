@@ -214,6 +214,16 @@ class ClientDetection(TempDirs):
         self.assertEqual(path, os.path.expanduser("~/x.md"))
         self.assertFalse(path.startswith("~"))
 
+    def test_registry_keys_that_differ_only_in_case_stop_on_record(self):
+        repo = self.origin_repo()
+        registry = {"acme/shop": "/a.md", "Acme/Shop": "/b.md", "other/repo": "/c.md"}
+        for name in ("acme/shop", "other/repo"):
+            with self.subTest(name):
+                mode, rec, blocking = cp.client_record(registry, name, repo)
+                self.assertEqual((rec, fields(blocking)), (None, ["record"]))
+                self.assertIn("acme/shop", blocking[0]["reason"])
+                self.assertIn("Acme/Shop", blocking[0]["reason"])
+
     def test_project_first_without_an_entry_stops_on_record(self):
         repo = self.origin_repo("mode: project-first\n")
         mode, rec, blocking = cp.client_record({"other/repo": "/x.md"}, "o/r", repo)

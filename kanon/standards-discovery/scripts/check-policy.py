@@ -213,8 +213,19 @@ def kanon_yml_at(repo, ref=BASE_REF):
         raise RuntimeError(f".ai/kanon.yml is not UTF-8: {error}")
 
 
+def _case_collisions(registry):
+    """The registry keys that casefold to the same name, as 'a, b; c, d'. Empty when there are none."""
+    groups = {}
+    for name in registry:
+        groups.setdefault(name.casefold(), []).append(name)
+    return "; ".join(", ".join(names) for names in groups.values() if len(names) > 1)
+
+
 def client_record(registry, repo_name, repo):
     """(mode, record path, blocking). A record path of None with no blocking means not a client repo."""
+    colliding = _case_collisions(registry)
+    if colliding:
+        return None, None, [{"field": "record", "reason": f"registry keys differ only in case: {colliding}"}]
     try:
         require_top_level(repo)
         text = kanon_yml_at(repo)
