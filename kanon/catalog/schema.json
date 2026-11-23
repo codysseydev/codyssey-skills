@@ -4,18 +4,19 @@
   "additionalProperties": false,
   "properties": {
     "family": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-    "title": { "type": "string", "pattern": "\\S" },
-    "intro": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
+    "title": { "$ref": "#/$defs/line" },
+    "intro": { "type": "array", "items": { "$ref": "#/$defs/line" } },
     "sections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/section" } }
   },
   "$defs": {
+    "line": { "type": "string", "pattern": "^[^\\n\\r]*\\S[^\\n\\r]*$" },
     "section": {
       "type": "object",
       "required": ["heading", "intro", "list", "entries"],
       "additionalProperties": false,
       "properties": {
-        "heading": { "type": "string", "pattern": "\\S" },
-        "intro": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
+        "heading": { "$ref": "#/$defs/line" },
+        "intro": { "type": "array", "items": { "$ref": "#/$defs/line" } },
         "list": { "enum": ["bullet", "numbered"] },
         "entries": {
           "type": "array",
@@ -28,7 +29,7 @@
       "required": ["note"],
       "additionalProperties": false,
       "properties": {
-        "note": { "type": "string", "pattern": "\\S" }
+        "note": { "$ref": "#/$defs/line" }
       }
     },
     "entry": {
@@ -42,8 +43,8 @@
           "enum": ["language-agnostic", "php-core", "laravel", "symfony", "filament", "nextjs"]
         },
         "keyword": { "enum": ["MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY"] },
-        "rule": { "type": "string", "pattern": "\\S" },
-        "items": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
+        "rule": { "$ref": "#/$defs/line" },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/line" } },
         "why": { "type": "string", "pattern": "\\S" },
         "applies_to": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
         "allowed_in": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
