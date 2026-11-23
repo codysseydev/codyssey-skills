@@ -63,5 +63,5 @@ Rules for the registry:
 
 - Keys are `owner/name`, matched without regard to case. Two keys that differ only in case stop the check on `record`.
 - A record path is absolute, and `~` at its start expands to the home folder. A relative path stops the check on `record`.
-- A registry file that does not exist counts as empty. One that exists but cannot be read (bad JSON, a dangling symlink, a folder that cannot be entered) stops the check on `record`.
+- A registry path with no file at it counts as empty, and so does one under a folder that does not exist. A registry file that is there but cannot be read stops the check on `record`: bad JSON, an exact duplicate key, a dangling symlink at the file's own path, a folder in its place, or a folder on the path that cannot be entered.
 - The mode is read from `.ai/kanon.yml` on origin/main. Two `mode:` lines, or a symlinked `.ai` or `.ai/kanon.yml`, stop the check on `mode`. So does a `--repo` that is not the top level of its git repo.
