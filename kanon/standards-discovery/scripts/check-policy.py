@@ -24,7 +24,7 @@ import sys
 
 STEPS = {"read-code": ["read-code"], "factory-run": ["read-code", "factory-run"]}
 MODES = ("canon-first", "project-first")
-BASE_REF = "origin/main"
+BASE_REF = "refs/remotes/origin/main"
 
 
 # ---------- the record ----------
@@ -175,22 +175,29 @@ def check(raw, step, ctx):
 
 def _git(repo, *args):
     try:
-        return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+        return subprocess.run(["git", "-C", repo, *args], capture_output=True)
     except OSError as error:
         raise RuntimeError(str(error))
 
 
+def _git_error(proc, name):
+    return proc.stderr.decode("utf-8", "replace").strip() or f"git {name} exited {proc.returncode}"
+
+
 def kanon_yml_at(repo, ref=BASE_REF):
-    """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError on a git error."""
+    """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError when it cannot be read."""
     listed = _git(repo, "ls-tree", ref, "--", ".ai/kanon.yml")
     if listed.returncode != 0:
-        raise RuntimeError(listed.stderr.strip() or f"git ls-tree exited {listed.returncode}")
+        raise RuntimeError(_git_error(listed, "ls-tree"))
     if not listed.stdout.strip():
         return None
     shown = _git(repo, "show", f"{ref}:.ai/kanon.yml")
     if shown.returncode != 0:
-        raise RuntimeError(shown.stderr.strip() or f"git show exited {shown.returncode}")
-    return shown.stdout
+        raise RuntimeError(_git_error(shown, "show"))
+    try:
+        return shown.stdout.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise RuntimeError(f".ai/kanon.yml is not UTF-8: {error}")
 
 
 def client_record(registry, repo_name, repo):
@@ -201,7 +208,7 @@ def client_record(registry, repo_name, repo):
         return None, None, [{"field": "mode", "reason": f"unreadable: {error}"}]
     mode = "canon-first"
     for line in (text or "").splitlines():
-        found = re.match(r"^mode:[ \t]*(.*?)[ \t]*(?:#.*)?$", line)
+        found = re.match(r"^[\"']?mode[\"']?[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$", line)
         if found:
             mode = _unquote(found.group(1))
             break

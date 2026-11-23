@@ -63,8 +63,9 @@ def git(cwd, *args):
 def put(root, rel, content=""):
     path = os.path.join(root, rel)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(content)
+    data = content if isinstance(content, bytes) else content.encode("utf-8")
+    with open(path, "wb") as handle:
+        handle.write(data)
 
 
 def record(name):
@@ -221,6 +222,33 @@ class ClientDetection(TempDirs):
     def test_file_without_a_mode_key_is_canon_first(self):
         repo = self.origin_repo("rules: []\n")
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
+
+    def test_a_byte_order_mark_does_not_hide_the_mode(self):
+        repo = self.origin_repo("\ufeffmode: project-first\n")
+        self.assertEqual(cp.client_record({}, "o/r", repo)[0:2], ("project-first", None))
+
+    def test_yaml_spellings_of_the_mode_key(self):
+        for line in ("mode : project-first", '"mode": project-first', "'mode': project-first"):
+            with self.subTest(line):
+                repo = self.origin_repo(line + "\n")
+                mode, rec, blocking = cp.client_record({}, "o/r", repo)
+                self.assertEqual((mode, rec), ("project-first", None))
+                self.assertEqual(fields(blocking), ["record"])
+
+    def test_a_nested_mode_key_is_not_the_mode(self):
+        repo = self.origin_repo("rules:\n  mode: project-first\n")
+        self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
+
+    def test_a_tag_named_origin_main_does_not_shadow_the_remote_ref(self):
+        repo = self.origin_repo()
+        git(repo, "tag", "origin/main")
+        put(repo, ".ai/kanon.yml", "mode: project-first\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "overlay")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        mode, rec, blocking = cp.client_record({}, "o/r", repo)
+        self.assertEqual((mode, rec), ("project-first", None))
+        self.assertEqual(fields(blocking), ["record"])
 
     def test_a_worktree_without_the_file_still_reads_origin_main(self):
         repo = self.tmp()
@@ -389,6 +417,17 @@ class Cli(TempDirs):
                 "--registry", registry, "--repo-name", "o/r", "--repo", self.tmp(), "--model", "m"
             )
             self.assertEqual((code, out["result"], fields(out["blocking"])), (1, "stop", ["mode"]))
+
+    def test_a_kanon_yml_that_is_not_utf8_stops_on_mode(self):
+        repo = self.origin_repo(b"mode: \xff\xfe\n")
+        registry_dir = self.tmp()
+        put(registry_dir, "ai-policy.json", "{}")
+        code, out, _ = self.run_cli(
+            "--registry", os.path.join(registry_dir, "ai-policy.json"), "--repo-name", "o/r",
+            "--repo", repo, "--model", "m",
+        )
+        self.assertEqual((code, fields(out["blocking"])), (1, ["mode"]))
+        self.assertTrue(out["blocking"][0]["reason"].startswith("unreadable"))
 
     def test_usage_errors_exit_2(self):
         common = ["--repo", self.tmp(), "--model", "m"]
