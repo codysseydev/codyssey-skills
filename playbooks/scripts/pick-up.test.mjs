@@ -22,7 +22,7 @@ function issue(number, labels = ['factory'], extra = {}) {
   };
 }
 
-function fake({ issues = {}, labels = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
+function fake({ issues = {}, labels = {}, timelines = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), 'pickup-'));
   if (armed) writeFileSync(join(stateDir, 'armed'), '');
   const calls = [];
@@ -49,6 +49,7 @@ function fake({ issues = {}, labels = {}, nowMs = T0, armed = true, dashboardRes
       if (i) i.labels = i.labels.filter((l) => l.name !== name);
     }),
     comment: rec('comment', () => {}),
+    timeline: rec('timeline', (repo, n) => timelines[`${repo}#${n}`] ?? []),
   };
   const events = [];
   const dashboard = { post: async (ev) => (events.push(ev), dashboardResult) };
@@ -248,6 +249,33 @@ test('claim: lock created after evaluation is skipped via EEXIST', async () => {
   assert.equal(out.issue, 2);
   const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 1), 'claim.json'), 'utf8'));
   assert.equal(claim.run_id, 'other');
+});
+
+const FAILED_ADDED = { event: 'labeled', label: { name: 'factory-failed' } };
+const failedTimes = (n) => Array(n).fill(FAILED_ADDED);
+
+test('claim returns attempt 1, 2 and 3 from the timeline', async () => {
+  for (const n of [0, 1, 2]) {
+    const { d } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(n) } });
+    const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+    assert.equal(out.attempt, n + 1);
+  }
+});
+
+test('dry-run claim returns attempt', async () => {
+  const { d } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(1) } });
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: true });
+  assert.equal(out.attempt, 2);
+  assert.equal(out.dry_run, true);
+});
+
+test('claim writes attempt to claim.json, the output and the claimed event', async () => {
+  const { d, stateDir, events } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(1) } });
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 1), 'claim.json'), 'utf8'));
+  assert.equal(claim.attempt, 2);
+  assert.equal(out.attempt, 2);
+  assert.equal(events[0].attempt, 2);
 });
 
 test('stale: exactly 4h is not stale, just over is', () => {
@@ -651,7 +679,7 @@ test('claim posts claimed with the claim.json time and action, and reports sent'
   const out = await cmdClaim(d, { repos: [R], runId: 'RUN-1', dryRun: false });
   const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 3), 'claim.json'), 'utf8'));
   assert.deepEqual(events, [
-    { run_id: 'RUN-1', repo: R, issue_number: 3, event: 'claimed', action: 'implement', occurred_at: claim.claimed_at },
+    { run_id: 'RUN-1', repo: R, issue_number: 3, event: 'claimed', action: 'implement', attempt: 1, occurred_at: claim.claimed_at },
   ]);
   assert.equal(claim.claimed_at, ISO0);
   assert.equal(out.dashboard, 'sent');

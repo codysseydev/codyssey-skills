@@ -6,8 +6,10 @@
 //   node pick-up.mjs claim   --repo <owner/name> [--repo ...] --run-id <id> [--only <owner/name#n>] [--dry-run]
 //   node pick-up.mjs release --repo <owner/name> --issue <n> --run-id <id>
 //
+// claim returns the issue's `attempt`: 1 plus the number of times factory-failed was added to it.
+//
 // State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file),
-// `locks/<owner>-<repo>-<issue>/claim.json`, and `expired/<lock>.<takenAtMs>.<uuid>`, where the
+// `locks/<owner>-<repo>-<issue>/claim.json` (it holds the attempt), and `expired/<lock>.<takenAtMs>.<uuid>`, where the
 // stale sweep moves a lock before it handles it. The sweep also finishes folders a killed sweep
 // left there. One JSON object on stdout, errors on stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
@@ -240,7 +242,7 @@ const shortError = (e) => {
 };
 
 // post(event) resolves to the `dashboard` field value and writes one stderr line on anything but "sent".
-// event: {event, run_id, repo, issue_number, action?, occurred_at}.
+// event: {event, run_id, repo, issue_number, action?, attempt?, occurred_at}.
 export function makeDashboard({
   env = process.env, fetchImpl = globalThis.fetch, sleep = defaultSleep, runSecurity = defaultSecurity,
   timeoutMs = POST_TIMEOUT_MS, retryWaitsMs = RETRY_WAITS_MS,
@@ -538,6 +540,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
   mkdirSync(locksDir(d), { recursive: true });
   for (const e of eligible) {
     const dir = lockPath(d, e.repo, e.issue.number);
+    const attempt = attemptFromTimeline(d.gh.timeline(e.repo, e.issue.number));
     try {
       mkdirSync(dir); // atomic claim: fails with EEXIST when another run holds it
     } catch (err) {
@@ -549,7 +552,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
     try {
       writeFileSync(
         join(dir, 'claim.json'),
-        JSON.stringify({ repo: e.repo, issue: e.issue.number, action, run_id: runId, claimed_at: claimedAt }, null, 2)
+        JSON.stringify({ repo: e.repo, issue: e.issue.number, action, attempt, run_id: runId, claimed_at: claimedAt }, null, 2)
       );
       ensureLabels(d.gh, e.repo);
       d.gh.addLabel(e.repo, e.issue.number, RUNNING);
@@ -565,7 +568,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
     const dashboard = dryRun
       ? 'skipped: dry run'
       : await sendEvent(d, {
-          run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, occurred_at: claimedAt,
+          run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, attempt, occurred_at: claimedAt,
         });
     return {
       status: 'claimed',
@@ -573,6 +576,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
       issue: e.issue.number,
       title: e.issue.title,
       action,
+      attempt,
       run_id: runId,
       dry_run: dryRun,
       dashboard,
