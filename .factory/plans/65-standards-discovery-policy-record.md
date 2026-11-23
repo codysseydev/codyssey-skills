@@ -32,10 +32,12 @@ Nothing in the repo knows about AI policy or project-first mode today.
 | `code_leaves_machine: no` | stop | `code_leaves_machine`: forbids read-code |
 | `commit_ai_files: no`, step `factory-run` | stop | `commit_ai_files`: forbids factory-run |
 | Every field valid, nothing forbids the step | continue, scan runs | none |
-| Factory: no `.ai/kanon.yml` or no `mode:` key, repo not in the registry | not-client, no check | none |
+| Factory: no `.ai/kanon.yml` on origin/main or no `mode:` key, repo not in the registry | not-client, no check | none |
 | Factory: repo in the registry, any mode | check the registry's record | as above |
-| Factory: `mode: project-first`, repo not in the registry | stop | `record`: missing, no registry entry |
+| Factory: `mode: project-first` on origin/main, repo not in the registry | stop | `record`: missing, no registry entry |
 | Factory: `mode:` with a value other than the two modes | stop | `mode`: not an allowed value |
+| Factory: git fails reading origin/main (bad ref, not a repo) | stop | `mode`: unreadable, with git's message |
+| Factory: the run's branch lacks or changed `.ai/kanon.yml`, origin/main has it | origin/main's mode decides | as above |
 
 Every blocking field is listed, in the field table's order, so one stop shows every gap. On a stop the scan does not run and `warnings` is `[]` (open decision h).
 
@@ -72,7 +74,7 @@ The rules live in one table in the script, `FIELDS`, keyed by field. Each row ha
 | `commit_ai_files` | may `.ai/`, `.factory/`, `CLAUDE.md` be committed | `yes`, `no` | never | `no` |
 | `retention` | how long anything is kept | `none`, `<N>d`, `end-of-engagement` | never | never |
 
-Parsing details, each confirmed in the prototype below:
+Parsing details. The prototype below ran each one except the unknown-key rule, which holds by construction (the check reads only the keys in `FIELDS`) and was not run on its own:
 
 - Booleans accept `yes`, `no`, `true`, `false`, any case. Obsidian checkbox properties are `true` and `false`.
 - Lists accept the flow style `[a, b]` and the block style (`- a` lines under the key). A bare scalar is a one-item list.
@@ -127,7 +129,14 @@ check-policy.py --record <file> --repo <dir> --model <id> [--tool claude-code] [
 check-policy.py --registry <file> --repo-name <owner/name> --repo <dir> --model <id> --step factory-run [--tool claude-code]
 ```
 
-Exactly one of `--record` and `--registry`, else exit 2. The second form reads the mode from `<repo>/.ai/kanon.yml` (top-level `mode:` line only) and looks the record up in the registry. `--repo` is a checkout at origin/main. In a factory run it is the run's worktree, so its `.ai/kanon.yml` is origin/main's.
+Exactly one of `--record` and `--registry`, else exit 2. The second form reads the mode from origin/main through git, never from the working tree, then looks the record up in the registry:
+
+- `git -C <repo> ls-tree origin/main -- .ai/kanon.yml`. Exit 0 with no output means the file is absent, so canon-first. Exit 0 with one line means present. Any other exit (bad ref, not a repo) stops on `mode` with git's message.
+- When present, `git -C <repo> show origin/main:.ai/kanon.yml`, and only its top-level `mode:` line is read.
+
+So `--repo` may be the owner's checkout or any worktree of it. At `implement` and `archive` the run's worktree is on `factory/<n>`, whose `.ai/kanon.yml` can lag origin/main or carry the run's own edit. The git read ignores both, which `playbooks/factory.md:40` asks of every project file.
+
+The scan stays on the working tree of `--repo`. Its warnings never stop a run, so a policy file the run's branch changed can alter a warning but never the decision. The decision's inputs (the record, the registry and the mode) never come from the run's branch.
 
 ### The scan
 
@@ -195,7 +204,7 @@ Runs only after a `continue`. It never lists a folder except the three below, an
 
 - A new subsection `#### AI policy in client repos` between `#### Project file` (ends `:50`) and `#### The five stops` (`:52`):
   - A repo is a client repo when `.ai/kanon.yml` on origin/main says `mode: project-first`, or when `~/.factory/ai-policy.json` lists it. Read `.ai/kanon.yml` from origin/main like the project file. No file or no `mode:` key means canon-first.
-  - The check: `python3 ~/.claude/skills/standards-discovery/scripts/check-policy.py --registry ~/.factory/ai-policy.json --repo-name <owner/name> --repo <worktree> --step factory-run --model <model id>`, with `<worktree>` the run's worktree at origin/main. Making the worktree writes files to disk. The model reads none of them before the check.
+  - The check: `python3 ~/.claude/skills/standards-discovery/scripts/check-policy.py --registry ~/.factory/ai-policy.json --repo-name <owner/name> --repo <worktree> --step factory-run --model <model id>`, with `<worktree>` the run's worktree on any action. The script reads the mode from origin/main through git, not from the worktree. Making the worktree at `plan` writes files to disk. The model reads none of them before the check.
   - Exit 1 is a stop (open decision g). Unattended: post one comment naming each blocking field and its reason, add `needs-decision`, report `waiting` with reason `question` and 2 options (the owner fixes the record or the registry; the owner closes the issue), and stop. Interactive: ask with the same options.
   - Exit 0 with `not-client` changes nothing. Exit 0 with `continue` puts the warnings in the plan comment.
 - `#### Before the run` (`:33-36`): a new bullet. At every claim, whatever the action (`plan`, `implement` or `archive`, `:27`), run the AI policy check before reading any code in the repo. A resumed run is a new session, so a check only at stage 1 would be skipped.
@@ -223,7 +232,7 @@ All in `kanon/standards-discovery/tests/test_check_policy.py` unless named. At b
 | `frontmatter forms` | Flow and block lists, `true`/`false`, quoted values, a duplicate key (unreadable), no frontmatter (unreadable) | fails |
 | `model prefix match` | `claude` and `claude-opus` match `claude-opus-5-5`, `claude-o` does not, `any` matches all | fails |
 | `factory-run blocks on commit_ai_files no` | `allowing.md` passes `read-code` and stops `factory-run` on `commit_ai_files` | fails |
-| `client detection` | The seven cases from the prototype below: not-client, registry wins over a missing file, project-first without an entry stops on `record`, a bad `mode:` stops on `mode`, no `mode:` key is canon-first | fails |
+| `client detection` | A temp git repo with a `refs/remotes/origin/main` ref, as in the prototype. Not-client without the file and without an entry. The registry wins over an absent file. Project-first without an entry stops on `record`. A bad `mode:` stops on `mode`. No `mode:` key is canon-first. A worktree on a branch without the file still reads origin/main's `mode: project-first`. A folder that is not a git repo stops on `mode` as unreadable | fails |
 | `scan opens only the policy files` | A repo with `README.md`, `.aiignore`, `docs/CONTRIBUTING.md`, `docs/README.md`, `app/Secret.php`, `composer.json`, every file holding "AI". A `sys.addaudithook` hook records each `open` event during `scan()`. The opened set is exactly `.aiignore`, `README.md`, `docs/CONTRIBUTING.md` | fails |
 | `scan warnings` | `ignore-file` carries the patterns without comments. `ai-clause` carries `file`, `line`, `text`. A symlinked README is not opened and gives a `symlink` warning | fails |
 | `no scan on a stop` | With `forbidding.md`, `main` opens no file under the repo and prints `warnings: []` | fails |
@@ -270,10 +279,14 @@ The implementation PR edits `.factory/recipe.yml` and `.factory/playbook.md`, so
 
 Run in a scratchpad, not committed.
 
-- A stdlib `check-policy.py` with the `FIELDS` table, the frontmatter parser and the scan, against three fixture records and a missing path, model `claude-opus-5-5`. `allowing.md`: `continue`, exit 0, 5 warnings. `forbidding.md`: `stop`, exit 1, `ai_allowed` and `code_leaves_machine`. `incomplete.md` (with `ai_allowed: true` and a block list for `models`): `stop` on `code_leaves_machine` (`'maybe'`), `commit_ai_files` and `retention`. Missing path: `stop` on `record`. `allowing.md` with `--step factory-run`: `stop` on `commit_ai_files`. With `--model gpt-5`: `stop` on `models`.
+- A stdlib `check-policy.py` with the `FIELDS` table, the frontmatter parser and the scan, against three fixture records and a missing path, model `claude-opus-5-5`. `allowing.md` (a flow list for `tools`, a block list for `models`): `continue`, exit 0, 5 warnings. `forbidding.md`: `stop`, exit 1, `ai_allowed` and `code_leaves_machine`. `incomplete.md` (`ai_allowed: true`, flow lists): `stop` on `code_leaves_machine` (`'maybe'`), `commit_ai_files` and `retention`. Missing path: `stop` on `record`. `allowing.md` with `--step factory-run`: `stop` on `commit_ai_files`. With `--model gpt-5`: `stop` on `models`.
 - The scan on a repo with root `README.md`, `CONTRIBUTING.md`, `.aiignore`, `.github/CONTRIBUTING.md`, `docs/README.md` and `app/Secret.php`. Warnings came from `.aiignore`, `CONTRIBUTING.md`, `README.md` and `.github/CONTRIBUTING.md`. `docs/README.md` and `app/Secret.php` gave none. One false positive: the README line "No AI clause here." matched.
 - The audit-hook test, run with `python3 -m unittest discover -s standards-discovery/tests` from a folder with a hyphen in its name: 4 tests OK. Discovery finds `test_*.py` in a hyphenated folder. `os.listdir` raises no `open` audit event, so the hook sees only real file opens. A mutation that made `policy_files` also return `app/Secret.php` failed the test with `['.aiignore', 'README.md', 'app/Secret.php', 'docs/CONTRIBUTING.md'] != [...]`.
-- Client detection over seven cases (no file, registered or not; project-first, registered or not; a bad mode; no `mode:` key; no registry file). The results match the Behaviour table.
+- Client detection as pure logic over seven cases (no file, registered or not; project-first, registered or not; a bad mode; no `mode:` key; no registry file). The results match the Behaviour table.
+- The git read of the mode, on a scratch repo with a bare `origin`. `git ls-tree origin/main -- .ai/kanon.yml` printed nothing with exit 0 when the file was absent, one line with exit 0 when present, and exit 128 for `origin/nope` and for a folder that is not a repo. A worktree on a branch from before the file was added had no `.ai/` on disk, and `git -C <worktree> show origin/main:.ai/kanon.yml` still printed `mode: project-first`.
+- The `--registry` form end to end on that repo: listed with `allowing.md` and `--step factory-run` stopped on `commit_ai_files`. Not listed stopped on `record` with exit 1. A non-repo `--repo` stopped on `mode` with git's message. A repo with no `.ai/kanon.yml` and no entry printed `not-client` with exit 0. Both or neither of `--record` and `--registry` exited 2.
+- The symlink skip: a root `README.md` symlinked to `app/x.php` gave `[{"file": "README.md", "signal": "symlink"}]` and was not opened.
+- Parse cases: a bare scalar `tools: claude-code` and quoted values (`'claude'`, `"30d"`, `["claude-code"]`) passed. `models: [claude-opus]`, `[any]` and `[claude-opus-5-5]` matched `claude-opus-5-5`, and `[claude-o]` stopped on `models`. A duplicate key raised "line 3: ai_allowed given twice". No frontmatter raised "no frontmatter". `retention: forever` stopped as not an allowed value.
 - `check-playbooks.mjs` on a copy of `playbooks/factory.md` with the new subsection and a stage-1 sentence: exit 0. A negative control that appended `- **Before** "Run the AI policy check" ...`: exit 1, "is not in any playbook it extends".
 - `install.mjs:29` installs only `FACTORY_SKILLS` (`bootstrap`, `brief-to-backlog`, `brief-writer`, `event-model`, `factory-onboard`), and `installMap` (`:34-38`) maps only `playbooks/` and `factory/<name>/`. No kanon skill installs today.
 
@@ -301,7 +314,8 @@ Skip. No journey board for internal tooling, as plan 29 did. In `codyssey-docs`,
 - The registry is local to this Mac. Another machine has no registry, so a project-first repo there stops on `record`. That fails closed.
 - A record goes stale when the client changes their policy. The record has no review date. Its `Source:` prose line is the only trace.
 - The audit hook sees Python `open` calls. A subprocess or a C extension that reads a file would not show. The script uses neither.
-- The factory check runs in a worktree that already holds the client's files. The model reads none of them before the check, and the script reads only `.ai/kanon.yml` and the policy files. If the owner reads "before any client code is read" as "before any checkout", the check would need `git show origin/main:<path>` reads instead (open decision d, option C).
+- The factory check runs in a worktree that already holds the client's files. The model reads none of them before the check, and the script reads only origin/main's `.ai/kanon.yml` (through git) and the policy files. If the owner reads "before any client code is read" as "before any checkout", the scan would need `git show origin/main:<path>` reads too (open decision d, option C).
+- #67 runs `standards-discovery` on the Codyssey backend "in project-first mode" (vault `:337`). If that run merges `mode: project-first` into codyssey's origin/main, every factory run on codyssey stops on `record` until the owner adds a registry entry and a record. The stop is correct, but it would halt the owner's own product. #67's plan should keep the mode off codyssey's origin/main or add the entry first.
 
 ## Open decisions
 
@@ -311,7 +325,7 @@ a. How the stop is enforced.
    - C. Script for the record, prose for the scan. Half the code, and the scan claim is still untested.
 
 b. Record format.
-   - **A. Markdown with YAML-style frontmatter, the allowed values above (recommended).** The record lives in a brain vault, where frontmatter shows as properties and the prose below holds the source. Booleans take `true`/`false` too, lists take both styles.
+   - **A. Markdown with YAML-style frontmatter, the allowed values above (recommended).** The record lives in a brain vault, where frontmatter shows as properties and the prose below holds the source. Booleans take `true`/`false` too, lists take both styles. The issue asks six questions. This plan splits "which tools and models" into two keys, `tools` and `models`, so each matches one flag (`--tool`, `--model`). That split is the plan's choice, not the issue's.
    - B. A plain YAML file. Same parser, but no place for the client's policy quotes next to the answers.
    - C. A Markdown table in the body. Readable, but table parsing breaks on a stray pipe and gives poor errors.
 
@@ -323,7 +337,7 @@ c. Which fields block which step. The issue and the vault say only that a record
 d. Where a factory run finds the record path. Nothing defines it today.
    - **A. An owner-written registry `~/.factory/ai-policy.json` mapping `owner/repo` to the record path (recommended).** Works when AI files may not be committed. Keeps the client's brain path out of the client's repo. A listed repo is a client repo whatever `.ai/kanon.yml` says, which covers an overlay kept in `.git/info/exclude` (vault `:324`).
    - B. A `policy_record:` key in `.ai/kanon.yml` next to `mode:`. One file to read, but it needs AI files committed (the thing the record may forbid), it puts a local path in the client's repo, and a local-only overlay is invisible on origin/main.
-   - C. A plus reads through `git show origin/main:<path>` instead of a worktree, so the check runs before any client file is on disk. Stricter, at the cost of a `--ref` mode in the script and the scan.
+   - C. A plus the scan also reads through `git show origin/main:<path>`, like the mode already does, so the check needs no client file on disk. Stricter, at the cost of a second file source in the scan and a test that fakes git instead of the audit hook.
 
 e. Which files the scan opens.
    - **A. The issue's list: `.aiignore`, `.cursorignore`, root `README`, `CONTRIBUTING` at root, `.github/` and `docs/` (recommended).** `CLAUDE.md`, `AGENTS.md`, `.cursor/rules` and `.github/copilot-instructions.md` are discovery inputs in the vault (`:317`), so they wait for #66.
