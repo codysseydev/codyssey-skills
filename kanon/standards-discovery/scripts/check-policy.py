@@ -210,8 +210,9 @@ def client_record(registry, repo_name, repo):
     if mode not in MODES:
         return mode, None, [{"field": "mode", "reason": f"not an allowed value: {mode}"}]
     by_name = {name.casefold(): path for name, path in registry.items()}
-    if repo_name.casefold() in by_name:
-        return mode, os.path.expanduser(by_name[repo_name.casefold()]), []
+    path = by_name.get(repo_name.casefold())
+    if path is not None:
+        return mode, os.path.expanduser(path), []
     if mode == "project-first":
         return mode, None, [{"field": "record", "reason": "missing, no registry entry"}]
     return mode, None, []
@@ -232,7 +233,7 @@ IGNORE_FILES = (".aiignore", ".cursorignore")
 def policy_files(repo):
     """Yield (relative path, kind) for each file the scan may open. Lists only the root, .github/ and docs/.
 
-    kind is ignore-file, clause, symlink, or unreadable for a name that is not a regular file or a folder that cannot be listed.
+    kind is ignore-file, clause, symlink, or unreadable (not a regular file, or a folder that cannot be listed).
     """
     def kind_of(rel, kind):
         path = os.path.join(repo, rel)

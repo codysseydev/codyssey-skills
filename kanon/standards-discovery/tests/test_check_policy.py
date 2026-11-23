@@ -413,7 +413,8 @@ class Scan(TempDirs):
 
 class Cli(TempDirs):
     def run_cli(self, *args, env=None):
-        proc = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env={**GIT_ENV, **(env or {})})
+        env = {**GIT_ENV, **(env or {})}
+        proc = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env=env)
         try:
             out = json.loads(proc.stdout)
         except ValueError:
