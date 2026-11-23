@@ -134,12 +134,13 @@ The first install runs the script from the checkout. Later runs use the installe
 `origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
 from the commit, not the working tree, so a dirty checkout does not matter. It copies
 `playbooks/` into `~/.agents/playbooks/`, each factory skill into `~/.claude/skills/<name>/` and
-each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to `~/.agents/playbooks/.installed-sha`, rewrites only files that
-changed, and never deletes a file. It writes a task prompt only when the task folder exists,
-which Claude Desktop creates with the task, and lists a missing one under `skipped`. It refuses
-with exit 3 while a claim lock in `~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`,
-`FACTORY_SKILLS_DIR`, `FACTORY_TASKS_DIR` or `FACTORY_HOME` to install somewhere else. For a single repository, copy `playbooks/` into its `.agents/playbooks/`
-by hand instead.
+each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to
+`~/.agents/playbooks/.installed-sha`, rewrites only files that changed, and never deletes a file.
+It writes a task prompt only when the task folder exists, which Claude Desktop creates with the
+task, and lists a missing one under `skipped`. It refuses with exit 3 while a claim lock in
+`~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR`, `FACTORY_TASKS_DIR`
+or `FACTORY_HOME` to install somewhere else. For a single repository, copy `playbooks/` into its
+`.agents/playbooks/` by hand instead.
 
 After each PStack upgrade, run PStack's `check-playbooks.mjs` from the repository root. It
 fails when an upgrade rewrote a step the playbook quotes.
@@ -151,7 +152,14 @@ For unattended runs:
 - Create each lane task once in Claude Desktop: `factory-pickup`, `factory-pickup-frontend` and
   `factory-pickup-tools`, Hourly, Auto permission mode. The instructions text does not matter.
   Then run the install: it writes each prompt from `scheduled-tasks/` over the task's file, and
-  each armed tick reinstalls it. Schedule, folder and permission mode stay in Desktop.
+  each armed tick with no live claim lock reinstalls it (the install refuses while any lane holds
+  one). Schedule, folder and permission mode stay in Desktop.
+- One-time bootstrap after the PR that added `scheduled-tasks/` merges. The live prompts have no
+  install step, and the installed `install.mjs` does not know task prompts, so no tick installs
+  them. Pull `main` in the codyssey-skills checkout and run
+  `node playbooks/scripts/install.mjs --source .` from it once, because the in-checkout installer
+  knows the new targets. Then check that the three `~/.claude/scheduled-tasks/*/SKILL.md` files
+  changed. From then on the prompts install themselves.
 - `mkdir -p ~/.factory && touch ~/.factory/armed` arms it. `rm ~/.factory/armed` disarms it.
 
 ## License
