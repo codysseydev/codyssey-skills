@@ -279,8 +279,7 @@ def main(argv=None):
     if args.registry and not args.repo_name:
         parser.error("--registry needs --repo-name")
 
-    result = {"result": "stop", "step": args.step, "record": args.record}
-    blocking = []
+    result = {"result": "stop", "step": args.step, "record": args.record, "blocking": [], "warnings": []}
     if args.registry:
         registry = {}
         try:
@@ -289,25 +288,28 @@ def main(argv=None):
                     registry = json.load(handle)
             if not isinstance(registry, dict) or not all(isinstance(v, str) for v in registry.values()):
                 raise ValueError("not an object of owner/name to path")
+            result["mode"], result["record"], result["blocking"] = client_record(registry, args.repo_name, args.repo)
         except (OSError, ValueError) as error:
-            blocking = [{"field": "record", "reason": f"unreadable registry: {error}"}]
-        if not blocking:
-            result["mode"], result["record"], blocking = client_record(registry, args.repo_name, args.repo)
-            if not blocking and result["record"] is None:
-                result["result"] = "not-client"
-    if not blocking and result["result"] != "not-client":
+            result["blocking"] = [{"field": "record", "reason": f"unreadable registry: {error}"}]
+        if not result["blocking"] and result["record"] is None:
+            result["result"] = "not-client"
+            return emit(result)
+    if not result["blocking"]:
         try:
             with open(result["record"], encoding="utf-8") as handle:
                 raw = parse_frontmatter(handle.read())
-            blocking = check(raw, args.step, {"tool": args.tool, "model": args.model})
+            result["blocking"] = check(raw, args.step, {"tool": args.tool, "model": args.model})
         except FileNotFoundError:
-            blocking = [{"field": "record", "reason": "missing"}]
+            result["blocking"] = [{"field": "record", "reason": "missing"}]
         except (OSError, ValueError) as error:
-            blocking = [{"field": "record", "reason": f"unreadable: {error}"}]
-    result["blocking"] = blocking
-    if not blocking and result["result"] != "not-client":
+            result["blocking"] = [{"field": "record", "reason": f"unreadable: {error}"}]
+    if not result["blocking"]:
         result["result"] = "continue"
-    result["warnings"] = scan(args.repo) if result["result"] == "continue" else []
+        result["warnings"] = scan(args.repo)
+    return emit(result)
+
+
+def emit(result):
     print(json.dumps(result, indent=2))
     return 1 if result["result"] == "stop" else 0
 
