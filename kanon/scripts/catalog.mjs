@@ -250,7 +250,9 @@ function gitOut(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-// IDs in the catalog files of a git ref: Map(id -> "file entry-path"). Problems go to `problems`.
+// IDs in the catalog files of a git ref, read where the branch left it (`git merge-base <ref> HEAD`, the
+// `origin/main...HEAD` meaning), so IDs main gained since do not count against a branch that is behind.
+// With no merge-base (unrelated histories) the ref tip is read. Map(id -> "file entry-path"); problems go to `problems`.
 function baseIds(root, ref, problems) {
   const ids = new Map();
   try {
@@ -260,7 +262,13 @@ function baseIds(root, ref, problems) {
     problems.push(`base ref "${ref}" does not exist (or ${root} is not a git repository)`);
     return undefined;
   }
-  const listing = gitOut(root, ['ls-tree', '-r', '--name-only', ref, '--', CATALOG_DIR]);
+  let at = ref;
+  try {
+    at = gitOut(root, ['merge-base', ref, 'HEAD']).trim() || ref;
+  } catch {
+    // no common ancestor: keep the ref tip
+  }
+  const listing = gitOut(root, ['ls-tree', '-r', '--name-only', at, '--', CATALOG_DIR]);
   const files = listing
     .split('\n')
     .filter((f) => new RegExp(`^${CATALOG_DIR}/[^/]+\\.json$`).test(f))
@@ -268,7 +276,7 @@ function baseIds(root, ref, problems) {
   for (const file of files) {
     let data;
     try {
-      data = JSON.parse(gitOut(root, ['show', `${ref}:${file}`]));
+      data = JSON.parse(gitOut(root, ['show', `${at}:${file}`]));
     } catch (error) {
       problems.push(`base ${ref}: ${file}: cannot read as JSON: ${error.message}`);
       continue;

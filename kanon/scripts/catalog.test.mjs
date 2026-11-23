@@ -294,7 +294,8 @@ test('check --base passes when the base ref has no catalog', (t) => {
   const dir = makeRepo(t);
   const empty = mkdtempSync(path.join(tmpdir(), 'kanon-empty-'));
   t.after(() => rmSync(empty, { recursive: true, force: true }));
-  // Base commit: a repo with no kanon/catalog directory at all.
+  // Base commit: a repo with no kanon/catalog directory at all. It shares no history with `dir`, so there is
+  // no merge-base and check reads the ref tip.
   git(empty, 'init', '-q');
   git(empty, 'config', 'user.name', 'Catalog Test');
   git(empty, 'config', 'user.email', 'catalog-test@example.invalid');
