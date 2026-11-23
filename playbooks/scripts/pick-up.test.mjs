@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FACTORY_LABELS, ensureLabels, SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
+  FACTORY_LABELS, ensureLabels, SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, attemptFromTimeline, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
   makeDashboard, resolveDashboardUrl, resolveIngestToken, main,
 } from './pick-up.mjs';
 
@@ -22,7 +22,7 @@ function issue(number, labels = ['factory'], extra = {}) {
   };
 }
 
-function fake({ issues = {}, labels = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
+function fake({ issues = {}, labels = {}, timelines = {}, nowMs = T0, armed = true, dashboardResult = 'sent' } = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), 'pickup-'));
   if (armed) writeFileSync(join(stateDir, 'armed'), '');
   const calls = [];
@@ -49,6 +49,7 @@ function fake({ issues = {}, labels = {}, nowMs = T0, armed = true, dashboardRes
       if (i) i.labels = i.labels.filter((l) => l.name !== name);
     }),
     comment: rec('comment', () => {}),
+    timeline: rec('timeline', (repo, n) => timelines[`${repo}#${n}`] ?? []),
   };
   const events = [];
   const dashboard = { post: async (ev) => (events.push(ev), dashboardResult) };
@@ -162,6 +163,19 @@ test('evaluateIssue: each dependency state', () => {
   assert.deepEqual(run(undefined), { eligible: false, reason: 'dependency o/r#2 unreadable' });
 });
 
+test('attemptFromTimeline counts factory-failed additions only', () => {
+  const failed = { event: 'labeled', label: { name: 'factory-failed' } };
+  const noise = [
+    { event: 'unlabeled', label: { name: 'factory-failed' } },
+    { event: 'labeled', label: { name: 'factory' } },
+    { event: 'commented' },
+  ];
+  assert.equal(attemptFromTimeline([]), 1);
+  assert.equal(attemptFromTimeline(noise), 1);
+  assert.equal(attemptFromTimeline([failed, ...noise]), 2);
+  assert.equal(attemptFromTimeline([failed, ...noise, failed]), 3);
+});
+
 test('list reports candidates and skipped', () => {
   const { d } = fake({ issues: { [R]: [issue(5), issue(6, ['factory', 'needs-decision'])] } });
   const out = cmdList(d, { repos: [R] });
@@ -235,6 +249,89 @@ test('claim: lock created after evaluation is skipped via EEXIST', async () => {
   assert.equal(out.issue, 2);
   const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 1), 'claim.json'), 'utf8'));
   assert.equal(claim.run_id, 'other');
+});
+
+const FAILED_ADDED = { event: 'labeled', label: { name: 'factory-failed' } };
+const failedTimes = (n) => Array(n).fill(FAILED_ADDED);
+
+test('claim returns attempt 1, 2 and 3 from the timeline', async () => {
+  for (const n of [0, 1, 2]) {
+    const { d } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(n) } });
+    const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+    assert.equal(out.attempt, n + 1);
+  }
+});
+
+test('dry-run claim returns attempt', async () => {
+  const { d } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(1) } });
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: true });
+  assert.equal(out.attempt, 2);
+  assert.equal(out.dry_run, true);
+});
+
+test('claim writes attempt to claim.json, the output and the claimed event', async () => {
+  const { d, stateDir, events } = fake({ issues: { [R]: [issue(1)] }, timelines: { [`${R}#1`]: failedTimes(1) } });
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 1), 'claim.json'), 'utf8'));
+  assert.equal(claim.attempt, 2);
+  assert.equal(out.attempt, 2);
+  assert.equal(events[0].attempt, 2);
+});
+
+// A gh failure as execFileSync throws it: the message names the command, stderr says what went wrong.
+const ghFailure = () => Object.assign(new Error('Command failed: gh api --paginate --slurp ...'), { stderr: 'HTTP 502: Bad Gateway\n' });
+const BAD_TIMELINE = 'attempt unknown: HTTP 502: Bad Gateway';
+
+// Issue 1's timeline fails, a stale lock on issue 4 is swept first.
+function unreadableTimeline(issues) {
+  const f = fake({ nowMs: T0 + 5 * H, issues: { [R]: issues } });
+  writeLock(f.stateDir, R, 4, 'old', ISO0);
+  const read = f.d.gh.timeline;
+  f.d.gh.timeline = (repo, n) => {
+    if (n === 1) throw ghFailure();
+    return read(repo, n);
+  };
+  const touched = (n) => f.calls.filter(([name, , num]) => (name === 'addLabel' || name === 'comment') && num === n);
+  return { ...f, touched, locked: (n) => existsSync(join(f.stateDir, 'locks', lockName(R, n))) };
+}
+
+test('claim with an unreadable timeline skips the issue and moves on', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1), issue(2)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.equal(out.status, 'claimed');
+  assert.equal(out.issue, 2);
+  assert.deepEqual(out.skipped, [{ repo: R, issue: 1, reason: BAD_TIMELINE }]);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+  assert.equal(locked(2), true);
+});
+
+test('claim with only an unreadable timeline returns none with the skip and keeps stale', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.equal(out.status, 'none');
+  assert.deepEqual(out.skipped, [{ repo: R, issue: 1, reason: BAD_TIMELINE }]);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+});
+
+test('claim --only with an unreadable timeline returns none with the reason and keeps stale', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1), issue(2)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', only: { repo: R, issue: 1 }, dryRun: false });
+  assert.deepEqual(Object.keys(out).sort(), ['reason', 'stale', 'status']);
+  assert.equal(out.status, 'none');
+  assert.equal(out.reason, BAD_TIMELINE);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+});
+
+test('claims with readable timelines carry no skipped field', async () => {
+  const { d } = fake({ issues: { [R]: [issue(1)] } });
+  assert.equal('skipped' in await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false }), false);
+  assert.deepEqual(await cmdClaim(d, { repos: [R], runId: 'b', dryRun: false }), { status: 'none', stale: [] });
 });
 
 test('stale: exactly 4h is not stale, just over is', () => {
@@ -464,6 +561,22 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
   assert.ok(seen[0].includes('--paginate') && seen[0].includes('--slurp'));
 });
 
+test('makeGh timeline flattens pages and rejects bad output', () => {
+  const seen = [];
+  let out = JSON.stringify([[{ event: 'labeled' }, { event: 'commented' }], [{ event: 'unlabeled' }]]);
+  const gh = makeGh((args) => {
+    seen.push(args);
+    return out;
+  });
+  assert.deepEqual(gh.timeline(R, 2).map((e) => e.event), ['labeled', 'commented', 'unlabeled']);
+  assert.deepEqual(seen[0], ['api', '--paginate', '--slurp', 'repos/o/r/issues/2/timeline?per_page=100']);
+  for (const bad of ['', 'not json', '{"message":"Not Found"}']) {
+    out = bad;
+    assert.throws(() => gh.timeline(R, 2));
+  }
+  assert.throws(() => makeGh(() => { throw new Error('gh down'); }).timeline(R, 2), /gh down/);
+});
+
 test('makeGh issueState maps the REST issue to a dependency state', () => {
   const pr = (merged_at) => ({ pull_request: { merged_at } });
   const cases = [
@@ -622,7 +735,7 @@ test('claim posts claimed with the claim.json time and action, and reports sent'
   const out = await cmdClaim(d, { repos: [R], runId: 'RUN-1', dryRun: false });
   const claim = JSON.parse(readFileSync(join(stateDir, 'locks', lockName(R, 3), 'claim.json'), 'utf8'));
   assert.deepEqual(events, [
-    { run_id: 'RUN-1', repo: R, issue_number: 3, event: 'claimed', action: 'implement', occurred_at: claim.claimed_at },
+    { run_id: 'RUN-1', repo: R, issue_number: 3, event: 'claimed', action: 'implement', attempt: 1, occurred_at: claim.claimed_at },
   ]);
   assert.equal(claim.claimed_at, ISO0);
   assert.equal(out.dashboard, 'sent');
