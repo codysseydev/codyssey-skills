@@ -4,7 +4,7 @@ Holds codyssey-skills' specifics for the factory playbook in codysseydev/codysse
 
 ## Checks
 
-The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `post-merge-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests`, `install-tests`, `kanon-catalog-check` and `kanon-catalog-tests`. They are the test files the repo ships. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there are no workflow files to take commands from. These local runs are the gates. The factory does not use GitHub Actions. Gates the recipe lacks:
+The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `post-merge-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests`, `install-tests`, `kanon-catalog-check` and `kanon-catalog-tests`. All but `kanon-catalog-check` are the test files the repo ships; `kanon-catalog-check` is a data check that runs `kanon/scripts/catalog.mjs check` on the Kanon catalog. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there are no workflow files to take commands from. These local runs are the gates. The factory does not use GitHub Actions. Gates the recipe lacks:
 
 None yet.
 
@@ -18,7 +18,7 @@ None yet.
 
 ## Local setup
 
-The recipe has no setup steps. The checks need `node` (for `node --test`) and `python3`, and no install, `.env` file or services.
+The recipe has no setup steps. The checks need `node` (for `node --test`) and `python3`, and no install, `.env` file or services. `kanon-catalog-check` also needs `git` and an `origin/main` ref in the checkout, because it reads the base IDs at the merge-base with `origin/main`. In a fresh clone `origin/main` is whatever the clone's origin calls main.
 
 ## Cleanup
 
