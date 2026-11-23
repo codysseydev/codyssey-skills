@@ -18,7 +18,7 @@ None yet.
 
 ## Local setup
 
-The recipe has no setup steps. The checks need `node` (for `node --test`) and `python3`, and no install, `.env` file or services. `kanon-catalog-check` also needs `git` and an `origin/main` ref in the checkout, because it reads the base IDs at the merge-base with `origin/main`. In a fresh clone `origin/main` is whatever the clone's origin calls main.
+The recipe has no setup steps. The checks need `node` (for `node --test`) and `python3`, and no install, `.env` file or services. `kanon-catalog-check` also needs `git` and an `origin/main` ref in the checkout, because it reads the base IDs at the merge-base with `origin/main`. The check compares against the `origin` remote's main, so a clone of a fork compares against the fork's main. The checkout must be a full clone: in a shallow clone that lacks the common ancestor, the check falls back to the `origin/main` tip, which can fail a branch that is behind main.
 
 ## Cleanup
 
