@@ -224,6 +224,18 @@ class ClientDetection(TempDirs):
                 self.assertIn("acme/shop", blocking[0]["reason"])
                 self.assertIn("Acme/Shop", blocking[0]["reason"])
 
+    def test_a_relative_record_path_in_the_registry_stops_on_record(self):
+        repo = self.origin_repo()
+        for path in ("rel/x.md", "x.md", "", "~nobody-here/x.md"):
+            with self.subTest(path):
+                rec, blocking = cp.client_record({"o/r": path}, "o/r", repo)[1:]
+                self.assertEqual((rec, fields(blocking)), (None, ["record"]))
+                self.assertIn("relative path not allowed", blocking[0]["reason"])
+
+    def test_a_relative_path_for_another_repo_does_not_stop_this_one(self):
+        repo = self.origin_repo()
+        self.assertEqual(cp.client_record({"other/repo": "x.md"}, "o/r", repo), ("canon-first", None, []))
+
     def test_project_first_without_an_entry_stops_on_record(self):
         repo = self.origin_repo("mode: project-first\n")
         mode, rec, blocking = cp.client_record({"other/repo": "/x.md"}, "o/r", repo)

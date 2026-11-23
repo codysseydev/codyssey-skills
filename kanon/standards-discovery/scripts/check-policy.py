@@ -244,7 +244,10 @@ def client_record(registry, repo_name, repo):
     by_name = {name.casefold(): path for name, path in registry.items()}
     path = by_name.get(repo_name.casefold())
     if path is not None:
-        return mode, os.path.expanduser(path), []
+        path = os.path.expanduser(path)
+        if not os.path.isabs(path):
+            return mode, None, [{"field": "record", "reason": f"relative path not allowed: {path}"}]
+        return mode, path, []
     if mode == "project-first":
         return mode, None, [{"field": "record", "reason": "missing, no registry entry"}]
     return mode, None, []
