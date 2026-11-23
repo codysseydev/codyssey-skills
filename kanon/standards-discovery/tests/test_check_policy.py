@@ -536,6 +536,36 @@ class Cli(TempDirs):
         self.assertEqual((code, fields(out["blocking"])), (1, ["mode"]))
         self.assertTrue(out["blocking"][0]["reason"].startswith("unreadable"))
 
+    def registry_stop(self, registry):
+        code, out, _ = self.run_cli(
+            "--registry", registry, "--repo-name", "o/r", "--repo", self.origin_repo(), "--model", "m"
+        )
+        self.assertEqual((code, out["result"], fields(out["blocking"])), (1, "stop", ["record"]))
+        self.assertTrue(out["blocking"][0]["reason"].startswith("unreadable registry"))
+
+    def test_a_dangling_symlink_registry_stops_on_record(self):
+        registry = os.path.join(self.tmp(), "ai-policy.json")
+        os.symlink(os.path.join(self.tmp(), "nowhere.json"), registry)
+        self.registry_stop(registry)
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores file modes")
+    def test_a_registry_in_a_folder_that_cannot_be_entered_stops_on_record(self):
+        folder = self.tmp()
+        put(folder, "ai-policy.json", "{}")
+        os.chmod(folder, 0)
+        self.addCleanup(os.chmod, folder, 0o755)
+        self.registry_stop(os.path.join(folder, "ai-policy.json"))
+
+    def test_a_registry_that_is_a_folder_stops_on_record(self):
+        self.registry_stop(self.tmp())
+
+    def test_an_absent_registry_is_an_empty_one(self):
+        code, out, _ = self.run_cli(
+            "--registry", os.path.join(self.tmp(), "gone.json"), "--repo-name", "o/r",
+            "--repo", self.origin_repo(), "--model", "m",
+        )
+        self.assertEqual((code, out["result"]), (0, "not-client"))
+
     def test_tilde_paths_expand_to_the_home_folder(self):
         home = self.tmp()
         shutil.copy(os.path.join(RECORDS, "allowing.md"), os.path.join(home, "record.md"))

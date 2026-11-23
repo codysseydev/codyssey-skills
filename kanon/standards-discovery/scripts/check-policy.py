@@ -239,6 +239,22 @@ def client_record(registry, repo_name, repo):
     return mode, None, []
 
 
+def read_registry(path):
+    """The registry's JSON, or {} when the path is truly absent. Raises OSError or ValueError otherwise.
+
+    A dangling symlink or a path inside a folder that cannot be entered is not absent.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
+            return {}
+        raise
+
+
 # ---------- the scan ----------
 
 AI_CLAUSE = re.compile(
@@ -331,11 +347,8 @@ def main(argv=None):
     result = {"result": "stop", "step": args.step, "record": args.record, "blocking": [], "warnings": []}
     if args.registry:
         result["mode"] = None
-        registry = {}
         try:
-            if os.path.exists(args.registry):
-                with open(args.registry, encoding="utf-8") as handle:
-                    registry = json.load(handle)
+            registry = read_registry(args.registry)
             if not isinstance(registry, dict) or not all(isinstance(v, str) for v in registry.values()):
                 raise ValueError("not an object of owner/name to path")
             result["mode"], result["record"], result["blocking"] = client_record(registry, args.repo_name, args.repo)
