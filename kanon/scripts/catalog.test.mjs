@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -343,6 +352,18 @@ test('check --base fails when the ref does not exist', (t) => {
   assert.equal(r.status, 1);
   assert.ok(r.out.includes('origin/nope'), r.out);
   assert.ok(r.out.includes('does not exist'), r.out);
+});
+
+test('running the script through a symlink still checks and exits 1 on a problem', (t) => {
+  const root = makeRoot(t);
+  rmSync(path.join(root, ORCH_REF));
+  const links = mkdtempSync(path.join(tmpdir(), 'kanon-link-'));
+  t.after(() => rmSync(links, { recursive: true, force: true }));
+  const link = path.join(links, 'catalog-link.mjs');
+  symlinkSync(script, link);
+  const r = spawnSync(process.execPath, [link, 'check', '--root', root], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(ORCH_REF), r.stdout);
 });
 
 test('the validator throws on a schema keyword it does not implement', async () => {
