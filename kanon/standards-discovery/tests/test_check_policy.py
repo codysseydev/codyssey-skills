@@ -284,6 +284,35 @@ class ClientDetection(TempDirs):
         self.assertEqual(fields(blocking), ["mode"])
         self.assertTrue(blocking[0]["reason"].startswith("unreadable"))
 
+    def test_a_subfolder_of_a_project_first_repo_stops_on_mode(self):
+        repo = self.origin_repo("mode: project-first\n")
+        sub = os.path.join(repo, "app")
+        os.makedirs(sub)
+        blocking = cp.client_record({}, "o/r", sub)[2]
+        self.assertEqual(fields(blocking), ["mode"])
+        self.assertIn("top level", blocking[0]["reason"])
+
+    def test_a_plain_folder_inside_another_repo_stops_on_mode(self):
+        repo = self.origin_repo()
+        plain = os.path.join(repo, "plain")
+        os.makedirs(plain)
+        blocking = cp.client_record({}, "o/r", plain)[2]
+        self.assertEqual(fields(blocking), ["mode"])
+        self.assertIn("top level", blocking[0]["reason"])
+
+    def test_the_kanon_file_is_looked_up_from_the_tree_root_not_the_folder(self):
+        repo = self.origin_repo("mode: project-first\n")
+        sub = os.path.join(repo, "app")
+        os.makedirs(sub)
+        self.assertEqual(cp.kanon_yml_at(sub), "mode: project-first\n")
+
+    def test_a_repo_given_through_a_symlink_is_still_the_top_level(self):
+        repo = self.origin_repo("mode: project-first\n")
+        link = os.path.join(self.tmp(), "link")
+        os.symlink(repo, link)
+        mode, rec, blocking = cp.client_record({}, "o/r", link)
+        self.assertEqual((mode, rec, fields(blocking)), ("project-first", None, ["record"]))
+
     def test_a_repo_without_origin_main_stops_on_mode(self):
         repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")

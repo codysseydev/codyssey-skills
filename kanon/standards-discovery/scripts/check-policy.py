@@ -179,9 +179,23 @@ def _git_error(proc, name):
     return proc.stderr.decode("utf-8", "replace").strip() or f"git {name} exited {proc.returncode}"
 
 
+def require_top_level(repo):
+    """Raises RuntimeError unless repo is the top level of a git work tree, not a folder inside one."""
+    proc = _git(repo, "rev-parse", "--show-toplevel")
+    if proc.returncode != 0:
+        raise RuntimeError(_git_error(proc, "rev-parse"))
+    top = proc.stdout.decode("utf-8", "replace").rstrip("\n")
+    try:
+        same = os.path.samefile(top, repo)
+    except OSError as error:
+        raise RuntimeError(str(error))
+    if not same:
+        raise RuntimeError(f"{repo} is not the top level of its git repo ({top})")
+
+
 def kanon_yml_at(repo, ref=BASE_REF):
     """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError when it cannot be read."""
-    listed = _git(repo, "ls-tree", ref, "--", ".ai/kanon.yml")
+    listed = _git(repo, "ls-tree", "--full-tree", ref, "--", ".ai/kanon.yml")
     if listed.returncode != 0:
         raise RuntimeError(_git_error(listed, "ls-tree"))
     if not listed.stdout.strip():
@@ -198,6 +212,7 @@ def kanon_yml_at(repo, ref=BASE_REF):
 def client_record(registry, repo_name, repo):
     """(mode, record path, blocking). A record path of None with no blocking means not a client repo."""
     try:
+        require_top_level(repo)
         text = kanon_yml_at(repo)
     except RuntimeError as error:
         return None, None, [{"field": "mode", "reason": f"unreadable: {error}"}]
