@@ -20,15 +20,20 @@ const writeJson = (root, rel, data) =>
 const collapse = (text) => text.replace(/\s+/g, ' ').trim();
 const stripIds = (text) => text.replace(/`[A-Z]+-\d{3}` /g, '');
 
-// A copy of the repo's catalog and the orchestration reference in a temp root.
+// A copy of the repo's catalog and the reference of every family that has a catalog file, in a temp root.
+// `check` compares each family's reference, so a root that lacks one fails with a problem the test did not cause.
 function makeRoot(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'kanon-catalog-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   cpSync(path.join(repoRoot, 'kanon', 'catalog'), path.join(root, 'kanon', 'catalog'), {
     recursive: true,
   });
-  mkdirSync(path.join(root, path.dirname(ORCH_REF)), { recursive: true });
-  cpSync(path.join(repoRoot, ORCH_REF), path.join(root, ORCH_REF));
+  const rows = JSON.parse(readFileSync(path.join(repoRoot, 'kanon', 'catalog', 'families.json'), 'utf8'));
+  for (const row of rows) {
+    if (!existsSync(path.join(repoRoot, 'kanon', 'catalog', `${row.family}.json`))) continue;
+    mkdirSync(path.join(root, path.dirname(row.reference)), { recursive: true });
+    cpSync(path.join(repoRoot, row.reference), path.join(root, row.reference));
+  }
   return root;
 }
 
@@ -190,6 +195,45 @@ test('a missing reference fails and names it', (t) => {
   const r = run(root, 'check');
   assert.equal(r.status, 1);
   assert.ok(r.lines[0].includes(ORCH_REF), r.out);
+});
+
+// A second family with its generated reference must not change what a single-problem test reports.
+test('a second family that is in order adds no problem to a one-problem result', (t) => {
+  const root = makeRoot(t);
+  writeJson(root, 'kanon/catalog/http-api.json', {
+    family: 'http-api',
+    title: 'HTTP',
+    intro: [],
+    sections: [
+      {
+        heading: 'Routes',
+        intro: [],
+        list: 'bullet',
+        entries: [
+          {
+            id: 'HTTP-001',
+            family: 'http-api',
+            scope: 'laravel',
+            keyword: 'MUST',
+            rule: 'Routes **MUST** be named.',
+            status: 'active',
+          },
+        ],
+      },
+    ],
+  });
+  const gen = run(root, 'generate');
+  assert.equal(gen.status, 0, gen.out);
+  assert.equal(run(root, 'check').status, 0);
+
+  const cat = readJson(root, ORCH_JSON);
+  const { s, e, entry } = find(cat, 'ORCH-005');
+  delete entry.keyword;
+  writeJson(root, ORCH_JSON, cat);
+  const r = run(root, 'check');
+  assert.equal(r.status, 1);
+  assert.equal(r.lines.length, 1, r.out);
+  assert.ok(r.lines[0].includes(`sections[${s}].entries[${e}] (ORCH-005)`), r.out);
 });
 
 test('keyword that differs from the first bold keyword in rule fails', (t) => {
