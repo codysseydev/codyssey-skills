@@ -38,6 +38,7 @@ Rules for the values:
 
 - Booleans take `yes`, `no`, `true` or `false`, in any case.
 - A list is `[a, b]` or one `- item` line per entry under the key. A single bare value counts as a one-item list.
+- A comment after a value (`ai_allowed: yes # ok`) is not allowed: the text after the colon is the whole value, so the check stops on it as not an allowed value. A comment on a line of its own is fine.
 - A key that is absent or has no value is missing. A value outside the allowed set stops the check. A duplicate key or a line that is not `key: value` makes the record unreadable.
 - Keys the check does not know are ignored. A misspelt key leaves the real field missing, so the check stops.
 

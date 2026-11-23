@@ -33,7 +33,7 @@ python3 <skill dir>/scripts/check-policy.py --record <record> --repo <repo> --mo
 The script prints one JSON object and exits 0, 1 or 2.
 
 - Exit 1 (`stop`): report each entry of `blocking` with its field and reason. Read nothing else in the repo. Stop.
-- Exit 0 (`continue`): keep `warnings` for the standards report. Treat the patterns of each `ignore-file` warning as paths not to read in later steps. A `symlink` warning names a policy file the check did not open.
+- Exit 0 (`continue`): keep `warnings` for the standards report. Treat the patterns of each `ignore-file` warning as paths not to read in later steps. A `symlink` or `unreadable` warning names a policy file the check did not read.
 - Exit 2: the command was wrong. Fix the arguments.
 
 On `continue` the script has opened only `.aiignore`, `.cursorignore`, the root `README`, and `CONTRIBUTING` at the root, in `.github/` and in `docs/`. A warning is not a stop. It is a line in the report for the owner to read.
