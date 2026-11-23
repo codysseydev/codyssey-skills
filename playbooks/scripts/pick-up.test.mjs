@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FACTORY_LABELS, ensureLabels, SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
+  FACTORY_LABELS, ensureLabels, SKIP_LABELS, parseDependsOn, isStale, evaluateIssue, attemptFromTimeline, cmdList, cmdClaim, makeGh, cmdRelease, parseArgs, UsageError, lockName,
   makeDashboard, resolveDashboardUrl, resolveIngestToken, main,
 } from './pick-up.mjs';
 
@@ -160,6 +160,19 @@ test('evaluateIssue: each dependency state', () => {
   assert.deepEqual(run('MERGED'), { eligible: true, action: 'plan' });
   assert.deepEqual(run('CLOSED_UNMERGED'), { eligible: false, reason: 'dependency o/r#2 is a PR closed without merging' });
   assert.deepEqual(run(undefined), { eligible: false, reason: 'dependency o/r#2 unreadable' });
+});
+
+test('attemptFromTimeline counts factory-failed additions only', () => {
+  const failed = { event: 'labeled', label: { name: 'factory-failed' } };
+  const noise = [
+    { event: 'unlabeled', label: { name: 'factory-failed' } },
+    { event: 'labeled', label: { name: 'factory' } },
+    { event: 'commented' },
+  ];
+  assert.equal(attemptFromTimeline([]), 1);
+  assert.equal(attemptFromTimeline(noise), 1);
+  assert.equal(attemptFromTimeline([failed, ...noise]), 2);
+  assert.equal(attemptFromTimeline([failed, ...noise, failed]), 3);
 });
 
 test('list reports candidates and skipped', () => {
@@ -462,6 +475,22 @@ test('makeGh flattens paginated REST pages and drops pull requests', () => {
   assert.equal(out[0].state, 'OPEN');
   assert.equal(out[0].authorAssociation, 'OWNER');
   assert.ok(seen[0].includes('--paginate') && seen[0].includes('--slurp'));
+});
+
+test('makeGh timeline flattens pages and rejects bad output', () => {
+  const seen = [];
+  let out = JSON.stringify([[{ event: 'labeled' }, { event: 'commented' }], [{ event: 'unlabeled' }]]);
+  const gh = makeGh((args) => {
+    seen.push(args);
+    return out;
+  });
+  assert.deepEqual(gh.timeline(R, 2).map((e) => e.event), ['labeled', 'commented', 'unlabeled']);
+  assert.deepEqual(seen[0], ['api', '--paginate', '--slurp', 'repos/o/r/issues/2/timeline?per_page=100']);
+  for (const bad of ['', 'not json', '{"message":"Not Found"}']) {
+    out = bad;
+    assert.throws(() => gh.timeline(R, 2));
+  }
+  assert.throws(() => makeGh(() => { throw new Error('gh down'); }).timeline(R, 2), /gh down/);
 });
 
 test('makeGh issueState maps the REST issue to a dependency state', () => {

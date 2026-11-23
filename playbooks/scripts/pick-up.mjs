@@ -138,6 +138,12 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
   return { eligible: true, action: labels.includes('plan-approved') ? 'implement' : 'plan' };
 }
 
+// Issue timeline events -> attempt number: 1 plus the number of times factory-failed was added.
+// Removals do not count.
+export function attemptFromTimeline(events) {
+  return 1 + events.filter((e) => e.event === 'labeled' && e.label?.name === FAILED).length;
+}
+
 // ---------- boundary (gh + filesystem + clock) ----------
 
 export function makeGh(run = defaultRun) {
@@ -160,6 +166,12 @@ export function makeGh(run = defaultRun) {
   return {
     listOpen: (repo) => list(repo, 'factory', 'open'),
     listClosedApproved: (repo) => list(repo, 'factory,plan-approved', 'closed'),
+    // No `|| '[]'` fallback: empty output would read as attempt 1.
+    timeline(repo, n) {
+      const pages = JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/timeline?per_page=100`]));
+      if (!Array.isArray(pages)) throw new Error(`timeline of ${repo}#${n} is not an array`);
+      return pages.flat();
+    },
     getIssue(repo, n) {
       const i = JSON.parse(run(['api', `repos/${repo}/issues/${n}`]));
       return i.pull_request ? null : normalize(i);
