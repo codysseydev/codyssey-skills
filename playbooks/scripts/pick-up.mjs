@@ -9,9 +9,10 @@
 // claim returns the issue's `attempt`: 1 plus the number of times factory-failed was added to it.
 //
 // State lives in $FACTORY_HOME (default ~/.factory): `armed` (arm file),
-// `locks/<owner>-<repo>-<issue>/claim.json` (it holds the attempt), and `expired/<lock>.<takenAtMs>.<uuid>`, where the
-// stale sweep moves a lock before it handles it. The sweep also finishes folders a killed sweep
-// left there. One JSON object on stdout, errors on stderr.
+// `locks/<owner>-<repo>-<issue>/claim.json` (it holds the attempt), and
+// `expired/<lock>.<takenAtMs>.<uuid>`, where the stale sweep moves a lock before it handles it.
+// The sweep also finishes folders a killed sweep left there. One JSON object on stdout, errors on
+// stderr.
 // Exit 0 for every normal outcome, 1 on an unexpected error, 2 on bad usage.
 //
 // claim, release and the stale sweep also POST run events (claimed, released, expired) to the
@@ -140,8 +141,7 @@ export function evaluateIssue(issue, repo, { hasLock, depState }) {
   return { eligible: true, action: labels.includes('plan-approved') ? 'implement' : 'plan' };
 }
 
-// Issue timeline events -> attempt number: 1 plus the number of times factory-failed was added.
-// Removals do not count.
+// Issue timeline events -> attempt number. Removals of factory-failed do not count.
 export function attemptFromTimeline(events) {
   return 1 + events.filter((e) => e.event === 'labeled' && e.label?.name === FAILED).length;
 }
@@ -168,7 +168,7 @@ export function makeGh(run = defaultRun) {
   return {
     listOpen: (repo) => list(repo, 'factory', 'open'),
     listClosedApproved: (repo) => list(repo, 'factory,plan-approved', 'closed'),
-    // No `|| '[]'` fallback: empty output would read as attempt 1.
+    // Empty output throws: an empty timeline would read as attempt 1.
     timeline(repo, n) {
       const pages = JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/issues/${n}/timeline?per_page=100`]));
       if (!Array.isArray(pages)) throw new Error(`timeline of ${repo}#${n} is not an array`);
