@@ -241,19 +241,20 @@ test('keyword that differs from the first bold keyword in rule fails', (t) => {
   assert.ok(r.lines[0].includes('keyword'), r.out);
 });
 
+// The foreign prefix is ZZ, which no real family uses, so converting any real family cannot make this ID a duplicate.
 test('ID with another family prefix fails', (t) => {
   const root = makeRoot(t);
   const cat = readJson(root, ORCH_JSON);
-  find(cat, 'ORCH-005').entry.id = 'HTTP-005';
+  find(cat, 'ORCH-005').entry.id = 'ZZ-005';
   writeJson(root, ORCH_JSON, cat);
   writeFileSync(
     path.join(root, ORCH_REF),
-    read(root, ORCH_REF).replace('`ORCH-005`', '`HTTP-005`')
+    read(root, ORCH_REF).replace('`ORCH-005`', '`ZZ-005`')
   );
   const r = run(root, 'check');
   assert.equal(r.status, 1);
   assert.equal(r.lines.length, 1, r.out);
-  assert.ok(r.lines[0].includes('(HTTP-005)'), r.out);
+  assert.ok(r.lines[0].includes('(ZZ-005)'), r.out);
   assert.ok(r.lines[0].includes('ORCH'), r.out);
 });
 
@@ -352,6 +353,7 @@ function unrelatedCommit(t, dir, files) {
 // With no merge-base (unrelated histories) check reads the ref tip.
 test('check --base passes when the unrelated base ref has no catalog', (t) => {
   const dir = makeRepo(t);
+  commit(dir, 'base');
   const noCatalog = unrelatedCommit(t, dir, { 'README.md': 'no catalog yet\n' });
   const r = run(dir, 'check', '--base', noCatalog);
   assert.equal(r.status, 0, r.out);
@@ -359,6 +361,7 @@ test('check --base passes when the unrelated base ref has no catalog', (t) => {
 
 test('check --base reads the tip of a ref with no merge-base and fails on an ID HEAD lacks', (t) => {
   const dir = makeRepo(t);
+  commit(dir, 'base');
   const cat = readJson(dir, ORCH_JSON);
   cat.sections[0].entries.push({ ...find(cat, 'ORCH-005').entry, id: 'ORCH-999' });
   const tip = unrelatedCommit(t, dir, { [ORCH_JSON]: JSON.stringify(cat) });
