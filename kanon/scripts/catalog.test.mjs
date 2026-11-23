@@ -331,26 +331,42 @@ test('an ID removed since the base ref fails check --base', (t) => {
   assert.ok(r.lines[0].includes(`(merge-base ${base.slice(0, 7)})`), r.out);
 });
 
-test('check --base passes when the base ref has no catalog', (t) => {
+// A commit in a separate repo (no shared history with `dir`), fetched into `dir`. `files` maps path -> text.
+function unrelatedCommit(t, dir, files) {
+  const other = mkdtempSync(path.join(tmpdir(), 'kanon-unrelated-'));
+  t.after(() => rmSync(other, { recursive: true, force: true }));
+  git(other, 'init', '-q');
+  git(other, 'config', 'user.name', 'Catalog Test');
+  git(other, 'config', 'user.email', 'catalog-test@example.invalid');
+  git(other, 'config', 'commit.gpgsign', 'false');
+  git(other, 'config', 'core.hooksPath', '/dev/null');
+  for (const [file, text] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(other, file)), { recursive: true });
+    writeFileSync(path.join(other, file), text);
+  }
+  const sha = commit(other, 'unrelated');
+  git(dir, 'fetch', '-q', other, sha);
+  return sha;
+}
+
+// With no merge-base (unrelated histories) check reads the ref tip.
+test('check --base passes when the unrelated base ref has no catalog', (t) => {
   const dir = makeRepo(t);
-  const empty = mkdtempSync(path.join(tmpdir(), 'kanon-empty-'));
-  t.after(() => rmSync(empty, { recursive: true, force: true }));
-  // Base commit: a repo with no kanon/catalog directory at all. It shares no history with `dir`, so there is
-  // no merge-base and check reads the ref tip.
-  git(empty, 'init', '-q');
-  git(empty, 'config', 'user.name', 'Catalog Test');
-  git(empty, 'config', 'user.email', 'catalog-test@example.invalid');
-  git(empty, 'config', 'commit.gpgsign', 'false');
-  git(empty, 'config', 'core.hooksPath', '/dev/null');
-  writeFileSync(path.join(empty, 'README.md'), 'no catalog yet\n');
-  const noCatalog = commit(empty, 'no catalog');
-  // Fetch that commit into the repo that has the catalog on disk.
-  git(dir, 'fetch', '-q', empty, noCatalog);
+  const noCatalog = unrelatedCommit(t, dir, { 'README.md': 'no catalog yet\n' });
   const r = run(dir, 'check', '--base', noCatalog);
   assert.equal(r.status, 0, r.out);
 });
 
-// A base ref that no commit of HEAD descends from (unrelated histories) has no merge-base; the ref tip is read.
+test('check --base reads the tip of a ref with no merge-base and fails on an ID HEAD lacks', (t) => {
+  const dir = makeRepo(t);
+  const cat = readJson(dir, ORCH_JSON);
+  cat.sections[0].entries.push({ ...find(cat, 'ORCH-005').entry, id: 'ORCH-999' });
+  const tip = unrelatedCommit(t, dir, { [ORCH_JSON]: JSON.stringify(cat) });
+  const r = run(dir, 'check', '--base', tip);
+  assert.equal(r.status, 1, r.out);
+  assert.ok(r.lines.some((l) => l.includes('ORCH-999') && l.includes(`(tip ${tip.slice(0, 7)})`)), r.out);
+});
+
 test('check --base reads the IDs at the merge-base, not at the tip of the ref', (t) => {
   const dir = makeRepo(t);
   commit(dir, 'base');
