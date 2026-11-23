@@ -250,9 +250,9 @@ function gitOut(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-// IDs in the catalog files of a git ref, read where the branch left it (`git merge-base <ref> HEAD`, the
-// `origin/main...HEAD` meaning), so IDs main gained since do not count against a branch that is behind.
-// With no merge-base (unrelated histories) the ref tip is read. Map(id -> "file entry-path"); problems go to `problems`.
+// IDs in the catalog files of a git ref as of `git merge-base <ref> HEAD`, so IDs main gained since do not
+// count against a branch that is behind. With no merge-base (unrelated histories) the ref tip is read.
+// Map(id -> "file entry-path"); problems go to `problems`.
 function baseIds(root, ref, problems) {
   const ids = new Map();
   try {
@@ -264,7 +264,7 @@ function baseIds(root, ref, problems) {
   }
   let at = ref;
   try {
-    at = gitOut(root, ['merge-base', ref, 'HEAD']).trim() || ref;
+    at = gitOut(root, ['merge-base', ref, 'HEAD']).trim();
   } catch {
     // no common ancestor: keep the ref tip
   }
