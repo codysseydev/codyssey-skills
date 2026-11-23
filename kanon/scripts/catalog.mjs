@@ -6,7 +6,7 @@
 //
 // Plain node, no packages. `check` prints one line per problem and exits 1 if there is any.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -443,7 +443,6 @@ function main(argv) {
   }
 }
 
-// argv[1] may be a symlink; import.meta.url is already the real path.
-if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+if (import.meta.main) {
   process.exitCode = main(process.argv.slice(2));
 }

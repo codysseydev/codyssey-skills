@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -393,6 +393,30 @@ test('running the script through a symlink still checks and exits 1 on a problem
   const link = path.join(links, 'catalog-link.mjs');
   symlinkSync(script, link);
   const r = spawnSync(process.execPath, [link, 'check', '--root', root], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(ORCH_REF), r.stdout);
+});
+
+// Importing the module must not run the CLI, whatever argv[1] holds (here a path that is not a file).
+test('importing the module does not run main and does not throw', () => {
+  const code = `await import(${JSON.stringify(pathToFileURL(script).href)})`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code, 'not-a-file'], {
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stdout + r.stderr, '', 'importing printed output, so main ran or something threw');
+});
+
+test('--preserve-symlinks-main through a symlink still checks and exits 1 on a problem', (t) => {
+  const root = makeRoot(t);
+  rmSync(path.join(root, ORCH_REF));
+  const links = mkdtempSync(path.join(tmpdir(), 'kanon-link-'));
+  t.after(() => rmSync(links, { recursive: true, force: true }));
+  const link = path.join(links, 'catalog-link.mjs');
+  symlinkSync(script, link);
+  const r = spawnSync(process.execPath, ['--preserve-symlinks-main', link, 'check', '--root', root], {
+    encoding: 'utf8',
+  });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.ok(r.stdout.includes(ORCH_REF), r.stdout);
 });
