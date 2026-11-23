@@ -107,6 +107,13 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
 
+## scheduled-tasks/
+
+The prompts of the three Claude Desktop scheduled tasks that run the factory pick-up, one per
+repo group: `factory-pickup/SKILL.md` (backend), `factory-pickup-frontend/SKILL.md` (frontend)
+and `factory-pickup-tools/SKILL.md` (the tool repos). Each prompt's `--repo` flags name the repos
+its lane watches. The install script writes them into the Desktop task folders.
+
 ## Install
 
 Copy a skill folder into `.claude/skills/` in your project, or into `~/.claude/skills/`
@@ -114,8 +121,9 @@ to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
 side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
 files from `laravel-kanon`'s `references/` folder.
 
-For the playbook and the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
-`event-model`, `factory-onboard`), run the install script from a checkout of this repo:
+For the playbook, the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
+`event-model`, `factory-onboard`) and the scheduled task prompts, run the install script from a
+checkout of this repo:
 
 ```
 node playbooks/scripts/install.mjs --source .
@@ -125,11 +133,12 @@ The first install runs the script from the checkout. Later runs use the installe
 `node ~/.agents/playbooks/scripts/install.mjs --source <checkout>`. It fetches the checkout's
 `origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
 from the commit, not the working tree, so a dirty checkout does not matter. It copies
-`playbooks/` into `~/.agents/playbooks/` and each factory skill into `~/.claude/skills/<name>/`,
-writes the commit sha to `~/.agents/playbooks/.installed-sha`, rewrites only files that
-changed, and never deletes a file. It refuses with exit 3 while a claim lock in
-`~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR` or `FACTORY_HOME` to
-install somewhere else. For a single repository, copy `playbooks/` into its `.agents/playbooks/`
+`playbooks/` into `~/.agents/playbooks/`, each factory skill into `~/.claude/skills/<name>/` and
+each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to `~/.agents/playbooks/.installed-sha`, rewrites only files that
+changed, and never deletes a file. It writes a task prompt only when the task folder exists,
+which Claude Desktop creates with the task, and lists a missing one under `skipped`. It refuses
+with exit 3 while a claim lock in `~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`,
+`FACTORY_SKILLS_DIR`, `FACTORY_TASKS_DIR` or `FACTORY_HOME` to install somewhere else. For a single repository, copy `playbooks/` into its `.agents/playbooks/`
 by hand instead.
 
 After each PStack upgrade, run PStack's `check-playbooks.mjs` from the repository root. It
@@ -139,8 +148,10 @@ For unattended runs:
 
 - Register the report MCP server once:
   `claude mcp add --scope user report-stage -- sh <dashboard checkout>/mcp/report-stage/run.sh`.
-- Create the Claude Desktop scheduled task `factory-pickup`. Its prompt text lives in
-  `playbooks/factory.md` under Scheduled pick-up.
+- Create each lane task once in Claude Desktop: `factory-pickup`, `factory-pickup-frontend` and
+  `factory-pickup-tools`, Hourly, Auto permission mode. The instructions text does not matter.
+  Then run the install: it writes each prompt from `scheduled-tasks/` over the task's file, and
+  each armed tick reinstalls it. Schedule, folder and permission mode stay in Desktop.
 - `mkdir -p ~/.factory && touch ~/.factory/armed` arms it. `rm ~/.factory/armed` disarms it.
 
 ## License

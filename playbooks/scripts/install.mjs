@@ -38,7 +38,6 @@ export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 
 // The only place the install list lives: a path prefix in the commit -> its folder on disk.
-// `existingOnly` targets are updated but never created.
 export function installMap({ agentsDir, skillsDir, tasksDir }) {
   return [
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
