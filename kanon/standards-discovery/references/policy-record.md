@@ -58,3 +58,10 @@ A factory run finds the record through `~/.factory/ai-policy.json`, written by t
 ```
 
 A repo listed there is a client repo whatever its `.ai/kanon.yml` says. This covers a client whose overlay is kept out of git.
+
+Rules for the registry:
+
+- Keys are `owner/name`, matched without regard to case. Two keys that differ only in case stop the check on `record`.
+- A record path is absolute, and `~` at its start expands to the home folder. A relative path stops the check on `record`.
+- A registry file that does not exist counts as empty. One that exists but cannot be read (bad JSON, a dangling symlink, a folder that cannot be entered) stops the check on `record`.
+- The mode is read from `.ai/kanon.yml` on origin/main. Two `mode:` lines, or a symlinked `.ai` or `.ai/kanon.yml`, stop the check on `mode`. So does a `--repo` that is not the top level of its git repo.
