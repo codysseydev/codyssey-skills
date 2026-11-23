@@ -91,15 +91,15 @@ function walk(root, schema, value, at, errors) {
 
   if (typeOf(value) === 'object') {
     for (const key of schema.required ?? []) {
-      if (!(key in value)) errors.push({ path: at, message: `missing required property "${key}"` });
+      if (!Object.hasOwn(value, key)) errors.push({ path: at, message: `missing required property "${key}"` });
     }
     const known = schema.properties ?? {};
     for (const [key, sub] of Object.entries(known)) {
-      if (key in value) walk(root, sub, value[key], [...at, key], errors);
+      if (Object.hasOwn(value, key)) walk(root, sub, value[key], [...at, key], errors);
     }
     if (schema.additionalProperties === false) {
       for (const key of Object.keys(value)) {
-        if (!(key in known)) errors.push({ path: at, message: `unknown property "${key}"` });
+        if (!Object.hasOwn(known, key)) errors.push({ path: at, message: `unknown property "${key}"` });
       }
     }
   }
