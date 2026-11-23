@@ -76,12 +76,12 @@ def _scalar(raw):
     return raw.strip().lower()
 
 
-def parse_bool(raw):
+def parse_yes_no(raw):
     value = _scalar(raw)
     if value in ("yes", "true"):
-        return True
+        return "yes"
     if value in ("no", "false"):
-        return False
+        return "no"
     raise ValueError(value)
 
 
@@ -113,10 +113,9 @@ def _model_matches(entry, model):
     return entry == "any" or model == entry or model.startswith(entry + "-")
 
 
-# A forbid rule takes the parsed value and the run's context and returns why the step is
-# forbidden, or None. A step's column holds only what that step adds: STEPS lists the columns.
+# A step's column holds only what that step adds: STEPS lists the columns each step runs.
 def _forbids_if_no(value, ctx):
-    return "no" if value is False else None
+    return "no" if value == "no" else None
 
 
 def _tool_not_listed(value, ctx):
@@ -129,21 +128,17 @@ def _model_not_listed(value, ctx):
     return None if any(_model_matches(entry, model) for entry in value) else f"{model} matches no entry"
 
 
-def _forbids_if_value_no(value, ctx):
-    return "no" if value == "no" else None
-
-
-# key -> (parser, {step column: forbid rule}). Order is the order of the stop's report.
+# Order is the order of the stop's report.
 FIELDS = {
-    "ai_allowed": (parse_bool, {"read-code": _forbids_if_no}),
+    "ai_allowed": (parse_yes_no, {"read-code": _forbids_if_no}),
     "tools": (parse_list, {"read-code": _tool_not_listed}),
     "models": (parse_list, {"read-code": _model_not_listed}),
     "code_leaves_machine": (
         parse_one_of("no", "model-provider", "yes"),
-        {"read-code": _forbids_if_value_no},
+        {"read-code": _forbids_if_no},
     ),
-    "cloud_sessions": (parse_bool, {}),
-    "commit_ai_files": (parse_bool, {"factory-run": _forbids_if_no}),
+    "cloud_sessions": (parse_yes_no, {}),
+    "commit_ai_files": (parse_yes_no, {"factory-run": _forbids_if_no}),
     "retention": (parse_retention, {}),
 }
 
@@ -153,7 +148,7 @@ def check(raw, step, ctx):
     blocking = []
     for key, (parse, rules) in FIELDS.items():
         given = raw.get(key)
-        if given is None or given == "" or given == []:
+        if not given:
             blocking.append({"field": key, "reason": "missing"})
             continue
         try:
