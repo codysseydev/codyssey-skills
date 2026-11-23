@@ -368,6 +368,18 @@ class ClientDetection(TempDirs):
         self.assertEqual(fields(blocking), ["mode"])
         self.assertIn("symlink", blocking[0]["reason"])
 
+    def test_a_symlink_inside_the_ai_folder_is_not_the_kanon_file(self):
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+        put(repo, "README.md", "hello\n")
+        put(repo, ".ai/kanon.yml", "mode: canon-first\n")
+        put(repo, ".ai/notes.md", "notes\n")
+        os.symlink(os.path.join("..", "README.md"), os.path.join(repo, ".ai", "AGENTS.md"))
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
+
     def test_a_repo_without_origin_main_stops_on_mode(self):
         repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")
@@ -577,6 +589,11 @@ class Cli(TempDirs):
         os.chmod(folder, 0)
         self.addCleanup(os.chmod, folder, 0o755)
         self.registry_stop(os.path.join(folder, "ai-policy.json"))
+
+    def test_a_registry_with_a_key_given_twice_stops_on_record(self):
+        directory = self.tmp()
+        put(directory, "ai-policy.json", '{"o/r": "/forbid.md", "o/r": "/allow.md"}')
+        self.registry_stop(os.path.join(directory, "ai-policy.json"))
 
     def test_a_registry_that_is_a_folder_stops_on_record(self):
         self.registry_stop(self.tmp())

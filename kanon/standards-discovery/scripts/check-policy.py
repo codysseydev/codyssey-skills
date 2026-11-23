@@ -200,7 +200,7 @@ def kanon_yml_at(repo, ref=BASE_REF):
         raise RuntimeError(_git_error(listed, "ls-tree"))
     entries = [entry.split(b"\t", 1) for entry in listed.stdout.split(b"\0") if entry]
     for meta, path in entries:
-        if meta.split()[0] == b"120000":
+        if meta.split()[0] == b"120000" and path in (b".ai", b".ai/kanon.yml"):
             raise RuntimeError(f"{path.decode('utf-8', 'replace')} is a symlink")
     if not any(path == b".ai/kanon.yml" for _, path in entries):
         return None
@@ -253,6 +253,15 @@ def client_record(registry, repo_name, repo):
     return mode, None, []
 
 
+def _no_duplicate_keys(pairs):
+    seen = set()
+    for key, _ in pairs:
+        if key in seen:
+            raise ValueError(f"key given twice: {key}")
+        seen.add(key)
+    return dict(pairs)
+
+
 def read_registry(path):
     """The registry's JSON, or {} when the path is truly absent. Raises OSError or ValueError otherwise.
 
@@ -260,7 +269,7 @@ def read_registry(path):
     """
     try:
         with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
+            return json.load(handle, object_pairs_hook=_no_duplicate_keys)
     except FileNotFoundError:
         try:
             os.lstat(path)
