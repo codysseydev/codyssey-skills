@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -75,25 +76,30 @@ def fields(blocking):
     return [b["field"] for b in blocking]
 
 
-def make_origin_repo(kanon_yml=None):
-    """A repo whose refs/remotes/origin/main holds .ai/kanon.yml (or not)."""
-    repo = tempfile.mkdtemp()
-    git(repo, "init", "-q", "-b", "main")
-    put(repo, "README.md", "hello\n")
-    if kanon_yml is not None:
-        put(repo, ".ai/kanon.yml", kanon_yml)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "init")
-    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    return repo
+class TempDirs(unittest.TestCase):
+    def tmp(self):
+        path = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, path, True)
+        return path
+
+    def origin_repo(self, kanon_yml=None):
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+        put(repo, "README.md", "hello\n")
+        if kanon_yml is not None:
+            put(repo, ".ai/kanon.yml", kanon_yml)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        return repo
 
 
-class RecordCheck(unittest.TestCase):
+class RecordCheck(TempDirs):
     def test_missing_record_stops_on_record(self):
         out = io.StringIO()
-        gone = os.path.join(tempfile.mkdtemp(), "nope.md")
+        gone = os.path.join(self.tmp(), "nope.md")
         with contextlib.redirect_stdout(out):
-            code = cp.main(["--record", gone, "--repo", tempfile.mkdtemp(), "--model", "claude-opus-5-5"])
+            code = cp.main(["--record", gone, "--repo", self.tmp(), "--model", "claude-opus-5-5"])
         result = json.loads(out.getvalue())
         self.assertEqual(code, 1)
         self.assertEqual(result["blocking"], [{"field": "record", "reason": "missing"}])
@@ -187,37 +193,37 @@ class RecordCheck(unittest.TestCase):
         self.assertEqual(blocking, [{"field": "commit_ai_files", "reason": "forbids factory-run: no"}])
 
 
-class ClientDetection(unittest.TestCase):
+class ClientDetection(TempDirs):
     def test_no_file_and_no_entry_is_not_a_client(self):
-        repo = make_origin_repo()
+        repo = self.origin_repo()
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
 
     def test_registry_wins_over_an_absent_file(self):
-        repo = make_origin_repo()
+        repo = self.origin_repo()
         self.assertEqual(cp.client_record({"o/r": "/x.md"}, "o/r", repo), ("canon-first", "/x.md", []))
 
     def test_project_first_without_an_entry_stops_on_record(self):
-        repo = make_origin_repo("mode: project-first\n")
+        repo = self.origin_repo("mode: project-first\n")
         mode, rec, blocking = cp.client_record({"other/repo": "/x.md"}, "o/r", repo)
         self.assertEqual((mode, rec), ("project-first", None))
         self.assertEqual(blocking, [{"field": "record", "reason": "missing, no registry entry"}])
 
     def test_project_first_with_an_entry_uses_it(self):
-        repo = make_origin_repo("# overlay\nmode: project-first\n")
+        repo = self.origin_repo("# overlay\nmode: project-first\n")
         self.assertEqual(cp.client_record({"o/r": "/x.md"}, "o/r", repo), ("project-first", "/x.md", []))
 
     def test_bad_mode_stops_on_mode(self):
-        repo = make_origin_repo("mode: fast\n")
+        repo = self.origin_repo("mode: fast\n")
         blocking = cp.client_record({}, "o/r", repo)[2]
         self.assertEqual(fields(blocking), ["mode"])
         self.assertTrue(blocking[0]["reason"].startswith("not an allowed value"))
 
     def test_file_without_a_mode_key_is_canon_first(self):
-        repo = make_origin_repo("rules: []\n")
+        repo = self.origin_repo("rules: []\n")
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
 
     def test_a_worktree_without_the_file_still_reads_origin_main(self):
-        repo = tempfile.mkdtemp()
+        repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")
         put(repo, "README.md", "hello\n")
         git(repo, "add", "-A")
@@ -227,7 +233,7 @@ class ClientDetection(unittest.TestCase):
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "overlay")
         git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-        worktree = os.path.join(tempfile.mkdtemp(), "run")
+        worktree = os.path.join(self.tmp(), "run")
         git(repo, "worktree", "add", "-q", worktree, "run")
         self.assertFalse(os.path.exists(os.path.join(worktree, ".ai")))
         self.assertEqual(cp.client_record({}, "o/r", worktree)[0:2], ("project-first", None))
@@ -235,19 +241,19 @@ class ClientDetection(unittest.TestCase):
         self.assertEqual(cp.client_record({}, "o/r", repo)[0], "project-first")
 
     def test_a_folder_that_is_not_a_repo_stops_on_mode(self):
-        blocking = cp.client_record({}, "o/r", tempfile.mkdtemp())[2]
+        blocking = cp.client_record({}, "o/r", self.tmp())[2]
         self.assertEqual(fields(blocking), ["mode"])
         self.assertTrue(blocking[0]["reason"].startswith("unreadable"))
 
     def test_a_repo_without_origin_main_stops_on_mode(self):
-        repo = tempfile.mkdtemp()
+        repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")
         self.assertEqual(fields(cp.client_record({}, "o/r", repo)[2]), ["mode"])
 
 
-class Scan(unittest.TestCase):
+class Scan(TempDirs):
     def repo_with_policy_files(self):
-        repo = tempfile.mkdtemp()
+        repo = self.tmp()
         put(repo, "README.md", "Intro.\nWe use AI tools here.\n")
         put(repo, ".aiignore", "# secrets\nsecrets/\n\n*.env\n")
         put(repo, "docs/CONTRIBUTING.md", "Do not paste code into ChatGPT.\n")
@@ -278,8 +284,36 @@ class Scan(unittest.TestCase):
         )
         self.assertEqual(len(warnings), 3)
 
+    def test_scan_reads_every_listed_form_and_nothing_else(self):
+        repo = self.tmp()
+        put(repo, ".cursorignore", "build/\n")
+        put(repo, "CONTRIBUTING", "Copilot is fine.\n")
+        put(repo, "README.txt", "Intro.\n")
+        put(repo, ".github/CONTRIBUTING.md", "LLMs are welcome.\n")
+        put(repo, "docs/contributing.rst", "Intro.\n")
+        for outside in ("src/README.md", ".github/workflows/CONTRIBUTING.md", "docs/guide/CONTRIBUTING.md", "NOTES.md"):
+            put(repo, outside, "AI\n")
+        with opened_files() as paths:
+            warnings = cp.scan(repo)
+        listed = [
+            ".cursorignore",
+            "CONTRIBUTING",
+            os.path.join(".github", "CONTRIBUTING.md"),
+            "README.txt",
+            os.path.join("docs", "contributing.rst"),
+        ]
+        self.assertEqual(under(paths, repo), sorted(listed))
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in warnings),
+            sorted([
+                (".cursorignore", "ignore-file"),
+                ("CONTRIBUTING", "ai-clause"),
+                (os.path.join(".github", "CONTRIBUTING.md"), "ai-clause"),
+            ]),
+        )
+
     def test_a_symlinked_policy_file_is_not_opened(self):
-        repo = tempfile.mkdtemp()
+        repo = self.tmp()
         put(repo, "app/x.php", "<?php // AI\n")
         os.symlink(os.path.join("app", "x.php"), os.path.join(repo, "README.md"))
         with opened_files() as paths:
@@ -288,7 +322,7 @@ class Scan(unittest.TestCase):
         self.assertEqual(under(paths, repo), [])
 
     def test_a_symlinked_docs_folder_is_not_listed(self):
-        repo = tempfile.mkdtemp()
+        repo = self.tmp()
         put(repo, "app/CONTRIBUTING.md", "AI\n")
         os.symlink("app", os.path.join(repo, "docs"))
         self.assertEqual(cp.scan(repo), [{"file": "docs", "signal": "symlink"}])
@@ -305,7 +339,7 @@ class Scan(unittest.TestCase):
         self.assertEqual(under(paths, repo), [])
 
 
-class Cli(unittest.TestCase):
+class Cli(TempDirs):
     def run_cli(self, *args):
         proc = subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env=GIT_ENV)
         try:
@@ -315,53 +349,60 @@ class Cli(unittest.TestCase):
         return proc.returncode, out, proc.stderr
 
     def test_exit_codes(self):
-        repo = make_origin_repo()
+        repo = self.origin_repo()
         put(repo, "README.md", "Uses AI.\n")
         common = ["--repo", repo, "--model", "claude-opus-5-5"]
-
-        code, out, _ = self.run_cli("--record", os.path.join(RECORDS, "allowing.md"), *common)
-        self.assertEqual((code, out["result"]), (0, "continue"))
-        self.assertEqual(out["blocking"], [])
-        self.assertEqual(out["warnings"][0]["signal"], "ai-clause")
-
-        code, out, _ = self.run_cli("--record", os.path.join(RECORDS, "forbidding.md"), *common)
-        self.assertEqual((code, out["result"]), (1, "stop"))
-        self.assertEqual(fields(out["blocking"]), ["ai_allowed", "code_leaves_machine"])
-
-        code, out, _ = self.run_cli("--record", os.path.join(RECORDS, "allowing.md"), "--step", "factory-run", *common)
-        self.assertEqual((code, out["result"]), (1, "stop"))
-        self.assertEqual(fields(out["blocking"]), ["commit_ai_files"])
-
-        registry_dir = tempfile.mkdtemp()
+        allowing = os.path.join(RECORDS, "allowing.md")
+        registry_dir = self.tmp()
         registry = os.path.join(registry_dir, "ai-policy.json")
-        put(registry_dir, "ai-policy.json", "{}")
-        code, out, _ = self.run_cli("--registry", registry, "--repo-name", "o/r", *common)
-        self.assertEqual((code, out["result"], out["mode"]), (0, "not-client", "canon-first"))
-        self.assertEqual(out["warnings"], [])
 
-        put(registry_dir, "ai-policy.json", json.dumps({"o/r": os.path.join(RECORDS, "allowing.md")}))
-        code, out, _ = self.run_cli("--registry", registry, "--repo-name", "o/r", "--step", "factory-run", *common)
-        self.assertEqual((code, out["result"]), (1, "stop"))
-        self.assertEqual(fields(out["blocking"]), ["commit_ai_files"])
+        with self.subTest("allowing record continues"):
+            code, out, _ = self.run_cli("--record", allowing, *common)
+            self.assertEqual((code, out["result"]), (0, "continue"))
+            self.assertEqual(out["blocking"], [])
+            self.assertEqual(out["warnings"][0]["signal"], "ai-clause")
 
-        code, out, _ = self.run_cli(
-            "--registry", registry, "--repo-name", "o/r", "--repo", tempfile.mkdtemp(), "--model", "m"
-        )
-        self.assertEqual((code, out["result"], fields(out["blocking"])), (1, "stop", ["mode"]))
+        with self.subTest("forbidding record stops"):
+            code, out, _ = self.run_cli("--record", os.path.join(RECORDS, "forbidding.md"), *common)
+            self.assertEqual((code, out["result"]), (1, "stop"))
+            self.assertEqual(fields(out["blocking"]), ["ai_allowed", "code_leaves_machine"])
+
+        with self.subTest("factory-run step stops on commit_ai_files"):
+            code, out, _ = self.run_cli("--record", allowing, "--step", "factory-run", *common)
+            self.assertEqual((code, out["result"]), (1, "stop"))
+            self.assertEqual(fields(out["blocking"]), ["commit_ai_files"])
+
+        with self.subTest("empty registry is not a client"):
+            put(registry_dir, "ai-policy.json", "{}")
+            code, out, _ = self.run_cli("--registry", registry, "--repo-name", "o/r", *common)
+            self.assertEqual((code, out["result"], out["mode"]), (0, "not-client", "canon-first"))
+            self.assertEqual(out["warnings"], [])
+
+        with self.subTest("registry entry runs the record"):
+            put(registry_dir, "ai-policy.json", json.dumps({"o/r": allowing}))
+            code, out, _ = self.run_cli("--registry", registry, "--repo-name", "o/r", "--step", "factory-run", *common)
+            self.assertEqual((code, out["result"]), (1, "stop"))
+            self.assertEqual(fields(out["blocking"]), ["commit_ai_files"])
+
+        with self.subTest("a folder that is not a repo stops on mode"):
+            code, out, _ = self.run_cli(
+                "--registry", registry, "--repo-name", "o/r", "--repo", self.tmp(), "--model", "m"
+            )
+            self.assertEqual((code, out["result"], fields(out["blocking"])), (1, "stop", ["mode"]))
 
     def test_usage_errors_exit_2(self):
-        common = ["--repo", tempfile.mkdtemp(), "--model", "m"]
+        common = ["--repo", self.tmp(), "--model", "m"]
         record_path = os.path.join(RECORDS, "allowing.md")
         self.assertEqual(self.run_cli("--record", record_path, "--registry", "r.json", "--repo-name", "o/r", *common)[0], 2)
         self.assertEqual(self.run_cli(*common)[0], 2)
         self.assertEqual(self.run_cli("--registry", "r.json", *common)[0], 2)
 
     def test_unreadable_registry_stops_on_record(self):
-        directory = tempfile.mkdtemp()
+        directory = self.tmp()
         put(directory, "ai-policy.json", "[1]")
         code, out, _ = self.run_cli(
             "--registry", os.path.join(directory, "ai-policy.json"), "--repo-name", "o/r",
-            "--repo", make_origin_repo(), "--model", "m",
+            "--repo", self.origin_repo(), "--model", "m",
         )
         self.assertEqual((code, fields(out["blocking"])), (1, ["record"]))
 
