@@ -34,8 +34,8 @@ A Claude Desktop scheduled task `factory-pickup` runs hourly in Auto permission 
 #### Before the run
 
 - Enter through PStack's poteto-mode.
+- At every claim, whatever the action (`plan`, `implement` or `archive`), run the AI policy check (see AI policy in client repos) before reading any code in the repo. A resumed run is a new session, so a check made only at stage 1 would be skipped. Run it first, before the next bullet: `check-playbooks.mjs` reads `.agents/playbooks/` in the repo, which in a client repo is client content.
 - From the repo root run `node <pstack plugin>/skills/poteto-mode/scripts/check-playbooks.mjs`. If it prints any problem, do not start. Open a `factory` issue in `codysseydev/codyssey-skills` to fix the anchors.
-- At every claim, whatever the action (`plan`, `implement` or `archive`), run the AI policy check (see AI policy in client repos) before reading any code in the repo. A resumed run is a new session, so a check made only at stage 1 would be skipped.
 
 #### Project file
 
@@ -58,6 +58,7 @@ A client's AI policy record says whether AI may read the repo's code. The check 
 - A repo is a client repo when `.ai/kanon.yml` on origin/main says `mode: project-first`, or when `~/.factory/ai-policy.json` lists it. The registry is a JSON object of `owner/name` to the record's path in the client's brain. The owner writes it, it stays on this machine and it is never committed. Read `.ai/kanon.yml` from origin/main like the project file. No file or no `mode:` key means canon-first.
 - The command: `python3 ~/.claude/skills/standards-discovery/scripts/check-policy.py --registry ~/.factory/ai-policy.json --repo-name <owner/name> --repo <worktree> --step factory-run --model <model id>`. `<worktree>` is the run's worktree, on any action. The script reads the mode from origin/main through git, never from the worktree, so a branch that lacks or changes `.ai/kanon.yml` does not change the decision. Making the worktree writes files to disk. The model reads none of them before the check.
 - Exit 1 is a stop. Unattended: post one comment naming each blocking field and its reason, add `needs-decision`, report `waiting` with reason `question` and 2 options (the owner fixes the record or the registry; the owner closes the issue), and stop. Interactive: ask with the same options.
+- Any exit other than 0, and any output that is not JSON, is a stop. That includes the script missing on the first tick after a merge, before `install.mjs` has run. Report what the check returned (the exit code and the first lines of stderr) in place of blocking fields, with the same options as exit 1.
 - Exit 0 with `not-client` changes nothing. Exit 0 with `continue` puts the `warnings` in the plan comment. They never stop a run.
 - `commit_ai_files: no` stops `factory-run`, because the factory needs `.factory/playbook.md` on origin/main.
 - The check and the skill run from `~/.claude/skills/`, so a merged change to either takes effect on the next `install.mjs` run.
