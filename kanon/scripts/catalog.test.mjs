@@ -366,6 +366,29 @@ test('running the script through a symlink still checks and exits 1 on a problem
   assert.ok(r.stdout.includes(ORCH_REF), r.stdout);
 });
 
+// A newline in a rendered text field would add lines to the reference and shift the line-to-ID mapping.
+test('a line break in a rendered text field fails check', (t) => {
+  const mutations = {
+    title: (cat) => (cat.title += '\nextra'),
+    intro: (cat) => cat.intro.push('one\ntwo'),
+    heading: (cat) => (cat.sections[0].heading += '\nextra'),
+    'section intro': (cat) => cat.sections[0].intro.push('one\ntwo'),
+    rule: (cat) => (find(cat, 'ORCH-005').entry.rule += '\n- injected'),
+    'rule with a carriage return': (cat) => (find(cat, 'ORCH-005').entry.rule += '\r- injected'),
+    items: (cat) => (find(cat, 'ORCH-008').entry.items[0] += '\n  - injected'),
+    note: (cat) => cat.sections[0].entries.push({ note: 'one\ntwo' }),
+  };
+  for (const [name, mutate] of Object.entries(mutations)) {
+    const root = makeRoot(t);
+    const cat = readJson(root, ORCH_JSON);
+    mutate(cat);
+    writeJson(root, ORCH_JSON, cat);
+    const r = run(root, 'check');
+    assert.equal(r.status, 1, `${name}: ${r.out}`);
+    assert.ok(r.lines.some((l) => l.includes('does not match pattern')), `${name}: ${r.out}`);
+  }
+});
+
 test('the validator throws on a schema keyword it does not implement', async () => {
   const { validate } = await import('./catalog.mjs');
   assert.throws(() => validate({ type: 'string', minLength: 1 }, 'x'), /minLength/);
