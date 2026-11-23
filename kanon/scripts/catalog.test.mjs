@@ -328,6 +328,7 @@ test('an ID removed since the base ref fails check --base', (t) => {
   assert.ok(r.lines[0].includes('ORCH-005'), r.out);
   assert.ok(r.lines[0].includes(ORCH_JSON), r.out);
   assert.ok(r.lines[0].includes(base), r.out);
+  assert.ok(r.lines[0].includes(`(merge-base ${base.slice(0, 7)})`), r.out);
 });
 
 test('check --base passes when the base ref has no catalog', (t) => {

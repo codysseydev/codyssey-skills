@@ -252,9 +252,9 @@ function gitOut(root, args) {
 
 // IDs in the catalog files of a git ref as of `git merge-base <ref> HEAD`, so IDs main gained since do not
 // count against a branch that is behind. With no merge-base (unrelated histories) the ref tip is read.
-// Map(id -> "file entry-path"); problems go to `problems`.
+// Returns { ids: Map(id -> "file entry-path"), label } where label names the commit the IDs came from,
+// e.g. "base origin/main (merge-base 6485e3a)"; problems go to `problems`.
 function baseIds(root, ref, problems) {
-  const ids = new Map();
   try {
     if (ref.startsWith('-')) throw new Error('ref starts with "-"');
     gitOut(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
@@ -262,12 +262,17 @@ function baseIds(root, ref, problems) {
     problems.push(`base ref "${ref}" does not exist (or ${root} is not a git repository)`);
     return undefined;
   }
-  let at = ref;
+  let at;
+  let source = 'merge-base';
   try {
     at = gitOut(root, ['merge-base', ref, 'HEAD']).trim();
   } catch {
     // no common ancestor: keep the ref tip
+    at = gitOut(root, ['rev-parse', `${ref}^{commit}`]).trim();
+    source = 'tip';
   }
+  const label = `base ${ref} (${source} ${at.slice(0, 7)})`;
+  const ids = new Map();
   const listing = gitOut(root, ['ls-tree', '-r', '--name-only', at, '--', CATALOG_DIR]);
   const files = listing
     .split('\n')
@@ -278,12 +283,12 @@ function baseIds(root, ref, problems) {
     try {
       data = JSON.parse(gitOut(root, ['show', `${at}:${file}`]));
     } catch (error) {
-      problems.push(`base ${ref}: ${file}: cannot read as JSON: ${error.message}`);
+      problems.push(`${label}: ${file}: cannot read as JSON: ${error.message}`);
       continue;
     }
     for (const { where, entry } of eachRule(data)) ids.set(entry.id, `${file} ${where}`);
   }
-  return ids;
+  return { ids, label };
 }
 
 function firstDifference(actual, expected) {
@@ -382,10 +387,10 @@ export function collectProblems(root, { base, skipReferences = false } = {}) {
 
   if (base !== undefined) {
     const before = baseIds(root, base, problems);
-    for (const [id, where] of before ?? []) {
+    for (const [id, where] of before?.ids ?? []) {
       if (!seenIds.has(id)) {
         problems.push(
-          `base ${base}: ${id} (${where}) is missing from the catalog; retire a rule with status "deprecated", do not delete it`
+          `${before.label}: ${id} (${where}) is missing from the catalog; retire a rule with status "deprecated", do not delete it`
         );
       }
     }
