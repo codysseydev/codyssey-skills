@@ -373,13 +373,23 @@ test('check --base reads the IDs at the merge-base, not at the tip of the ref', 
   git(dir, 'branch', '-M', 'main');
   git(dir, 'checkout', '-q', '-b', 'feature');
   git(dir, 'checkout', '-q', 'main');
-  writeJson(dir, 'kanon/catalog/http-api.json', httpApiCatalog());
+  // The ID main gains must be one no feature branch can have, whichever real families are converted by then,
+  // so the family is a test-only row (prefix ZZ) added to families.json too.
+  const rows = readJson(dir, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz-test/references/zz-test.md' });
+  writeJson(dir, 'kanon/catalog/families.json', rows);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  zz.sections[0].entries[0].family = 'zz-test';
+  writeJson(dir, 'kanon/catalog/zz-test.json', zz);
   assert.equal(run(dir, 'generate').status, 0);
+  assert.ok(existsSync(path.join(dir, 'kanon/zz-test/references/zz-test.md')));
   commit(dir, 'main gains a family');
   git(dir, 'checkout', '-q', 'feature');
 
   const behind = run(dir, 'check', '--base', 'main');
-  assert.equal(behind.status, 0, 'a branch behind main must not be asked to keep IDs it never had');
+  assert.equal(behind.status, 0, behind.out);
+  assert.ok(!behind.out.includes('ZZ-001'), 'a branch behind main must not be asked to keep IDs it never had');
 
   const cat = readJson(dir, ORCH_JSON);
   const { sec, e } = find(cat, 'ORCH-005');
@@ -390,7 +400,7 @@ test('check --base reads the IDs at the merge-base, not at the tip of the ref', 
   assert.equal(r.status, 1, 'an ID present at the merge-base is still protected');
   assert.equal(r.lines.length, 1, r.out);
   assert.ok(r.lines[0].includes('ORCH-005'), r.out);
-  assert.ok(!r.out.includes('HTTP-001'), r.out);
+  assert.ok(!r.out.includes('ZZ-001'), r.out);
 });
 
 test('check --base fails when the ref does not exist', (t) => {
