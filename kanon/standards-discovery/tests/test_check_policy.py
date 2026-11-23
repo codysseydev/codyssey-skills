@@ -313,6 +313,39 @@ class ClientDetection(TempDirs):
         mode, rec, blocking = cp.client_record({}, "o/r", link)
         self.assertEqual((mode, rec, fields(blocking)), ("project-first", None, ["record"]))
 
+    def test_a_second_mode_line_stops_on_mode(self):
+        for text in ("mode: canon-first\nmode: project-first\n", "mode: project-first\nmode: project-first\n"):
+            with self.subTest(text):
+                repo = self.origin_repo(text)
+                blocking = cp.client_record({}, "o/r", repo)[2]
+                self.assertEqual(fields(blocking), ["mode"])
+                self.assertIn("twice", blocking[0]["reason"])
+
+    def test_a_symlinked_kanon_file_stops_on_mode(self):
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+        put(repo, "README.md", "mode: canon-first\n")
+        os.makedirs(os.path.join(repo, ".ai"))
+        os.symlink(os.path.join("..", "README.md"), os.path.join(repo, ".ai", "kanon.yml"))
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        blocking = cp.client_record({}, "o/r", repo)[2]
+        self.assertEqual(fields(blocking), ["mode"])
+        self.assertIn("symlink", blocking[0]["reason"])
+
+    def test_a_symlinked_ai_folder_stops_on_mode(self):
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+        put(repo, "elsewhere/kanon.yml", "mode: project-first\n")
+        os.symlink("elsewhere", os.path.join(repo, ".ai"))
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        blocking = cp.client_record({}, "o/r", repo)[2]
+        self.assertEqual(fields(blocking), ["mode"])
+        self.assertIn("symlink", blocking[0]["reason"])
+
     def test_a_repo_without_origin_main_stops_on_mode(self):
         repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")

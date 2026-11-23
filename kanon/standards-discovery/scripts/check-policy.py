@@ -195,10 +195,14 @@ def require_top_level(repo):
 
 def kanon_yml_at(repo, ref=BASE_REF):
     """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError when it cannot be read."""
-    listed = _git(repo, "ls-tree", "--full-tree", ref, "--", ".ai/kanon.yml")
+    listed = _git(repo, "ls-tree", "-z", "--full-tree", ref, "--", ".ai", ".ai/kanon.yml")
     if listed.returncode != 0:
         raise RuntimeError(_git_error(listed, "ls-tree"))
-    if not listed.stdout.strip():
+    entries = [entry.split(b"\t", 1) for entry in listed.stdout.split(b"\0") if entry]
+    for meta, path in entries:
+        if meta.split()[0] == b"120000":
+            raise RuntimeError(f"{path.decode('utf-8', 'replace')} is a symlink")
+    if not any(path == b".ai/kanon.yml" for _, path in entries):
         return None
     shown = _git(repo, "show", f"{ref}:.ai/kanon.yml")
     if shown.returncode != 0:
@@ -216,12 +220,14 @@ def client_record(registry, repo_name, repo):
         text = kanon_yml_at(repo)
     except RuntimeError as error:
         return None, None, [{"field": "mode", "reason": f"unreadable: {error}"}]
-    mode = "canon-first"
-    for line in (text or "").splitlines():
-        found = re.match(r"^[\"']?mode[\"']?[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$", line)
-        if found:
-            mode = _unquote(found.group(1))
-            break
+    given = [
+        found.group(1)
+        for line in (text or "").splitlines()
+        if (found := re.match(r"^[\"']?mode[\"']?[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$", line))
+    ]
+    if len(given) > 1:
+        return None, None, [{"field": "mode", "reason": "mode given twice in .ai/kanon.yml"}]
+    mode = _unquote(given[0]) if given else "canon-first"
     if mode not in MODES:
         return mode, None, [{"field": "mode", "reason": f"not an allowed value: {mode}"}]
     by_name = {name.casefold(): path for name, path in registry.items()}
