@@ -77,6 +77,30 @@ function commit(dir, message) {
   return git(dir, 'rev-parse', 'HEAD').trim();
 }
 
+// A one-entry catalog for a second family; `id` lets a test reuse another family's ID.
+const httpApiCatalog = (id = 'HTTP-001') => ({
+  family: 'http-api',
+  title: 'HTTP',
+  intro: [],
+  sections: [
+    {
+      heading: 'Routes',
+      intro: [],
+      list: 'bullet',
+      entries: [
+        {
+          id,
+          family: 'http-api',
+          scope: 'laravel',
+          keyword: 'MUST',
+          rule: 'Routes **MUST** be named.',
+          status: 'active',
+        },
+      ],
+    },
+  ],
+});
+
 test('repo catalog passes check', () => {
   const r = run(repoRoot, 'check');
   assert.equal(r.status, 0, r.out);
@@ -129,28 +153,7 @@ test('two entries sharing an ID in one file fail and name both entries', (t) => 
 test('two entries sharing an ID across two files fail and name both entries', (t) => {
   const root = makeRoot(t);
   const orch = find(readJson(root, ORCH_JSON), 'ORCH-001');
-  writeJson(root, 'kanon/catalog/http-api.json', {
-    family: 'http-api',
-    title: 'HTTP',
-    intro: [],
-    sections: [
-      {
-        heading: 'Routes',
-        intro: [],
-        list: 'bullet',
-        entries: [
-          {
-            id: 'ORCH-001',
-            family: 'http-api',
-            scope: 'laravel',
-            keyword: 'MUST',
-            rule: 'Routes **MUST** be named.',
-            status: 'active',
-          },
-        ],
-      },
-    ],
-  });
+  writeJson(root, 'kanon/catalog/http-api.json', httpApiCatalog('ORCH-001'));
   const r = run(root, 'check');
   assert.equal(r.status, 1);
   const line = r.lines.find((l) => l.includes('duplicate ID'));
@@ -200,28 +203,7 @@ test('a missing reference fails and names it', (t) => {
 // A second family with its generated reference must not change what a single-problem test reports.
 test('a second family that is in order adds no problem to a one-problem result', (t) => {
   const root = makeRoot(t);
-  writeJson(root, 'kanon/catalog/http-api.json', {
-    family: 'http-api',
-    title: 'HTTP',
-    intro: [],
-    sections: [
-      {
-        heading: 'Routes',
-        intro: [],
-        list: 'bullet',
-        entries: [
-          {
-            id: 'HTTP-001',
-            family: 'http-api',
-            scope: 'laravel',
-            keyword: 'MUST',
-            rule: 'Routes **MUST** be named.',
-            status: 'active',
-          },
-        ],
-      },
-    ],
-  });
+  writeJson(root, 'kanon/catalog/http-api.json', httpApiCatalog());
   const gen = run(root, 'generate');
   assert.equal(gen.status, 0, gen.out);
   assert.equal(run(root, 'check').status, 0);
@@ -324,6 +306,33 @@ test('check --base passes when the base ref has no catalog', (t) => {
   git(dir, 'fetch', '-q', empty, noCatalog);
   const r = run(dir, 'check', '--base', noCatalog);
   assert.equal(r.status, 0, r.out);
+});
+
+// A base ref that no commit of HEAD descends from (unrelated histories) has no merge-base; the ref tip is read.
+test('check --base reads the IDs at the merge-base, not at the tip of the ref', (t) => {
+  const dir = makeRepo(t);
+  commit(dir, 'base');
+  git(dir, 'branch', '-M', 'main');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  git(dir, 'checkout', '-q', 'main');
+  writeJson(dir, 'kanon/catalog/http-api.json', httpApiCatalog());
+  assert.equal(run(dir, 'generate').status, 0);
+  commit(dir, 'main gains a family');
+  git(dir, 'checkout', '-q', 'feature');
+
+  const behind = run(dir, 'check', '--base', 'main');
+  assert.equal(behind.status, 0, 'a branch behind main must not be asked to keep IDs it never had');
+
+  const cat = readJson(dir, ORCH_JSON);
+  const { sec, e } = find(cat, 'ORCH-005');
+  sec.entries.splice(e, 1);
+  writeJson(dir, ORCH_JSON, cat);
+  assert.equal(run(dir, 'generate').status, 0);
+  const r = run(dir, 'check', '--base', 'main');
+  assert.equal(r.status, 1, 'an ID present at the merge-base is still protected');
+  assert.equal(r.lines.length, 1, r.out);
+  assert.ok(r.lines[0].includes('ORCH-005'), r.out);
+  assert.ok(!r.out.includes('HTTP-001'), r.out);
 });
 
 test('check --base fails when the ref does not exist', (t) => {
