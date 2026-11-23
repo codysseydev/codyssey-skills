@@ -73,7 +73,6 @@ function fixture() {
   const tasksDir = join(root, 'tasks');
   const home = join(root, 'home');
   for (const dir of [agentsDir, skillsDir, home]) mkdirSync(dir);
-  // Desktop makes a task's folder when the task is created; the fixture has every listed task.
   for (const name of FACTORY_TASKS) mkdirSync(join(tasksDir, name), { recursive: true });
   const runScript = (script, ...args) => {
     const r = spawnSync('node', [script, ...args], {
@@ -398,8 +397,6 @@ test('a lock that appears during the fetch refuses and writes nothing', () => {
   assert.deepEqual(result.locks, [join(f.home, 'locks', 'o-r-1')]);
   nothingWritten(f);
 });
-
-// ---------- scheduled task prompts ----------
 
 const prompt = (f, name) => join(f.tasksDir, name, 'SKILL.md');
 const repoPrompt = (name) => readFileSync(join(REPO, 'scheduled-tasks', name, 'SKILL.md'));
