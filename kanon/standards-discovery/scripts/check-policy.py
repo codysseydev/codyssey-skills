@@ -304,6 +304,8 @@ def main(argv=None):
         parser.error("give exactly one of --record and --registry")
     if args.registry and not args.repo_name:
         parser.error("--registry needs --repo-name")
+    if not os.path.isdir(args.repo):
+        parser.error(f"--repo is not a directory: {args.repo}")
     if args.record:
         args.record = os.path.expanduser(args.record)
     if args.registry:

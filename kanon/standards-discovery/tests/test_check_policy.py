@@ -490,6 +490,12 @@ class Cli(TempDirs):
         self.assertEqual(self.run_cli(*common)[0], 2)
         self.assertEqual(self.run_cli("--registry", "r.json", *common)[0], 2)
 
+    def test_a_repo_that_is_not_a_directory_exits_2(self):
+        record_path = os.path.join(RECORDS, "allowing.md")
+        for repo in (os.path.join(self.tmp(), "missing"), record_path):
+            with self.subTest(repo):
+                self.assertEqual(self.run_cli("--record", record_path, "--repo", repo, "--model", "m")[0], 2)
+
     def test_unreadable_registry_stops_on_record(self):
         directory = self.tmp()
         put(directory, "ai-policy.json", "[1]")
