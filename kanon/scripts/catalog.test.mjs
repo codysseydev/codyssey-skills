@@ -418,6 +418,33 @@ test('check fails when schema.json uses a keyword the validator lacks', (t) => {
   assert.ok(r.out.includes('minLength'), r.out);
 });
 
+// Names that Object.prototype also has must be treated like any other key.
+test('the validator is not fooled by keys named like Object.prototype members', async () => {
+  const { validate } = await import('./catalog.mjs');
+  const strict = { type: 'object', additionalProperties: false, properties: { id: { type: 'string' } } };
+  for (const key of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+    const value = JSON.parse(`{"id": "x", "${key}": 1}`);
+    const messages = validate(strict, value).map((e) => e.message);
+    assert.deepEqual(messages, [`unknown property "${key}"`], key);
+  }
+  const needs = { type: 'object', required: ['toString', 'constructor'] };
+  assert.equal(validate(needs, {}).length, 2);
+  assert.deepEqual(validate(needs, JSON.parse('{"toString": 1, "constructor": 2}')), []);
+  const declared = { type: 'object', properties: { constructor: { type: 'string' } } };
+  assert.equal(validate(declared, {}).length, 0);
+  assert.equal(validate(declared, JSON.parse('{"constructor": 1}')).length, 1);
+});
+
+test('an entry with a constructor key fails check', (t) => {
+  const root = makeRoot(t);
+  const text = read(root, ORCH_JSON).replace('"id": "ORCH-005",', '"id": "ORCH-005", "constructor": "x",');
+  assert.notEqual(text, read(root, ORCH_JSON));
+  writeFileSync(path.join(root, ORCH_JSON), text);
+  const r = run(root, 'check');
+  assert.equal(r.status, 1);
+  assert.ok(r.lines.some((l) => l.includes('(ORCH-005)') && l.includes('unknown property "constructor"')), r.out);
+});
+
 test('the validator enforces type, required, enum, pattern, items, minItems and additionalProperties', async () => {
   const { validate } = await import('./catalog.mjs');
   const schema = {
