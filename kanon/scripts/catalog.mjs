@@ -448,6 +448,10 @@ function main(argv) {
   }
 }
 
-if (import.meta.main) {
+// Without import.meta.main (Node before 22.18 and 24.2) the check would exit 0 having checked nothing.
+if (import.meta.main === undefined) {
+  console.error('catalog.mjs needs a Node where import.meta.main exists (Node >= 22.18 or >= 24.2).');
+  process.exitCode = 2;
+} else if (import.meta.main) {
   process.exitCode = main(process.argv.slice(2));
 }
