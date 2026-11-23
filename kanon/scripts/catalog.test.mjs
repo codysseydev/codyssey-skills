@@ -279,6 +279,37 @@ test('a deprecated entry is left out, and a new entry with its ID fails check', 
   assert.ok(r.lines.some((l) => l.includes('duplicate ID') && l.includes('(ORCH-005)')), r.out);
 });
 
+test('a candidate entry is left out of the generated reference', (t) => {
+  const root = makeRoot(t);
+  const cat = readJson(root, ORCH_JSON);
+  find(cat, 'ORCH-005').entry.status = 'candidate';
+  writeJson(root, ORCH_JSON, cat);
+  const gen = run(root, 'generate');
+  assert.equal(gen.status, 0, gen.out);
+  const text = read(root, ORCH_REF);
+  assert.ok(!text.includes('ORCH-005') && !text.includes('recoverIfPastDue'));
+  assert.ok(text.includes('`ORCH-004`') && text.includes('`ORCH-006`'));
+  assert.equal(run(root, 'check').status, 0);
+});
+
+test('generate writes nothing when the catalog has a problem', (t) => {
+  const root = makeRoot(t);
+  const before = read(root, ORCH_REF);
+  const cat = readJson(root, ORCH_JSON);
+  delete find(cat, 'ORCH-005').entry.keyword;
+  find(cat, 'ORCH-006').entry.status = 'deprecated';
+  writeJson(root, ORCH_JSON, cat);
+  const gen = run(root, 'generate');
+  assert.equal(gen.status, 1, gen.out);
+  assert.equal(gen.lines.length, 1, gen.out);
+  assert.ok(gen.lines[0].includes('(ORCH-005)'), gen.out);
+  assert.equal(read(root, ORCH_REF), before, 'the reference was rewritten');
+
+  rmSync(path.join(root, ORCH_REF));
+  assert.equal(run(root, 'generate').status, 1);
+  assert.ok(!existsSync(path.join(root, ORCH_REF)), 'the reference was created');
+});
+
 test('an ID removed since the base ref fails check --base', (t) => {
   const dir = makeRepo(t);
   const base = commit(dir, 'base');
