@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
-export const FACTORY_TASKS = ['factory-pickup'];
+export const FACTORY_TASKS = ['factory-pickup', 'factory-pickup-frontend', 'factory-pickup-tools'];
 export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 

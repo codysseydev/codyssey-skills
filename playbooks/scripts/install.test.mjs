@@ -472,5 +472,6 @@ test('each repo prompt runs the install before it claims', () => {
 });
 
 test('scheduled-tasks/ in the repo holds exactly the listed task folders', () => {
-  assert.deepEqual(readdirSync(join(REPO, 'scheduled-tasks')).sort(), [...FACTORY_TASKS].sort());
+  const folders = readdirSync(join(REPO, 'scheduled-tasks'), { withFileTypes: true }).filter((e) => e.isDirectory());
+  assert.deepEqual(folders.map((e) => e.name).sort(), [...FACTORY_TASKS].sort());
 });
