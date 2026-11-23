@@ -351,6 +351,39 @@ class Scan(TempDirs):
             ]),
         )
 
+    def test_a_dotted_abbreviation_is_an_ai_clause(self):
+        repo = self.tmp()
+        put(repo, "README.md", "Use of A.I. tools is banned.\n")
+        self.assertEqual(
+            cp.scan(repo),
+            [{"file": "README.md", "line": 1, "signal": "ai-clause", "text": "Use of A.I. tools is banned."}],
+        )
+
+    def test_a_policy_name_that_is_not_a_regular_file_is_unreadable(self):
+        repo = self.tmp()
+        put(repo, "README/inner.md", "AI\n")
+        os.mkdir(os.path.join(repo, ".aiignore"))
+        with opened_files() as paths:
+            warnings = cp.scan(repo)
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in warnings),
+            [(".aiignore", "unreadable"), ("README", "unreadable")],
+        )
+        self.assertEqual(under(paths, repo), [])
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores file modes")
+    def test_a_file_or_folder_that_cannot_be_read_is_unreadable(self):
+        repo = self.tmp()
+        put(repo, "README.md", "AI\n")
+        put(repo, "docs/CONTRIBUTING.md", "AI\n")
+        for rel in ("README.md", "docs"):
+            os.chmod(os.path.join(repo, rel), 0)
+            self.addCleanup(os.chmod, os.path.join(repo, rel), 0o755)
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in cp.scan(repo)),
+            [("README.md", "unreadable"), ("docs", "unreadable")],
+        )
+
     def test_a_symlinked_policy_file_is_not_opened(self):
         repo = self.tmp()
         put(repo, "app/x.php", "<?php // AI\n")

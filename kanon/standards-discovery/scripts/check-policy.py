@@ -225,7 +225,7 @@ def client_record(registry, repo_name, repo):
 # ---------- the scan ----------
 
 AI_CLAUSE = re.compile(
-    r"\b(AI|A\.I\.|artificial intelligence|LLMs?|large language models?|ChatGPT|Copilot|Claude|Cursor|generative|GPT-?\d*)\b",
+    r"(?<!\w)(AI|A\.I\.|artificial intelligence|LLMs?|large language models?|ChatGPT|Copilot|Claude|Cursor|generative|GPT-?\d*)(?!\w)",
     re.IGNORECASE,
 )
 _TEXT_EXT = r"(\.(md|markdown|rst|txt))?"
@@ -235,32 +235,50 @@ IGNORE_FILES = (".aiignore", ".cursorignore")
 
 
 def policy_files(repo):
-    """Relative paths of the files the scan may open. Lists only the root, .github/ and docs/."""
-    found = [name for name in IGNORE_FILES if os.path.lexists(os.path.join(repo, name))]
+    """Yield (relative path, kind) for each file the scan may open. Lists only the root, .github/ and docs/.
+
+    kind is ignore-file, clause, symlink, or unreadable for a name that is not a regular file or a folder that cannot be listed.
+    """
+    def kind_of(rel, kind):
+        path = os.path.join(repo, rel)
+        if os.path.islink(path):
+            return "symlink"
+        return kind if os.path.isfile(path) else "unreadable"
+
+    for name in IGNORE_FILES:
+        if os.path.lexists(os.path.join(repo, name)):
+            yield name, kind_of(name, "ignore-file")
     for folder, pattern in (("", README_OR_CONTRIBUTING), (".github", CONTRIBUTING), ("docs", CONTRIBUTING)):
         path = os.path.join(repo, folder)
         if folder and os.path.islink(path):
-            found.append(folder)
-        elif os.path.isdir(path):
-            found += [os.path.join(folder, name) for name in sorted(os.listdir(path)) if pattern.fullmatch(name)]
-    return found
+            yield folder, "symlink"
+            continue
+        if not os.path.isdir(path):
+            continue
+        try:
+            names = sorted(os.listdir(path))
+        except OSError:
+            yield folder or ".", "unreadable"
+            continue
+        for name in names:
+            if pattern.fullmatch(name):
+                rel = os.path.join(folder, name)
+                yield rel, kind_of(rel, "clause")
 
 
 def scan(repo):
     warnings = []
-    for rel in policy_files(repo):
-        path = os.path.join(repo, rel)
-        if os.path.islink(path):
-            warnings.append({"file": rel, "signal": "symlink"})
-            continue
-        if not os.path.isfile(path):
+    for rel, kind in policy_files(repo):
+        if kind in ("symlink", "unreadable"):
+            warnings.append({"file": rel, "signal": kind})
             continue
         try:
-            with open(path, encoding="utf-8", errors="replace") as handle:
+            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as handle:
                 lines = handle.read().splitlines()
         except OSError:
+            warnings.append({"file": rel, "signal": "unreadable"})
             continue
-        if os.path.basename(rel) in IGNORE_FILES:
+        if kind == "ignore-file":
             patterns = [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
             warnings.append({"file": rel, "signal": "ignore-file", "patterns": patterns})
             continue
