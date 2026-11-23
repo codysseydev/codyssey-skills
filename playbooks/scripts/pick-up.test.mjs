@@ -278,6 +278,62 @@ test('claim writes attempt to claim.json, the output and the claimed event', asy
   assert.equal(events[0].attempt, 2);
 });
 
+// A gh failure as execFileSync throws it: the message names the command, stderr says what went wrong.
+const ghFailure = () => Object.assign(new Error('Command failed: gh api --paginate --slurp ...'), { stderr: 'HTTP 502: Bad Gateway\n' });
+const BAD_TIMELINE = 'attempt unknown: HTTP 502: Bad Gateway';
+
+// Issue 1's timeline fails, a stale lock on issue 4 is swept first.
+function unreadableTimeline(issues) {
+  const f = fake({ nowMs: T0 + 5 * H, issues: { [R]: issues } });
+  writeLock(f.stateDir, R, 4, 'old', ISO0);
+  const read = f.d.gh.timeline;
+  f.d.gh.timeline = (repo, n) => {
+    if (n === 1) throw ghFailure();
+    return read(repo, n);
+  };
+  const touched = (n) => f.calls.filter(([name, , num]) => (name === 'addLabel' || name === 'comment') && num === n);
+  return { ...f, touched, locked: (n) => existsSync(join(f.stateDir, 'locks', lockName(R, n))) };
+}
+
+test('claim with an unreadable timeline skips the issue and moves on', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1), issue(2)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.equal(out.status, 'claimed');
+  assert.equal(out.issue, 2);
+  assert.deepEqual(out.skipped, [{ repo: R, issue: 1, reason: BAD_TIMELINE }]);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+  assert.equal(locked(2), true);
+});
+
+test('claim with only an unreadable timeline returns none with the skip and keeps stale', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false });
+  assert.equal(out.status, 'none');
+  assert.deepEqual(out.skipped, [{ repo: R, issue: 1, reason: BAD_TIMELINE }]);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+});
+
+test('claim --only with an unreadable timeline returns none with the reason and keeps stale', async () => {
+  const { d, touched, locked } = unreadableTimeline([issue(1), issue(2)]);
+  const out = await cmdClaim(d, { repos: [R], runId: 'a', only: { repo: R, issue: 1 }, dryRun: false });
+  assert.deepEqual(Object.keys(out).sort(), ['reason', 'stale', 'status']);
+  assert.equal(out.status, 'none');
+  assert.equal(out.reason, BAD_TIMELINE);
+  assert.deepEqual(out.stale.map((e) => e.issue), [4]);
+  assert.equal(locked(1), false);
+  assert.deepEqual(touched(1), []);
+});
+
+test('claims with readable timelines carry no skipped field', async () => {
+  const { d } = fake({ issues: { [R]: [issue(1)] } });
+  assert.equal('skipped' in await cmdClaim(d, { repos: [R], runId: 'a', dryRun: false }), false);
+  assert.deepEqual(await cmdClaim(d, { repos: [R], runId: 'b', dryRun: false }), { status: 'none', stale: [] });
+});
+
 test('stale: exactly 4h is not stale, just over is', () => {
   const at = new Date(T0).toISOString();
   assert.equal(isStale(at, T0 + 4 * H), false);

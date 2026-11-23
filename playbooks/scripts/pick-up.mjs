@@ -238,7 +238,7 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const shortError = (e) => {
   if (e?.name === 'TimeoutError' || e?.name === 'AbortError') return 'timeout';
-  return String(e?.cause?.code ?? e?.message ?? e).replace(/\s+/g, ' ').slice(0, 80);
+  return String(e?.cause?.code ?? (e?.stderr || e?.message) ?? e).replace(/\s+/g, ' ').trim().slice(0, 80);
 };
 
 // post(event) resolves to the `dashboard` field value and writes one stderr line on anything but "sent".
@@ -537,10 +537,22 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
   const eligible = evaluated.filter((e) => e.result.eligible);
   if (only && !eligible.length) return { status: 'none', reason: evaluated[0].result.reason, stale };
 
+  // An issue whose timeline cannot be read is skipped before its lock, so it stays eligible for
+  // the next tick and does not hold back the issues after it.
+  const skipped = [];
+  const withSkipped = (out) => (skipped.length ? { ...out, skipped } : out);
   mkdirSync(locksDir(d), { recursive: true });
   for (const e of eligible) {
     const dir = lockPath(d, e.repo, e.issue.number);
-    const attempt = attemptFromTimeline(d.gh.timeline(e.repo, e.issue.number));
+    let attempt;
+    try {
+      attempt = attemptFromTimeline(d.gh.timeline(e.repo, e.issue.number));
+    } catch (err) {
+      const reason = `attempt unknown: ${shortError(err)}`;
+      if (only) return { status: 'none', reason, stale };
+      skipped.push({ repo: e.repo, issue: e.issue.number, reason });
+      continue;
+    }
     try {
       mkdirSync(dir); // atomic claim: fails with EEXIST when another run holds it
     } catch (err) {
@@ -570,7 +582,7 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
       : await sendEvent(d, {
           run_id: runId, repo: e.repo, issue_number: e.issue.number, event: 'claimed', action, attempt, occurred_at: claimedAt,
         });
-    return {
+    return withSkipped({
       status: 'claimed',
       repo: e.repo,
       issue: e.issue.number,
@@ -581,9 +593,9 @@ export async function cmdClaim(d, { repos, runId, only, dryRun }) {
       dry_run: dryRun,
       dashboard,
       stale,
-    };
+    });
   }
-  return { status: 'none', stale };
+  return withSkipped({ status: 'none', stale });
 }
 
 export async function cmdRelease(d, { repo, issue, runId }) {
