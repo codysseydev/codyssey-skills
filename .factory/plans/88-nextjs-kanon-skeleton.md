@@ -21,10 +21,10 @@ Build the skeleton of `kanon/nextjs-kanon` that the rule issues #89 to #96 fill 
 
 ### `kanon/nextjs-kanon/references/index.md` (new)
 
-- Layers, id scheme and prefixes, entry format, notes policy, source policy, names rules may cite, guard-test rows.
+- Layers, id scheme and prefixes, entry format, notes policy, source policy, names rules may cite, guard-test rows, and the checks the template may ship (stage 2 decides).
 - Counts per file, copied from the issue.
 - The frontend accounting line, as numbers only.
-- The id map: 325 rows, one per pack id, with file, layer, `From:` and a note column. The note column is used once, on the A11 Cloudflare clause row.
+- The id map: 325 rows, one per pack id, with file, layer, `From:` and a note column. The note column is used on three rows: the A11 Cloudflare clause row, and the I9 and I10 core part rows, which carry no `Tags:` line.
 
 The map comes from a script that parses the Scope tables of #89 to #96, cross-checks them against the rule recount and the review sheet, and reads prose order from `codysseydev/codyssey-frontend` at `abdfd9f2`. A second script counts the committed `index.md` table on its own. Both run outside the repo. Their source and output go in the PR body.
 
@@ -53,7 +53,19 @@ Each has `paths:` frontmatter, a title, a one-paragraph scope, a severity paragr
    - `install.mjs` does not change.
    - The count script is not committed.
    - `data-and-rendering.md` has no "Rendering HTML safely" section, since all its rules are add-on rules. `tooling.md` has no I-family section, and its first section drops the "(C family)" tag. `design-principles.md` has no "Considered and not proposed" section; #93 writes it.
-   - `paths:` globs name no product feature folder. `app/edge/**` becomes `app/**/route.ts`. `next.config.*` is in `data-and-rendering.md`, `access-and-security.md` and the overlay, not `tooling.md`. The Sentry, Turnstile and Plausible add-ons also carry it (owner decision 2026-11-24, see below). `wrangler.jsonc`, `worker.js` and `open-next.config.ts` are only in the overlay.
+   - `paths:` globs name no product feature folder. The source project's edge route folder becomes `app/**/route.ts`. `next.config.*` is in `data-and-rendering.md`, `access-and-security.md` and the overlay, not `tooling.md`. The Sentry, Turnstile and Plausible add-ons also carry it (owner decision 2026-11-24, see below). `wrangler.jsonc`, `worker.js` and `open-next.config.ts` are only in the overlay.
+
+## Owner decisions (2026-11-24, after the independent review)
+
+1. Wider `paths:` globs. `overlays/cloudflare.md` adds `app/**`, `src/lib/env.ts`, `src/types/**`, `src/features/**/types/**`, `**/*.test.ts` and `**/*.test.tsx`. `add-ons/sentry.md` adds `.github/**`, `package.json` and `src/lib/env.ts`. `add-ons/turnstile.md` adds `app/**`. `wrangler.jsonc`, `worker.js` and `open-next.config.ts` stay only in the overlay's globs.
+2. `references/index.md`:
+   - The "Names rules may cite" table adds `src/constants/routes.ts`, `src/lib/authSession.ts`, `src/lib/metadata.ts`, `src/lib/JsonLd.tsx`, `src/lib/structuredData.ts`, `src/lib/sentry/` and `src/lib/cloudflare/`.
+   - A new table after the guard-test tables, "Checks the template may ship (stage 2 decides)", lists the overlay's Durable Object check (I1), the skew-mapping sync check (T31 Cloudflare clause, I2), the size budget (I10 core part and Cloudflare clause), the untrusted-content sanitizer tests (D37, D75), the Sentry consent guard (A14 Sentry clause) and the scripts-are-TypeScript guard (C7 core part). A rule keeps a `Check:` line naming such a check, and stage 2 decides whether it ships.
+3. Tags. I9 and the I10 core part hold on any host and carry no `Tags:` line. Every other overlay entry is tagged `OpenNext` or `Workers`. Every source rule numbered I stays in the overlay by owner decision of 2026-11-23, and no other deploy overlay replaces the two untagged entries. The overlay intro, `SKILL.md`, the entry format in `index.md` and the id map notes on CF-007 and CF-008 say so. This settles the open question in #96 on the I9 tag. The shipped files say "by owner decision" without the date, since stubs carry no dates.
+4. Wording:
+   - This plan names the source project's edge route folder only in those words.
+   - The `SKILL.md` description says "as MUST and SHOULD requirements".
+   - The `data-and-rendering.md` heading "Hydration, layout and the edge cache" becomes "Hydration, layout and caching".
 
 ## Readings of the issue
 

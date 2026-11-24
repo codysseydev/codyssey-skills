@@ -8,6 +8,9 @@ paths:
   - 'src/providers/**'
   - 'app/global-error.tsx'
   - 'app/**/error.tsx'
+  - '.github/**'
+  - 'package.json'
+  - 'src/lib/env.ts'
 ---
 
 # Add-on: Sentry

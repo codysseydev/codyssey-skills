@@ -7,7 +7,7 @@ description: >-
   canon" in a Next.js repo, or starts a greenfield Next.js frontend. It fixes the
   stack (App Router, React Compiler, Tailwind 4, TanStack Query, React Hook Form,
   Vitest) and prescribes static-first pages, one API client and no Server Actions as
-  MUST/MUST NOT requirements that deliberately IGNORE the host project's own
+  MUST and SHOULD requirements that deliberately IGNORE the host project's own
   conventions. Do NOT auto-apply this in a codebase with
   established team standards (e.g. an employer's monorepo) unless the user explicitly
   asks for the canon there. This is the rulebook for WRITING code; to AUDIT existing
@@ -108,8 +108,10 @@ tag, not a package, so they are detected by the script origin in the code.
 | `references/overlays/cloudflare.md` | `@opennextjs/cloudflare` is a dependency, or `wrangler.jsonc` exists |
 
 The Cloudflare overlay holds the rules for deploying to Cloudflare Workers through
-OpenNext. Its entries are tagged `OpenNext` or `Workers`, so another deploy overlay
-touches only the tagged rules.
+OpenNext, plus the two source rules numbered I that hold on any host, kept there by owner
+decision. Its Cloudflare entries are tagged `OpenNext` or `Workers`, so another deploy
+overlay touches only the tagged rules. The two host-neutral entries carry no tag, and no
+other deploy overlay replaces them.
 
 ## Vendored skills
 

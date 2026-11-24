@@ -51,7 +51,7 @@ rule that enforces a rule, where one exists.
 
 ## Browser storage, session and navigation
 
-## Hydration, layout and the edge cache
+## Hydration, layout and caching
 
 ## React and effects
 

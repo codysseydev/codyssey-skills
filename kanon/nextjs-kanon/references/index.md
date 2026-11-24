@@ -64,7 +64,7 @@ A rule cites another rule by its pack id, never by its source id.
 - `From:` is `D12` for a whole rule, `D12 (core part)` for the core part of a split row, `D12 (Cloudflare clause)` or `D12 (Sentry clause)` for a clause, and `NX-04` for a new rule.
 - A clause is its own entry in its add-on or overlay file. It states what it adds to the core rule and cites that rule by its pack id. A clause that is only an example is a one-line entry.
 - The one access core line written fresh from its layer decision carries `From: Layer calls tab (written fresh)` and no source id.
-- Overlay entries add `- Tags: OpenNext` or `- Tags: Workers`.
+- Overlay entries add `- Tags: OpenNext` or `- Tags: Workers`, except I9 and the I10 core part (CF-007 and CF-008). Those two hold on any host and carry no `Tags:` line.
 
 ## Notes policy
 
@@ -90,7 +90,14 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `src/features/global-ui/` | shared UI |
 | `src/lib/apiClient.ts` | the API client |
 | `src/constants/apiRoutes.ts` | every API path |
+| `src/constants/routes.ts` | the app's own page paths, as constants and small builders |
 | `src/lib/env.ts` | the env module |
+| `src/lib/authSession.ts` | the one module that reads and writes the browser auth flag |
+| `src/lib/metadata.ts` | the helpers that build page metadata |
+| `src/lib/JsonLd.tsx` | the component that writes JSON-LD into the page |
+| `src/lib/structuredData.ts` | the builders for structured data objects |
+| `src/lib/sentry/` | the Sentry setup and helpers (Sentry add-on) |
+| `src/lib/cloudflare/` | one module per Worker concern (Cloudflare overlay) |
 | `.ai/rules/` | the rule folder |
 | `src/lib/tests/architectureRules.test.ts` | the guard test |
 | `docs/reference/global-ui-components.md` | the component catalog |
@@ -128,6 +135,19 @@ The smaller portable guards come too:
 | DATA-042 | D30 | The env module: environment variables are read only through `src/lib/env.ts`. |
 | ACCESS-011 | A10 | The `next.config` headers: string assertions on the header policy. |
 | ACCESS-014 | A13 | The `next.config` headers: string assertions on the header policy. |
+
+## Checks the template may ship (stage 2 decides)
+
+A rule that one of these checks covers keeps a `Check:` line naming it, and stage 2 decides whether the check ships.
+
+| pack id | source id | what the check does |
+|---|---|---|
+| CF-001 | I1 | The overlay's Durable Object check: the Worker entry exports no class, and the Workers config declares no Durable Object binding and no migration class that is never deleted. |
+| CF-017, CF-023 | T31 (Cloudflare clause), I2 (Cloudflare clause) | The skew-mapping sync check: the limits in the skew mapping the deploy builds match the skew protection settings in `open-next.config.ts`. |
+| CF-008, CF-024 | I10 (core part), I10 (Cloudflare clause) | The size budget: after the build, the client chunk and Worker sizes are compared with a committed baseline, and the deploy fails when one grows past its budget or the baseline is missing. |
+| UNTRUSTED-004, UNTRUSTED-005 | D37, D75 | The untrusted-content sanitizer tests: Markdown renders with the sanitize step after raw HTML parsing, and sanitized HTML has its authored `id` and `name` removed or prefixed. |
+| SENTRY-009 | A14 (Sentry clause) | The Sentry consent guard: session replay is wired in one module, `Sentry.init` passes no replay integration, and replay starts only after the visitor grants consent. |
+| TOOLING-007 | C7 (core part) | The scripts-are-TypeScript guard: every file under `scripts/` is a `.ts` file. |
 
 ## Counts per file
 
@@ -467,8 +487,8 @@ One row per pack id: 325 rows. The map covers every source rule with a target in
 | CF-004 | `overlays/cloudflare.md` | cloudflare | I5 |  |
 | CF-005 | `overlays/cloudflare.md` | cloudflare | I6 |  |
 | CF-006 | `overlays/cloudflare.md` | cloudflare | I7 |  |
-| CF-007 | `overlays/cloudflare.md` | core | I9 |  |
-| CF-008 | `overlays/cloudflare.md` | core | I10 (core part) |  |
+| CF-007 | `overlays/cloudflare.md` | core | I9 | Holds on any host. No `Tags:` line. |
+| CF-008 | `overlays/cloudflare.md` | core | I10 (core part) | Holds on any host. No `Tags:` line. |
 | CF-009 | `overlays/cloudflare.md` | cloudflare | I11 |  |
 | CF-010 | `overlays/cloudflare.md` | cloudflare | S11 (Cloudflare clause) |  |
 | CF-011 | `overlays/cloudflare.md` | cloudflare | D1 (Cloudflare clause) |  |
