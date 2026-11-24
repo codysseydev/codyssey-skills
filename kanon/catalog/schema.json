@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "required": ["family", "title", "intro", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "family": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "title": { "$ref": "#/$defs/line" },
+    "intro": { "type": "array", "items": { "$ref": "#/$defs/line" } },
+    "sections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/section" } }
+  },
+  "$defs": {
+    "line": { "type": "string", "pattern": "^[^\\S\\n\\r]*\\S[^\\n\\r]*$" },
+    "section": {
+      "type": "object",
+      "required": ["heading", "intro", "list", "entries"],
+      "additionalProperties": false,
+      "properties": {
+        "heading": { "$ref": "#/$defs/line" },
+        "intro": { "type": "array", "items": { "$ref": "#/$defs/line" } },
+        "list": { "enum": ["bullet", "numbered"] },
+        "entries": {
+          "type": "array",
+          "items": { "oneOf": [{ "$ref": "#/$defs/entry" }, { "$ref": "#/$defs/note" }] }
+        }
+      }
+    },
+    "note": {
+      "type": "object",
+      "required": ["note"],
+      "additionalProperties": false,
+      "properties": {
+        "note": { "$ref": "#/$defs/line" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": ["id", "family", "scope", "keyword", "rule", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
+        "family": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "scope": {
+          "enum": ["language-agnostic", "php-core", "laravel", "symfony", "filament", "nextjs"]
+        },
+        "keyword": { "enum": ["MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY"] },
+        "rule": { "$ref": "#/$defs/line" },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/line" } },
+        "why": { "type": "string", "pattern": "\\S" },
+        "applies_to": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
+        "allowed_in": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
+        "detect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "paths": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
+            "signals": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } }
+          }
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["tool", "coverage", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": { "type": "string", "pattern": "\\S" },
+              "coverage": { "type": "string", "pattern": "\\S" },
+              "status": { "enum": ["draft", "verified"] }
+            }
+          }
+        },
+        "examples": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bad": { "type": "string", "pattern": "\\S" },
+            "good": { "type": "string", "pattern": "\\S" }
+          }
+        },
+        "sources": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" } },
+        "lane_note": { "type": "string", "pattern": "\\S" },
+        "duplicate_of": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
+        "status": { "enum": ["active", "candidate", "deprecated"] }
+      }
+    }
+  }
+}

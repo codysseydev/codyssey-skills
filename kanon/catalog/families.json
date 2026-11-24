@@ -1,0 +1,16 @@
+[
+  { "family": "orchestration-di", "prefix": "ORCH", "reference": "kanon/laravel-kanon/references/orchestration-di.md" },
+  { "family": "http-api", "prefix": "HTTP", "reference": "kanon/laravel-kanon/references/http-api.md" },
+  { "family": "authorization", "prefix": "AUTH", "reference": "kanon/laravel-kanon/references/authorization.md" },
+  { "family": "models-domain", "prefix": "MD", "reference": "kanon/laravel-kanon/references/models-domain.md" },
+  { "family": "testing", "prefix": "TEST", "reference": "kanon/laravel-kanon/references/testing.md" },
+  { "family": "performance", "prefix": "PERF", "reference": "kanon/laravel-kanon/references/performance.md" },
+  { "family": "symfony", "prefix": "SYM", "reference": "kanon/symfony-kanon/references/symfony.md" },
+  { "family": "integrations", "prefix": "INT", "reference": "kanon/laravel-kanon/references/integrations.md" },
+  { "family": "architecture", "prefix": "ARCH", "reference": "kanon/laravel-kanon/references/architecture.md" },
+  { "family": "filament", "prefix": "FIL", "reference": "kanon/laravel-kanon/references/filament.md" },
+  { "family": "isolation", "prefix": "ISO", "reference": "kanon/laravel-kanon/references/isolation.md" },
+  { "family": "persistence", "prefix": "PERS", "reference": "kanon/laravel-kanon/references/persistence.md" },
+  { "family": "php-core", "prefix": "PHP", "reference": "kanon/laravel-kanon/references/php-core.md" },
+  { "family": "reliability", "prefix": "REL", "reference": "kanon/laravel-kanon/references/reliability.md" }
+]
