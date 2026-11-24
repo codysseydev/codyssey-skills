@@ -70,11 +70,11 @@ No diagrams: no trigger fired. The change adds fields to an existing `report_sta
 | 1 | Stage 5, stage 6 and Dashboard events name the fields and shapes | `grep -nF` the edited `factory.md` for each new string in Change 1 to 5, and read each hit. `grep -cF "Until dashboard PR #13"` prints 0. |
 | 2 | `check-playbooks.mjs` prints no problem | Copy the edited `factory.md` to a temp `$HOME/.agents/playbooks/` and run `HOME=$T node <pstack>/skills/poteto-mode/scripts/check-playbooks.mjs $T`: "Every project playbook matches this pstack's playbooks.", exit 0. No "Changes to the bundled steps" anchor changes, so this is a regression check. The real `~/.agents/playbooks/` is not touched. |
 | 3 | The dashboard shows `evidence` on a `verify` event and `owner_count` on `waiting` events | The #79 implement run sends its own `verify` (with `evidence` and `owner_count`) and `waiting` events by the new text, then reads `GET /api/stage-events?repo=codysseydev/codyssey-skills&issue_number=79` and quotes the stored fields under `## Verification`. Runs on other issues pick the text up only after merge and install. |
-| 4 | Recipe gates pass | The nine `.factory/recipe.yml` checks at the head commit, clean tree. |
+| 4 | Recipe gates pass | The 12 `.factory/recipe.yml` checks at the head commit, clean tree. |
 
 ## Gates
 
-Baseline at 6485e3a, worktree `~/.factory/worktrees/codyssey-skills-79`, clean tree: all nine recipe checks exit 0 (pick-up 108, post-merge 23, capture-ui 115, trial-decision 39, test-first 36, install 22 tests pass; bootstrap 3, event-model 4, factory-onboard 28 OK). `check-playbooks.mjs` with the unchanged file: exit 0.
+Baseline at 6485e3a, worktree `~/.factory/worktrees/codyssey-skills-79`, clean tree: all nine recipe checks then in `.factory/recipe.yml` exit 0 (pick-up 108, post-merge 23, capture-ui 115, trial-decision 39, test-first 36, install 22 tests pass; bootstrap 3, event-model 4, factory-onboard 28 OK). `check-playbooks.mjs` with the unchanged file: exit 0. After merging origin/main the recipe lists 12 checks: the nine plus standards-discovery-tests, kanon-catalog-check and kanon-catalog-tests.
 
 ```sh
 node --test playbooks/scripts/pick-up.test.mjs
@@ -85,7 +85,10 @@ node --test playbooks/scripts/test-first.test.mjs
 python3 -m unittest discover -s factory/bootstrap/tests
 python3 -m unittest discover -s factory/event-model/tests
 python3 -m unittest discover -s factory/factory-onboard/tests
+python3 -m unittest discover -s kanon/standards-discovery/tests
 node --test playbooks/scripts/install.test.mjs
+node kanon/scripts/catalog.mjs check --base origin/main
+node --test kanon/scripts/catalog.test.mjs
 ```
 
 Plus the `check-playbooks.mjs` run from criterion 2.
