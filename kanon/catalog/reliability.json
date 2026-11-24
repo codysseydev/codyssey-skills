@@ -1,0 +1,28 @@
+{
+  "family": "reliability",
+  "title": "Reliability",
+  "intro": [
+    "Applies to: batch imports, bulk jobs and other code that processes many independent records in one run."
+  ],
+  "sections": [
+    {
+      "heading": "Batch processing",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "REL-001",
+          "family": "reliability",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "A batch import **SHOULD** catch per-row domain failures, record the row's source reference, and continue with the remaining rows. One bad row should not discard the good ones, and the recorded reference lets someone fix and re-run that row.",
+          "why": "One bad row should not discard the good ones, and the recorded reference lets someone fix and re-run that row",
+          "applies_to": [
+            "batch imports"
+          ],
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}
