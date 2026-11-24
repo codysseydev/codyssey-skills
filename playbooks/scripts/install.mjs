@@ -1,4 +1,4 @@
-// Install script for the factory's installed copies: sync `playbooks/` and the factory skills
+// Install script for the factory's installed copies: sync `playbooks/`, the factory skills and `standards-discovery`
 // from a commit of this repo into ~/.agents/playbooks/ and ~/.claude/skills/<name>/.
 //
 // Usage:
@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
+export const KANON_SKILLS = ['standards-discovery'];
 export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 
@@ -35,6 +36,7 @@ export function installMap({ agentsDir, skillsDir }) {
   return [
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
     ...FACTORY_SKILLS.map((name) => ({ prefix: `factory/${name}/`, dir: join(skillsDir, name) })),
+    ...KANON_SKILLS.map((name) => ({ prefix: `kanon/${name}/`, dir: join(skillsDir, name) })),
   ];
 }
 
