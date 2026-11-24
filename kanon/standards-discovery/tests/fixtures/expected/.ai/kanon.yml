@@ -1,0 +1,22 @@
+# Written by standards-discovery. The standards report names the commit it read.
+mode: project-first
+overlay:
+  - id: ORCH-011
+    effect: adopt
+    evidence:
+      - .php-cs-fixer.dist.php:9
+  - id: ORCH-008
+    effect: 'off'
+    evidence:
+      - CLAUDE.md:12
+  - file: kanon/laravel-kanon/references/testing.md
+    sentence: 'Test method names **MUST** be descriptive with the `it_` prefix, stating the behavior (`it_signs_up_a_member_successfully`, `it_returns_404_when_course_not_found`), never generic (`test_course`).'
+    effect: change
+    rule: .ai/rules/project/testing.md
+    evidence:
+      - CLAUDE.md:7
+  - file: kanon/laravel-kanon/references/testing.md
+    sentence: 'Every test that boots the application **MUST** extend the project''s `Tests\TestCase`.'
+    effect: adopt
+    evidence:
+      - tests/Orders/CreateOrderHandlerTest.php:9
