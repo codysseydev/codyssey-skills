@@ -62,7 +62,9 @@ These follow from the issue text. The PR lists them so the owner can change any 
 - `design-principles.md` has no `##` sections. The source file uses one heading per rule, and #93 says the pack uses the entry format instead.
 - Add-on and overlay stubs have no `##` sections. They have no source file whose sections they could follow.
 - Core sections keep the source headings word for word, minus the sections named above.
-- `paths:` globs start from the source file's globs with decision 5 applied. Add-on globs name the files each add-on touches. They leave out `next.config.*`, which decision 5 places only in the three files it names.
+- Core `paths:` globs start from the source file's globs, with decision 5 applied and paths that only the source project has removed: its reviewer skill folder, CMS fetcher, static OG pipeline, project guides and service worker. Sentry's init files move to the Sentry add-on. Two template names join: `src/features/global-ui/**` and the component catalog.
+- Add-on globs, which have no source, name the files each add-on touches. They leave out `next.config.*`, which decision 5 places only in the three files it names.
+- `AGENTS.md` is in the `tooling.md` globs only. `.vite-hooks/**` stays in `tooling.md` from the source; a glob for a missing folder matches nothing.
 
 ## Verification
 
