@@ -9,7 +9,6 @@ paths:
   - 'scripts/**'
   - '.github/**'
   - 'package.json'
-  - 'docs/guides/cloudflare-deployment.md'
 ---
 
 # Cloudflare Overlay: OpenNext on Workers

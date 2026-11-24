@@ -51,7 +51,7 @@ The core rules assume this stack, as the Laravel Kanon assumes PHPUnit:
 - Next.js App Router.
 - React with the React Compiler on.
 - Tailwind 4 with tailwind-merge.
-- TanStack Query for server data.
+- TanStack Query.
 - Client-only UI state in a small external store with selector subscriptions. XState
   Store is the named implementation. Zustand maps one to one: a Zustand store read
   through selectors takes the place of an XState Store.
@@ -139,5 +139,6 @@ Pack rules win over every vendored skill. The clash list names each known clash.
 ## Companions
 
 - `nextjs-kanon-audit` audits a branch, PR, or diff against these same references.
+  It is not built yet; #97 builds it.
 - The canon covers standards, not correctness: keep using normal judgment (and
   /code-review) for bugs and security.
