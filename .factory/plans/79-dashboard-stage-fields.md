@@ -115,9 +115,21 @@ One delegate, one worktree (`factory/79`), one file, five edits, no fan-out. Tru
 - Resumed plan runs: every run, whatever action it starts at, reads the totals on the issue before its first event.
 - `evidence` is not verify-only: the dashboard shows it from any event that carries it, normally `verify`.
 - How to read the totals: a subagent runs the `curl` against the stage-events endpoint with the pick-up URL and token.
-- Comment fallback: stop comments end with an `Owner count:` line, so the fallback has something to read.
+- Comment fallback: stop comments end with an `Owner count:` line, so the fallback has something to read. Replaced in round 2 (see below).
 - The owner action that resumed the run counts as the new run's first entry.
 - Dashboard events gets an every-event `owner_count` bullet, with the `failed` stale-lock exception.
 - `cost_usd` wording: no tool a run can call returns dollars.
 - Validation limits are named, and dropped field content goes in the `summary`.
 - The re-sent `verify` carries `pr_number`.
+
+## Review round 2
+
+- The totals read works from a plain shell (defaults for URL and token, `-f`, a parse that fails loudly) and was run live against #79.
+- A failed read sends no `owner_count` instead of a comment fallback.
+- The resumed-action sentence is removed because the dashboard counts plan approvals separately and owner asks only outside the plan and merge stops (open for the owner, see the PR).
+- Totals go in `waiting`, `failed` and `archived` summaries.
+- Validation names the local check, the `result` enum and non-empty fields.
+- The dropped-field summary is a short form.
+- The stale-lock rule lives only in Dashboard events.
+- `cost_usd` wording is dated.
+- Stage 5's test-first `fail` row no longer puts stderr in `result`.
