@@ -133,3 +133,11 @@ One delegate, one worktree (`factory/79`), one file, five edits, no fan-out. Tru
 - The stale-lock rule lives only in Dashboard events.
 - `cost_usd` wording is dated.
 - Stage 5's test-first `fail` row no longer puts stderr in `result`.
+
+## Review round 3
+
+- A failed totals read is an exception to the every-event `owner_count` bullet in Dashboard events.
+- The summaries rule is scoped to events the run sends for the issue it claimed.
+- A `null` on `implement`, `archive` or a later attempt is a failed read.
+- The default URL and token source is named: the same defaults `pick-up.mjs` uses.
+- The run retries the totals read before each later event.
