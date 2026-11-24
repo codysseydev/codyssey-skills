@@ -50,6 +50,9 @@ const baseFiles = (v) => [
   ...FACTORY_SKILLS.map((name) => [`factory/${name}/SKILL.md`, `${name} ${v}\n`]),
   ...KANON_SKILLS.map((name) => [`kanon/${name}/SKILL.md`, `${name} ${v}\n`]),
   ['kanon/standards-discovery/scripts/check-policy.py', `check-policy ${v}\n`],
+  ['kanon/catalog/families.json', `families ${v}\n`],
+  ['kanon/laravel-kanon/references/php-core.md', `php-core ${v}\n`],
+  ['kanon/symfony-kanon/references/symfony.md', `symfony ${v}\n`],
   ['kanon/laravel-kanon/SKILL.md', 'not listed\n'],
   ['factory/event-model/scripts/check.py', `check ${v}\n`],
   ['factory/not-listed/SKILL.md', 'not listed\n'],
@@ -136,6 +139,9 @@ test('installs playbooks, the five factory skills and standards-discovery from t
   assert.equal(read(f.agentsDir, 'playbooks/scripts/pick-up.mjs'), 'pick-up v1\n');
   for (const name of [...FACTORY_SKILLS, ...KANON_SKILLS]) assert.equal(read(f.skillsDir, name, 'SKILL.md'), `${name} v1\n`);
   assert.equal(read(f.skillsDir, 'standards-discovery/scripts/check-policy.py'), 'check-policy v1\n');
+  assert.equal(read(f.skillsDir, 'standards-discovery/kanon/catalog/families.json'), 'families v1\n');
+  assert.equal(read(f.skillsDir, 'standards-discovery/kanon/laravel-kanon/references/php-core.md'), 'php-core v1\n');
+  assert.equal(read(f.skillsDir, 'standards-discovery/kanon/symfony-kanon/references/symfony.md'), 'symfony v1\n');
   assert.equal(read(f.skillsDir, 'event-model/scripts/check.py'), 'check v1\n');
   assert.equal(read(f.agentsDir, 'playbooks/.installed-sha'), `${f.sha1}\n`);
   assert.ok(statSync(join(f.agentsDir, 'playbooks/scripts/run.sh')).mode & 0o100, 'executable bit kept');
