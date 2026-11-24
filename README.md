@@ -8,7 +8,7 @@ Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), and `standards-discovery`, the AI policy check that comes before reading a client's code | Any Laravel or Symfony project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), the skeleton of a Next.js Kanon (`nextjs-kanon`), and `standards-discovery`, the AI policy check that comes before reading a client's code | Any Laravel, Symfony or Next.js project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -27,6 +27,11 @@ Five folders, five different jobs:
   `$container->get()`, writes go through a Messenger command to one handler). It reads
   `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
   install it next to `laravel-kanon`. It has no audit yet.
+- `nextjs-kanon`: the Kanon for the Next.js frontend of a product with its own API. Its
+  `SKILL.md` holds the fixed core stack, how each add-on and the Cloudflare overlay is
+  detected, and the known clashes with upstream skills. `references/index.md` holds the id
+  of every rule. The rule files are stubs for now: #89 to #96 fill them, and the audit,
+  `nextjs-kanon-audit`, comes in #97.
 - `standards-discovery`: reads a client's codebase and writes its conventions as a project
   overlay (project-first mode). Today it does one thing: before any client code is read, it
   checks the client's AI policy record and stops when the record is missing, incomplete or
