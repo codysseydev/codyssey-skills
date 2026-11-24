@@ -172,7 +172,7 @@ Run in the scratchpad on a copy of `kanon/standards-discovery/`, not committed.
 - Fetch: in a `--single-branch --branch other` clone, `git fetch -q origin main` exited 0 and created no `origin/main`. With the refspec edited to cover only `other`, both `git fetch -q origin main` and `git fetch origin` exited 0 and left `origin/main` at the old commit. `git fetch -q origin +refs/heads/main:refs/remotes/origin/main` moved it.
 - The fixes A to H on the copy: 69 tests OK. Every new bug test failed against the untouched script and passed after. The only existing tests that broke were the nine that used the bare `models` entry `claude`.
 - The strict reader against Ruby's YAML over 34 texts: no row where Ruby reads root `mode` as `project-first` and the reader reads canon-first. Rows where the reader stops and Ruby reads a mode (`{mode: ...}`, anchors, tags, `%YAML`, a trailing `...`) fail closed.
-- The clause variant run had `AI` case-sensitive. The plan keeps `AI`, `A.I.` and `LLMs?` case-insensitive but not after a `.`, so "ai tools are banned" still warns. That variant is not run yet.
+- The clause variant of open decision g (product names case-sensitive, `AI`, `A.I.` and `LLMs?` in any case but not after a `.`, `generative AI` as a phrase) ran in the implementation. All 14 clause lines from the plan, plus "ai tools are banned", "See example.ai", "generative grammar" and "llms are banned", give the expected result. "Claude Monet painting" still warns, as accepted.
 
 ## Event model
 
@@ -196,6 +196,8 @@ No diagrams: no trigger fired.
 - The scan's `.github`/`docs` reads through git cost two `ls-tree` calls and one `cat-file` per policy file. The prototype took about 15 ms each.
 
 ## Open decisions
+
+The owner chose A on every decision (2026-11-24).
 
 a. Kind.
    - **A. Bug fix (recommended).** Most bullets make the check fail open. One failing-test commit holds every new test.
