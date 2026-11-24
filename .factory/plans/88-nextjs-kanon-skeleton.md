@@ -53,18 +53,19 @@ Each has `paths:` frontmatter, a title, a one-paragraph scope, a severity paragr
    - `install.mjs` does not change.
    - The count script is not committed.
    - `data-and-rendering.md` has no "Rendering HTML safely" section, since all its rules are add-on rules. `tooling.md` has no I-family section, and its first section drops the "(C family)" tag. `design-principles.md` has no "Considered and not proposed" section; #93 writes it.
-   - `paths:` globs name no product feature folder. `app/edge/**` becomes `app/**/route.ts`. `next.config.*` is in `data-and-rendering.md`, `access-and-security.md` and the overlay, not `tooling.md`. `wrangler.jsonc`, `worker.js` and `open-next.config.ts` are only in the overlay.
+   - `paths:` globs name no product feature folder. `app/edge/**` becomes `app/**/route.ts`. `next.config.*` is in `data-and-rendering.md`, `access-and-security.md` and the overlay, not `tooling.md`. The Sentry, Turnstile and Plausible add-ons also carry it (owner decision 2026-11-24, see below). `wrangler.jsonc`, `worker.js` and `open-next.config.ts` are only in the overlay.
 
 ## Readings of the issue
 
-These follow from the issue text. The PR lists them so the owner can change any of them.
+These follow from the issue text. The PR lists them so the owner can change any of them. Items marked as owner decisions were asked after the first build and answered on 2026-11-24.
 
-- `design-principles.md` has no `##` sections. The source file uses one heading per rule, and #93 says the pack uses the entry format instead.
-- Add-on and overlay stubs have no `##` sections. They have no source file whose sections they could follow.
-- Core sections keep the source headings word for word, minus the sections named above.
-- Core `paths:` globs start from the source file's globs, with decision 5 applied and paths that only the source project has removed: its reviewer skill folder, CMS fetcher, static OG pipeline, project guides and service worker. Sentry's init files move to the Sentry add-on. Two template names join: `src/features/global-ui/**` and the component catalog.
-- Add-on globs, which have no source, name the files each add-on touches. They leave out `next.config.*`, which decision 5 places only in the three files it names.
+- `design-principles.md` has no `##` sections. The source file uses one heading per rule, and #93 says the pack uses the entry format instead. Owner decision 2026-11-24: confirmed.
+- Add-on and overlay stubs have no `##` sections. They have no source file whose sections they could follow. Owner decision 2026-11-24: confirmed.
+- Core sections keep the source headings, minus the sections named above, with one change. Owner decision 2026-11-24: the "Rule N:" and "Rules N and M:" prefixes are dropped. The `data-and-rendering.md` headings are `Public pages are prerendered`, `Seeding server data into client queries`, `Query-string-dependent UI`, `Lazy loading` and `Content images`. The old "Rules 5 and 6: code highlighting and content images" becomes `Content images`, since code highlighting is an add-on topic. No other core stub has such a prefix.
+- Core `paths:` globs start from the source file's globs, with decision 5 applied and paths that only the source project has removed: its reviewer skill folder, CMS fetcher, static OG pipeline, project guides and service worker. Sentry's init files move to the Sentry add-on. Two template names join: `src/features/global-ui/**` and the component catalog. Owner decision 2026-11-24: the extra source globs (`vite.config.ts`, `.vite-hooks/**`, the `src/lib` metadata helpers, `src/lib/sentry/**`, `src/lib/cloudflare/**`) are confirmed as written.
+- Add-on globs, which have no source, name the files each add-on touches. Owner decision 2026-11-24: `next.config.*` is added to the globs of `sentry.md`, `turnstile.md` and `plausible.md`, since each add-on wires its script origin or build plugin there. The other add-ons leave it out.
 - `AGENTS.md` is in the `tooling.md` globs only. `.vite-hooks/**` stays in `tooling.md` from the source; a glob for a missing folder matches nothing.
+- Owner decision 2026-11-24: the Zustand line in `SKILL.md`, the stub severity paragraph and the how-to step about `design-principles.md` and `structure.md` are confirmed as written.
 
 ## Verification
 

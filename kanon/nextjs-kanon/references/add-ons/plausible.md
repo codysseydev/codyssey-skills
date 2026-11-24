@@ -1,6 +1,7 @@
 ---
 paths:
   - 'app/layout.tsx'
+  - 'next.config.*'
   - 'src/**/*.tsx'
   - 'src/lib/**'
 ---

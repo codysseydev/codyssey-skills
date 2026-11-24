@@ -29,15 +29,15 @@ Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolu
 reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
 rule that enforces a rule, where one exists.
 
-## Rule 1: public pages are prerendered
+## Public pages are prerendered
 
-## Rule 2: seeding server data into client queries
+## Seeding server data into client queries
 
-## Rule 3: query-string-dependent UI
+## Query-string-dependent UI
 
-## Rule 4: lazy loading
+## Lazy loading
 
-## Rules 5 and 6: code highlighting and content images
+## Content images
 
 ## State management
 

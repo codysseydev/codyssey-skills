@@ -1,5 +1,6 @@
 ---
 paths:
+  - 'next.config.*'
   - 'instrumentation.ts'
   - 'instrumentation-client.ts'
   - 'sentry.*.config.ts'

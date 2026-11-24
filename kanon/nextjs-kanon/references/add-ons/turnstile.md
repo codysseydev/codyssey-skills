@@ -1,5 +1,6 @@
 ---
 paths:
+  - 'next.config.*'
   - 'src/**/*.tsx'
   - 'src/features/**/components/**'
 ---
