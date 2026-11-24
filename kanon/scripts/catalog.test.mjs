@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -567,18 +568,119 @@ test('the validator enforces type, required, enum, pattern, items, minItems and 
   assert.match(messages(['x']).join('\n'), /expected object/);
 });
 
-test('words and code spans match the original reference (criterion 2)', (t) => {
+// Inner whitespace is collapsed: prose files may wrap a span across a line break that `generate` never writes.
+const spans = (text) => (text.match(/`[^`]+`/g) ?? []).map((s) => s.replace(/\s+/g, ' '));
+
+// The families of `root` that have a catalog file, with their prefix-table row.
+const convertedRows = (root) =>
+  readJson(root, 'kanon/catalog/families.json').filter((row) =>
+    existsSync(path.join(root, 'kanon', 'catalog', `${row.family}.json`))
+  );
+
+// Checks every converted family of `root` against `<fixturesDir>/<family>.base.md` and against the
+// reference on disk in `diskRoot`. Returns one message per problem; a missing fixture is reported
+// before anything is generated.
+function baseFixtureProblems(root, fixturesDir, diskRoot) {
+  const rows = convertedRows(root);
+  const problems = [];
+  const bases = new Map();
+  for (const row of rows) {
+    const file = path.join(fixturesDir, `${row.family}.base.md`);
+    if (existsSync(file)) bases.set(row.family, readFileSync(file, 'utf8'));
+    else problems.push(`${row.family}: missing base fixture ${file}`);
+  }
+  if (problems.length > 0) return problems;
+  for (const row of rows) rmSync(path.join(root, row.reference), { force: true });
+  const gen = run(root, 'generate');
+  if (gen.status !== 0) return [`generate failed: ${gen.out}`];
+  for (const row of rows) {
+    const text = read(root, row.reference);
+    const base = bases.get(row.family);
+    if (collapse(stripIds(text)) !== collapse(base)) {
+      problems.push(`${row.family}: words differ from the base fixture`);
+    }
+    if (JSON.stringify(spans(stripIds(text))) !== JSON.stringify(spans(base))) {
+      problems.push(`${row.family}: code spans differ from the base fixture`);
+    }
+    if (text !== read(diskRoot, row.reference)) {
+      problems.push(`${row.family}: generated text differs from ${row.reference} on disk`);
+    }
+  }
+  return problems;
+}
+
+test('words and code spans of every converted family match its base fixture (criterion 2)', (t) => {
   const root = makeRoot(t);
-  rmSync(path.join(root, ORCH_REF));
+  assert.ok(convertedRows(root).some((row) => row.family === 'orchestration-di'));
+  assert.deepEqual(baseFixtureProblems(root, fixtures, repoRoot), []);
+  const base = readFileSync(path.join(fixtures, 'orchestration-di.base.md'), 'utf8');
+  assert.equal(spans(base).length, 70);
+});
+
+test('a converted family with no base fixture is reported by name', (t) => {
+  const root = makeRoot(t);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  for (const sec of zz.sections) for (const entry of sec.entries) entry.family = 'zz-test';
+  writeJson(root, 'kanon/catalog/zz-test.json', zz);
+  const rows = readJson(root, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz/references/zz-test.md' });
+  writeJson(root, 'kanon/catalog/families.json', rows);
+  assert.deepEqual(baseFixtureProblems(root, fixtures, repoRoot), [
+    `zz-test: missing base fixture ${path.join(fixtures, 'zz-test.base.md')}`,
+  ]);
+});
+
+test('code spans that differ only in inner whitespace match the base fixture', (t) => {
+  const root = makeRoot(t);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  for (const sec of zz.sections) {
+    for (const entry of sec.entries) {
+      entry.family = 'zz-test';
+      entry.rule = 'Classes **MUST** be `final readonly`.';
+    }
+  }
+  writeJson(root, 'kanon/catalog/zz-test.json', zz);
+  const rows = readJson(root, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz/references/zz-test.md' });
+  writeJson(root, 'kanon/catalog/families.json', rows);
+
+  const fixturesDir = mkdtempSync(path.join(tmpdir(), 'kanon-fixtures-'));
+  t.after(() => rmSync(fixturesDir, { recursive: true, force: true }));
+  for (const name of readdirSync(fixtures)) {
+    if (name.endsWith('.base.md')) cpSync(path.join(fixtures, name), path.join(fixturesDir, name));
+  }
+
   const gen = run(root, 'generate');
   assert.equal(gen.status, 0, gen.out);
-  const generated = stripIds(read(root, ORCH_REF));
-  const base = readFileSync(path.join(fixtures, 'orchestration-di.base.md'), 'utf8');
-  assert.equal(collapse(generated), collapse(base));
-  const spans = (text) => text.match(/`[^`]+`/g) ?? [];
-  assert.equal(spans(base).length, 70);
-  assert.deepEqual(spans(generated), spans(base));
-  assert.equal(read(root, ORCH_REF), readFileSync(path.join(repoRoot, ORCH_REF), 'utf8'));
+  const generated = stripIds(read(root, 'kanon/zz/references/zz-test.md'));
+  assert.ok(generated.includes('`final readonly`'));
+  const fixtureFile = path.join(fixturesDir, 'zz-test.base.md');
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  readonly`'));
+  assert.deepEqual(baseFixtureProblems(root, fixturesDir, root), []);
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  mutable`'));
+  assert.ok(
+    baseFixtureProblems(root, fixturesDir, root).includes(
+      'zz-test: code spans differ from the base fixture'
+    )
+  );
+});
+
+test('every converted family keeps why inside its rule or items', () => {
+  for (const row of convertedRows(repoRoot)) {
+    const cat = readJson(repoRoot, `kanon/catalog/${row.family}.json`);
+    for (const e of cat.sections.flatMap((s) => s.entries)) {
+      if (!('why' in e)) continue;
+      const texts = [e.rule, ...(e.items ?? [])].filter((x) => typeof x === 'string');
+      assert.ok(
+        texts.some((x) => x.includes(e.why)),
+        `${row.family} ${e.id}: why is not a substring of rule or of an item`
+      );
+    }
+  }
 });
 
 test('why is a substring of rule and no entry has sources (criterion 3)', () => {
