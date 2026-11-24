@@ -95,6 +95,37 @@ class TempDirs(unittest.TestCase):
         return repo
 
 
+    def plumbing_repo(self, root_entries):
+        """A repo whose origin/main root tree is built by hand: [(mode, name, content | tree-entries | oid)]."""
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+
+        def make(entries):
+            lines = []
+            for mode, name, payload in entries:
+                if mode == "040000":
+                    oid, kind = make(payload), "tree"
+                elif mode == "160000":
+                    oid, kind = "1" * 40, "commit"
+                else:
+                    blob = subprocess.run(
+                        ["git", "hash-object", "-w", "--stdin"], cwd=repo, env=GIT_ENV, check=True,
+                        input=payload.encode(), capture_output=True,
+                    )
+                    oid, kind = blob.stdout.decode().strip(), "blob"
+                lines.append(f"{mode} {kind} {oid}\t{name}")
+            made = subprocess.run(
+                ["git", "mktree", "--missing"], cwd=repo, env=GIT_ENV, check=True,
+                input="".join(line + "\n" for line in lines).encode(), capture_output=True,
+            )
+            return made.stdout.decode().strip()
+
+        tree = make(root_entries)
+        commit = git(repo, "commit-tree", tree, "-m", "x")
+        git(repo, "update-ref", "refs/remotes/origin/main", commit)
+        return repo
+
+
 class RecordCheck(TempDirs):
     def test_missing_record_stops_on_record(self):
         out = io.StringIO()
@@ -124,7 +155,7 @@ class RecordCheck(TempDirs):
         base = {
             "ai_allowed": "yes",
             "tools": ["claude-code"],
-            "models": ["claude"],
+            "models": ["claude-*"],
             "code_leaves_machine": "model-provider",
             "cloud_sessions": "yes",
             "commit_ai_files": "yes",
@@ -180,12 +211,22 @@ class RecordCheck(TempDirs):
             ctx = {"tool": "claude-code", "model": model}
             return fields(cp.check({**base, "models": models}, "read-code", ctx))
 
-        self.assertEqual(blocked(["claude"]), [])
-        self.assertEqual(blocked(["claude-opus"]), [])
+        self.assertEqual(blocked(["claude-*"]), [])
+        self.assertEqual(blocked(["claude-opus-*"]), [])
         self.assertEqual(blocked(["claude-opus-5-5"]), [])
-        self.assertEqual(blocked(["claude-o"]), ["models"])
+        self.assertEqual(blocked(["claude-opus-5-5-*"]), ["models"])
+        self.assertEqual(blocked(["claude"]), ["models"])
+        self.assertEqual(blocked(["claude-opus"]), ["models"])
+        self.assertEqual(blocked(["claude-sonnet-*"]), ["models"])
+        self.assertEqual(blocked(["claude-o*"]), ["models"])
+        self.assertEqual(blocked(["*"]), ["models"])
+        self.assertEqual(blocked(["-*"]), ["models"])
+        self.assertEqual(blocked(["claude-*-5"]), ["models"])
         self.assertEqual(blocked(["any"], "gpt-5"), [])
-        self.assertEqual(blocked(["claude"], "gpt-5"), ["models"])
+        self.assertEqual(blocked(["claude-*"], "gpt-5"), ["models"])
+        self.assertEqual(blocked(["gpt-5", "claude-*"]), [])
+        reason = cp.check({**base, "models": ["claude-o*"]}, "read-code", CTX)[0]["reason"]
+        self.assertEqual(reason, "not an allowed value: claude-o*")
 
     def test_factory_run_blocks_on_commit_ai_files_no(self):
         allowing = record("allowing.md")
@@ -271,6 +312,44 @@ class ClientDetection(TempDirs):
     def test_a_nested_mode_key_is_not_the_mode(self):
         repo = self.origin_repo("rules:\n  mode: project-first\n")
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
+
+    def test_a_kanon_file_the_reader_does_not_understand_stops_on_mode(self):
+        for text in (
+            "{mode: project-first}\n", "  mode: project-first\n", "  rules: []\n  mode: project-first\n",
+            "? mode\n: project-first\n", "base: &b {mode: project-first}\n<<: *b\n", '"\\x6dode": project-first\n',
+            "mode: project-first\n---\nmode: canon-first\n", "mode: project-first\n...\n", "- mode: project-first\n",
+            "\tmode: project-first\n", "Mode: project-first\n", "mode: project-first\nMODE: canon-first\n",
+            "%YAML 1.1\n---\nmode: project-first\n", "---\n---\nmode: project-first\n",
+        ):
+            with self.subTest(text):
+                blocking = cp.client_record({}, "o/r", self.origin_repo(text))[2]
+                self.assertEqual(fields(blocking), ["mode"])
+                self.assertTrue(blocking[0]["reason"].startswith("unreadable"), blocking)
+
+    def test_kanon_files_the_reader_accepts(self):
+        overlay = "# overlay\nmode: project-first\nrules:\n  - id: x\n    severity: high\nsources:\n- CLAUDE.md\n"
+        for text, expected in (
+            ("mode: project-first\n", "project-first"),
+            ("---\nmode: project-first\n", "project-first"),
+            ("mode: project-first # note\n", "project-first"),
+            ("rules:\n- a\nmode: project-first\n", "project-first"),
+            (overlay, "project-first"),
+            ("mode: project-first\r\nrules: []\r\n", "project-first"),
+            ("x: a\u2028mode: project-first\n", "project-first"),
+            ("description: \"project mode: strict\"\n", "canon-first"),
+            ("x: |\n  mode: project-first\n", "canon-first"),
+            ("rules:\n  mode: project-first\n", "canon-first"),
+        ):
+            with self.subTest(text):
+                self.assertEqual(cp.client_record({}, "o/r", self.origin_repo(text))[0], expected)
+
+    def test_an_empty_mode_stops_on_mode(self):
+        for text in ("mode:\n", 'mode: ""\n', "mode: # nothing\n"):
+            with self.subTest(text):
+                blocking = cp.client_record({}, "o/r", self.origin_repo(text))[2]
+                self.assertEqual(blocking, [{"field": "mode", "reason": "empty"}])
+        blocking = cp.client_record({}, "o/r", self.origin_repo("mode: &a project-first\n"))[2]
+        self.assertTrue(blocking[0]["reason"].startswith("not an allowed value"))
 
     def test_a_tag_named_origin_main_does_not_shadow_the_remote_ref(self):
         repo = self.origin_repo()
@@ -380,6 +459,51 @@ class ClientDetection(TempDirs):
         git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
 
+    def test_git_environment_variables_do_not_redirect_the_lookup(self):
+        a = self.origin_repo("mode: project-first\n")
+        b = self.origin_repo()
+        old = os.environ.get("GIT_DIR")
+        os.environ["GIT_DIR"] = os.path.join(b, ".git")
+
+        def restore():
+            if old is None:
+                os.environ.pop("GIT_DIR", None)
+            else:
+                os.environ["GIT_DIR"] = old
+
+        self.addCleanup(restore)
+        mode, rec, blocking = cp.client_record({}, "o/r", a)
+        self.assertEqual((mode, rec, fields(blocking)), ("project-first", None, ["record"]))
+
+    def test_case_variants_and_odd_entries_around_the_kanon_file_stop_on_mode(self):
+        good = "mode: canon-first\n"
+        cases = {
+            "root .AI": ([("040000", ".AI", [("100644", "kanon.yml", good)])], "case variant"),
+            "root .Ai next to .ai": (
+                [("040000", ".ai", []), ("040000", ".Ai", [("100644", "kanon.yml", good)])], "case variant"),
+            "Kanon.yml": ([("040000", ".ai", [("100644", "Kanon.yml", good)])], "case variant"),
+            "kanon.yaml": ([("040000", ".ai", [("100644", "kanon.yaml", good)])], "case variant"),
+            "kanon.yml and KANON.YML": (
+                [("040000", ".ai", [("100644", "kanon.yml", good), ("100644", "KANON.YML", good)])], "case variant"),
+            ".ai gitlink": ([("160000", ".ai", None)], ".ai is not a folder"),
+            ".ai file": ([("100644", ".ai", good)], ".ai is not a folder"),
+            "kanon.yml gitlink": ([("040000", ".ai", [("160000", "kanon.yml", None)])], "not a regular file"),
+            "kanon.yml folder": (
+                [("040000", ".ai", [("040000", "kanon.yml", [("100644", "x", good)])])], "not a regular file"),
+        }
+        for label, (entries, expected) in cases.items():
+            with self.subTest(label):
+                blocking = cp.client_record({}, "o/r", self.plumbing_repo(entries))[2]
+                self.assertEqual(fields(blocking), ["mode"])
+                self.assertIn(expected, blocking[0]["reason"])
+
+    def test_an_executable_kanon_file_and_unrelated_entries_are_fine(self):
+        repo = self.plumbing_repo([
+            ("040000", ".ai", [("100755", "kanon.yml", "mode: project-first\n"), ("100644", "notes.md", "x")]),
+            ("100644", "README.md", "hello\n"),
+        ])
+        self.assertEqual(cp.client_record({}, "o/r", repo)[0:2], ("project-first", None))
+
     def test_a_repo_without_origin_main_stops_on_mode(self):
         repo = self.tmp()
         git(repo, "init", "-q", "-b", "main")
@@ -454,6 +578,79 @@ class Scan(TempDirs):
             cp.scan(repo),
             [{"file": "README.md", "line": 1, "signal": "ai-clause", "text": "Use of A.I. tools is banned."}],
         )
+
+    def test_ai_clause_matches_the_names_and_not_the_common_words(self):
+        for text, hit in (
+            ("Move the cursor to the end.", False), ("DB cursor pagination", False), ("Cursor is our editor.", True),
+            ("Claude Monet painting", True), ("Ask Claude.", True), ("See example.ai", False),
+            ("ai tools are banned", True), ("generative grammar", False), ("Generative AI is banned.", True), ("generative ai is banned.", True),
+            ("We use Copilot.", True), ("copilot program", False), ("LLM", True), ("llms are banned", True), ("GPT-4", True),
+            ("Do not use AI tools.", True), ("No A.I. please", True), ("Artificial Intelligence", True),
+            ("Large Language Models", True), ("MAIN", False), ("AIM", False),
+        ):
+            with self.subTest(text):
+                self.assertEqual(bool(cp.AI_CLAUSE.search(text)), hit)
+
+    def test_the_git_scan_reads_origin_main_and_opens_nothing_in_the_worktree(self):
+        repo = self.tmp()
+        git(repo, "init", "-q", "-b", "main")
+        put(repo, "src/app.txt", "x\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "before")
+        git(repo, "branch", "run")
+        put(repo, "README.md", "Intro.\nWe use AI tools here.\n")
+        put(repo, "docs/CONTRIBUTING.md", "Do not paste code into ChatGPT.\n")
+        put(repo, ".aiignore", "# secrets\nsecrets/\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "policy")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        worktree = os.path.join(self.tmp(), "run")
+        git(repo, "worktree", "add", "-q", worktree, "run")
+        put(worktree, "README.md", "A clean readme.\n")
+        self.assertEqual(cp.scan(worktree), [])
+        scan_git = getattr(cp, "scan_git", None)
+        self.assertIsNotNone(scan_git, "check-policy.py has no scan_git")
+        with opened_files() as paths:
+            warnings = scan_git(worktree)
+        self.assertEqual(under(paths, worktree), [])
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in warnings),
+            sorted([
+                (".aiignore", "ignore-file"),
+                ("README.md", "ai-clause"),
+                (os.path.join("docs", "CONTRIBUTING.md"), "ai-clause"),
+            ]),
+        )
+        self.assertIn({"file": "README.md", "line": 2, "signal": "ai-clause", "text": "We use AI tools here."}, warnings)
+
+    def test_the_git_scan_classifies_entries_by_mode(self):
+        repo = self.plumbing_repo([
+            ("120000", "README.md", "app/x.php"),
+            ("040000", "CONTRIBUTING", [("100644", "inner", "AI")]),
+            ("160000", ".aiignore", None),
+            ("100755", ".cursorignore", "build/\n"),
+            ("040000", "docs", [("100644", "CONTRIBUTING.md", "Copilot\n"), ("040000", "README.md", [])]),
+            ("120000", ".github", "app"),
+            ("100644", "NOTES.md", "AI\n"),
+            ("040000", "src", [("100644", "README.md", "AI\n")]),
+        ])
+        scan_git = getattr(cp, "scan_git", None)
+        self.assertIsNotNone(scan_git, "check-policy.py has no scan_git")
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in scan_git(repo)),
+            sorted([
+                ("README.md", "symlink"), ("CONTRIBUTING", "unreadable"), (".aiignore", "unreadable"),
+                (".cursorignore", "ignore-file"), (".github", "symlink"),
+                (os.path.join("docs", "CONTRIBUTING.md"), "ai-clause"),
+            ]),
+        )
+
+    def test_the_git_scan_decodes_with_replacement_and_reports_a_missing_ref(self):
+        repo = self.plumbing_repo([("100644", "README.md", "caf\xe9 uses AI\n")])
+        scan_git = getattr(cp, "scan_git", None)
+        self.assertIsNotNone(scan_git, "check-policy.py has no scan_git")
+        self.assertEqual([w["signal"] for w in scan_git(repo)], ["ai-clause"])
+        self.assertEqual(scan_git(repo, "refs/remotes/origin/gone"), [{"file": ".", "signal": "unreadable"}])
 
     def test_a_policy_name_that_is_not_a_regular_file_is_unreadable(self):
         repo = self.tmp()
@@ -598,6 +795,34 @@ class Cli(TempDirs):
     def test_a_registry_that_is_a_folder_stops_on_record(self):
         self.registry_stop(self.tmp())
 
+    def test_a_registry_under_a_dangling_symlinked_folder_stops_on_record(self):
+        base = self.tmp()
+        link = os.path.join(base, "link")
+        os.symlink(os.path.join(base, "nowhere"), link)
+        self.registry_stop(os.path.join(link, "ai-policy.json"))
+        self.registry_stop(os.path.join(link, "deeper", "ai-policy.json"))
+
+    def test_a_registry_under_a_missing_folder_is_still_an_empty_one(self):
+        code, out, _ = self.run_cli(
+            "--registry", os.path.join(self.tmp(), "missing", "ai-policy.json"), "--repo-name", "o/r",
+            "--repo", self.origin_repo(), "--model", "m",
+        )
+        self.assertEqual((code, out["result"]), (0, "not-client"))
+
+    def test_the_registry_form_scans_origin_main_not_the_worktree(self):
+        repo = self.origin_repo()
+        put(repo, "README.md", "We use AI tools here.\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "readme")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        put(repo, "README.md", "Clean on disk.\n")
+        registry_dir = self.tmp()
+        put(registry_dir, "ai-policy.json", json.dumps({"o/r": os.path.join(RECORDS, "allowing.md")}))
+        common = ["--registry", os.path.join(registry_dir, "ai-policy.json"), "--repo-name", "o/r", "--repo", repo]
+        code, out, _ = self.run_cli(*common, "--model", "claude-opus-5-5")
+        self.assertEqual((code, out["result"]), (0, "continue"))
+        self.assertEqual([(w["file"], w["signal"]) for w in out["warnings"]], [("README.md", "ai-clause")])
+
     def test_an_absent_registry_is_an_empty_one(self):
         code, out, _ = self.run_cli(
             "--registry", os.path.join(self.tmp(), "gone.json"), "--repo-name", "o/r",
@@ -621,6 +846,30 @@ class Cli(TempDirs):
         self.assertEqual(self.run_cli("--record", record_path, "--registry", "r.json", "--repo-name", "o/r", *common)[0], 2)
         self.assertEqual(self.run_cli(*common)[0], 2)
         self.assertEqual(self.run_cli("--registry", "r.json", *common)[0], 2)
+
+    def test_a_repo_name_that_is_not_owner_slash_name_exits_2(self):
+        registry = os.path.join(self.tmp(), "ai-policy.json")
+        put(os.path.dirname(registry), "ai-policy.json", "{}")
+        for name in (
+            "o", "o/r/x", "o/r.git", "/r", "o/", "o/r ", "o/r\n", "o/r?", "o\\r", "o/\u00e9",
+            "../x", "o/..", "./x", "o/.", "..", ".",
+        ):
+            with self.subTest(name):
+                code, _, _ = self.run_cli(
+                    "--registry", registry, "--repo-name", name, "--repo", self.origin_repo(), "--model", "m"
+                )
+                self.assertEqual(code, 2)
+        code, out, _ = self.run_cli(
+            "--registry", registry, "--repo-name", "My-Org/my_repo.v2", "--repo", self.origin_repo(), "--model", "m"
+        )
+        self.assertEqual((code, out["result"]), (0, "not-client"))
+
+    def test_a_registry_key_that_is_not_owner_slash_name_stops_on_record(self):
+        for key in ("o", "o/r.git", "o/r/x", "o/r ", "*/r", "\u00e9/r", "../x", "o/..", "./x", "o/."):
+            with self.subTest(key):
+                registry = {key: "/x.md", "o/r": "/y.md"}
+                blocking = cp.client_record(registry, "o/r", self.origin_repo())[2]
+                self.assertEqual(blocking, [{"field": "record", "reason": f"registry key is not owner/name: {key}"}])
 
     def test_a_repo_that_is_not_a_directory_exits_2(self):
         record_path = os.path.join(RECORDS, "allowing.md")
