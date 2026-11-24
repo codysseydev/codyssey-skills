@@ -143,7 +143,7 @@ A rule that one of these checks covers keeps a `Check:` line naming it, and stag
 | pack id | source id | what the check does |
 |---|---|---|
 | CF-001 | I1 | The overlay's Durable Object check: the Worker entry exports no class, and the Workers config declares no Durable Object binding and no migration class that is never deleted. |
-| CF-017, CF-023 | T31 (Cloudflare clause), I2 (Cloudflare clause) | The skew-mapping sync check: the limits in the skew mapping the deploy builds match the skew protection settings in `open-next.config.ts`. |
+| CF-017, CF-023 | T31 (Cloudflare clause), I2 (Cloudflare clause) | The skew-mapping sync check: the limits in the skew mapping the deploy builds match the skew protection settings in the OpenNext config. |
 | CF-008, CF-024 | I10 (core part), I10 (Cloudflare clause) | The size budget: after the build, the client chunk and Worker sizes are compared with a committed baseline, and the deploy fails when one grows past its budget or the baseline is missing. |
 | UNTRUSTED-004, UNTRUSTED-005 | D37, D75 | The untrusted-content sanitizer tests: Markdown renders with the sanitize step after raw HTML parsing, and sanitized HTML has its authored `id` and `name` removed or prefixed. |
 | SENTRY-009 | A14 (Sentry clause) | The Sentry consent guard: session replay is wired in one module, `Sentry.init` passes no replay integration, and replay starts only after the visitor grants consent. |
