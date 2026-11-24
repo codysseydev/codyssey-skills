@@ -2,7 +2,7 @@
   "family": "testing",
   "title": "Testing",
   "intro": [
-    "Applies to: all tests, and to any behavioral change (which is incomplete without them). "
+    "Applies to: all tests, and to any behavioral change (which is incomplete without them)."
   ],
   "sections": [
     {
@@ -15,7 +15,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-001` Tests **MUST** use PHPUnit with the `#[Test]` attribute. Every test that boots the application **MUST** extend the project's `Tests\\TestCase`. Pest **MUST NOT** be used; a Pest-style `it(...)`/`test(...)` closure is a violation, not a preference.",
+          "rule": "Tests **MUST** use PHPUnit with the `#[Test]` attribute. Every test that boots the application **MUST** extend the project's `Tests\\TestCase`. Pest **MUST NOT** be used; a Pest-style `it(...)`/`test(...)` closure is a violation, not a preference.",
           "detect": {
             "signals": [
               "#[Test]",
@@ -43,7 +43,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "SHOULD",
-          "rule": "`TEST-002` Tests of pure domain code (value objects, model methods with no query, rules on plain values) **SHOULD** live in a Unit suite and extend `PHPUnit\\Framework\\TestCase`, so they run without booting the framework or the database.",
+          "rule": "Tests of pure domain code (value objects, model methods with no query, rules on plain values) **SHOULD** live in a Unit suite and extend `PHPUnit\\Framework\\TestCase`, so they run without booting the framework or the database.",
           "why": "they run without booting the framework or the database",
           "applies_to": [
             "value objects",
@@ -62,7 +62,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-003` Test method names **MUST** be descriptive with the `it_` prefix, stating the behavior (`it_signs_up_a_member_successfully`, `it_returns_404_when_course_not_found`), never generic (`test_course`).",
+          "rule": "Test method names **MUST** be descriptive with the `it_` prefix, stating the behavior (`it_signs_up_a_member_successfully`, `it_returns_404_when_course_not_found`), never generic (`test_course`).",
           "detect": {
             "signals": [
               "it_signs_up_a_member_successfully",
@@ -84,7 +84,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-004` Tests touching the database **MUST** use `RefreshDatabase`.",
+          "rule": "Tests touching the database **MUST** use `RefreshDatabase`.",
           "detect": {
             "signals": [
               "RefreshDatabase"
@@ -97,7 +97,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-005` Test data **MUST** come from factories and factory states; manual `Model::create([...])` where a factory state exists is a violation.",
+          "rule": "Test data **MUST** come from factories and factory states; manual `Model::create([...])` where a factory state exists is a violation.",
           "detect": {
             "signals": [
               "Model::create([...])"
@@ -117,7 +117,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MAY",
-          "rule": "`TEST-006` Tests **MAY** use facades and helpers freely. When invoking a job's `handle()` directly with injected dependencies, use `$this->app->call([$job, 'handle'])`.",
+          "rule": "Tests **MAY** use facades and helpers freely. When invoking a job's `handle()` directly with injected dependencies, use `$this->app->call([$job, 'handle'])`.",
           "detect": {
             "signals": [
               "handle()",
@@ -141,7 +141,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-007` Every behavioral change **MUST** ship with tests covering the happy path, the failure paths, and the edge cases. An untested endpoint/handler/rule is incomplete work, not a follow-up.",
+          "rule": "Every behavioral change **MUST** ship with tests covering the happy path, the failure paths, and the edge cases. An untested endpoint/handler/rule is incomplete work, not a follow-up.",
           "status": "active"
         },
         {
@@ -149,7 +149,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-008` Controller happy-path tests **MUST** assert the full response structure (`assertJsonStructure` matching every resource key), not a spot-check.",
+          "rule": "Controller happy-path tests **MUST** assert the full response structure (`assertJsonStructure` matching every resource key), not a spot-check.",
           "applies_to": [
             "Controller happy-path tests"
           ],
@@ -165,7 +165,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-009` Every Form Request validation rule (`required`, `email`, `max`, `unique`, enum, `confirmed`, ...) **MUST** have a test that triggers it.",
+          "rule": "Every Form Request validation rule (`required`, `email`, `max`, `unique`, enum, `confirmed`, ...) **MUST** have a test that triggers it.",
           "applies_to": [
             "Every Form Request validation rule"
           ],
@@ -185,7 +185,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-010` Any test that creates, updates, or deletes data **MUST** assert the resulting database state, not just the HTTP response, using strict comparison (`assertSame`, never `assertEquals`).",
+          "rule": "Any test that creates, updates, or deletes data **MUST** assert the resulting database state, not just the HTTP response, using strict comparison (`assertSame`, never `assertEquals`).",
           "applies_to": [
             "Any test that creates, updates, or deletes data"
           ],
@@ -209,7 +209,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-011` A handler that dispatches a domain event **MUST** be tested with `Event::fake()` plus `assertDispatched(...)` including assertions on the event's properties.",
+          "rule": "A handler that dispatches a domain event **MUST** be tested with `Event::fake()` plus `assertDispatched(...)` including assertions on the event's properties.",
           "applies_to": [
             "A handler that dispatches a domain event"
           ],
@@ -226,7 +226,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-012` Side effects **MUST** be asserted: `Mail::assertQueued`, `Bus::assertDispatched`, `Notification::assertSentTo`.",
+          "rule": "Side effects **MUST** be asserted: `Mail::assertQueued`, `Bus::assertDispatched`, `Notification::assertSentTo`.",
           "detect": {
             "signals": [
               "Mail::assertQueued",
@@ -241,7 +241,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-013` Every business-rule exception **MUST** have a test triggering it and asserting the HTTP status and message.",
+          "rule": "Every business-rule exception **MUST** have a test triggering it and asserting the HTTP status and message.",
           "status": "active"
         },
         {
@@ -249,7 +249,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-014` Every authenticated endpoint **MUST** have a test asserting 401 when unauthenticated; every owned-resource endpoint **MUST** have a test asserting the failure when a non-owner tries it.",
+          "rule": "Every authenticated endpoint **MUST** have a test asserting 401 when unauthenticated; every owned-resource endpoint **MUST** have a test asserting the failure when a non-owner tries it.",
           "applies_to": [
             "Every authenticated endpoint",
             "every owned-resource endpoint"
@@ -261,7 +261,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-015` State transitions **MUST** be tested from every relevant source state, not just the happy one.",
+          "rule": "State transitions **MUST** be tested from every relevant source state, not just the happy one.",
           "status": "active"
         },
         {
@@ -269,7 +269,7 @@
           "family": "testing",
           "scope": "laravel",
           "keyword": "MUST",
-          "rule": "`TEST-016` History/audit tests **MUST** assert the actual recorded content and metadata, not merely that a row exists.",
+          "rule": "History/audit tests **MUST** assert the actual recorded content and metadata, not merely that a row exists.",
           "status": "active"
         }
       ]
