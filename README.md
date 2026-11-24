@@ -8,7 +8,7 @@ Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), and a Symfony overlay of the Kanon (`symfony-kanon`) | Any Laravel or Symfony project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), and `standards-discovery`, the AI policy check that comes before reading a client's code | Any Laravel or Symfony project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -27,6 +27,13 @@ Five folders, five different jobs:
   `$container->get()`, writes go through a Messenger command to one handler). It reads
   `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
   install it next to `laravel-kanon`. It has no audit yet.
+- `standards-discovery`: reads a client's codebase and writes its conventions as a project
+  overlay (project-first mode). Today it does one thing: before any client code is read, it
+  checks the client's AI policy record and stops when the record is missing, incomplete or
+  forbids the step, naming the field that blocks. When the record allows it, it scans the
+  repo's policy files (`.aiignore`, `.cursorignore`, `README`, `CONTRIBUTING`) for warnings.
+  The record template is `kanon/standards-discovery/references/policy-record.md`.
+  Discovery, the standards report and the overlay writer come later.
 
 Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
 rulebook's `references/` folder, so the two folders must sit next to each other.
@@ -107,6 +114,13 @@ Install `bootstrap` with `factory-onboard` and `event-model`: the script calls b
   when the `report_stage` MCP tool is not registered. Set `FACTORY_DASHBOARD_REPO` to the
   dashboard checkout.
 
+## scheduled-tasks/
+
+The prompts of the three Claude Desktop scheduled tasks that run the factory pick-up, one per
+repo group: `factory-pickup/SKILL.md` (backend), `factory-pickup-frontend/SKILL.md` (frontend)
+and `factory-pickup-tools/SKILL.md` (the tool repos). Each prompt's `--repo` flags name the repos
+its lane watches. The install script writes them into the Desktop task folders.
+
 ## Install
 
 Copy a skill folder into `.claude/skills/` in your project, or into `~/.claude/skills/`
@@ -114,8 +128,9 @@ to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
 side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
 files from `laravel-kanon`'s `references/` folder.
 
-For the playbook and the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
-`event-model`, `factory-onboard`), run the install script from a checkout of this repo:
+For the playbook, the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
+`event-model`, `factory-onboard`), `standards-discovery` and the scheduled task prompts, run the
+install script from a checkout of this repo:
 
 ```
 node playbooks/scripts/install.mjs --source .
@@ -125,12 +140,14 @@ The first install runs the script from the checkout. Later runs use the installe
 `node ~/.agents/playbooks/scripts/install.mjs --source <checkout>`. It fetches the checkout's
 `origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
 from the commit, not the working tree, so a dirty checkout does not matter. It copies
-`playbooks/` into `~/.agents/playbooks/` and each factory skill into `~/.claude/skills/<name>/`,
-writes the commit sha to `~/.agents/playbooks/.installed-sha`, rewrites only files that
-changed, and never deletes a file. It refuses with exit 3 while a claim lock in
-`~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR` or `FACTORY_HOME` to
-install somewhere else. For a single repository, copy `playbooks/` into its `.agents/playbooks/`
-by hand instead.
+`playbooks/` into `~/.agents/playbooks/`, each of those skills into `~/.claude/skills/<name>/` and
+each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to
+`~/.agents/playbooks/.installed-sha`, rewrites only files that changed, and never deletes a file.
+It writes a task prompt only when the task folder exists, which Claude Desktop creates with the
+task, and lists a missing one under `skipped`. It refuses with exit 3 while a claim lock in
+`~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR`, `FACTORY_TASKS_DIR`
+or `FACTORY_HOME` to install somewhere else. For a single repository, copy `playbooks/` into its
+`.agents/playbooks/` by hand instead.
 
 After each PStack upgrade, run PStack's `check-playbooks.mjs` from the repository root. It
 fails when an upgrade rewrote a step the playbook quotes.
@@ -139,8 +156,17 @@ For unattended runs:
 
 - Register the report MCP server once:
   `claude mcp add --scope user report-stage -- sh <dashboard checkout>/mcp/report-stage/run.sh`.
-- Create the Claude Desktop scheduled task `factory-pickup`. Its prompt text lives in
-  `playbooks/factory.md` under Scheduled pick-up.
+- Create each lane task once in Claude Desktop: `factory-pickup`, `factory-pickup-frontend` and
+  `factory-pickup-tools`, Hourly, Auto permission mode. The instructions text does not matter.
+  Then run the install: it writes each prompt from `scheduled-tasks/` over the task's file, and
+  each armed tick with no live claim lock reinstalls it (the install refuses while any lane holds
+  one). Schedule, folder and permission mode stay in Desktop.
+- One-time bootstrap after the PR that added `scheduled-tasks/` merges. The live prompts have no
+  install step, and the installed `install.mjs` does not know task prompts, so no tick installs
+  them. Pull `main` in the codyssey-skills checkout and run
+  `node playbooks/scripts/install.mjs --source .` from it once, because the in-checkout installer
+  knows the new targets. Then check that the three `~/.claude/scheduled-tasks/*/SKILL.md` files
+  changed. From then on the prompts install themselves.
 - `mkdir -p ~/.factory && touch ~/.factory/armed` arms it. `rm ~/.factory/armed` disarms it.
 
 ## License

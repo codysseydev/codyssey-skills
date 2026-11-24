@@ -1,0 +1,79 @@
+{
+  "family": "shapes",
+  "title": "Shapes",
+  "intro": [
+    "First intro paragraph, with a `code span`.",
+    "Second intro paragraph."
+  ],
+  "sections": [
+    {
+      "heading": "Bullets and a note",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SHP-001",
+          "family": "shapes",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Rules **MUST** stay small:",
+          "items": ["one;", "two."],
+          "status": "active"
+        },
+        {
+          "note": "File-shape rules are owned by `orchestration-di.md`."
+        }
+      ]
+    },
+    {
+      "heading": "Section with an intro",
+      "intro": ["A paragraph before the list."],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SHP-002",
+          "family": "shapes",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "Intros **SHOULD** come before the list.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "A numbered list",
+      "intro": [],
+      "list": "numbered",
+      "entries": [
+        {
+          "id": "SHP-003",
+          "family": "shapes",
+          "scope": "laravel",
+          "keyword": "MAY",
+          "rule": "Numbers **MAY** count only the lines written.",
+          "status": "active"
+        },
+        {
+          "note": "A note takes a number too."
+        },
+        {
+          "id": "SHP-004",
+          "family": "shapes",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A deprecated entry **MUST** not be written.",
+          "status": "deprecated"
+        },
+        {
+          "id": "SHP-005",
+          "family": "shapes",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Nested lines **MUST NOT** break the numbering:",
+          "items": ["first nested line."],
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

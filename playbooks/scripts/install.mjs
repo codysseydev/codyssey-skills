@@ -1,5 +1,6 @@
-// Install script for the factory's installed copies: sync `playbooks/` and the factory skills
-// from a commit of this repo into ~/.agents/playbooks/ and ~/.claude/skills/<name>/.
+// Install script for the factory's installed copies: sync `playbooks/`, the factory skills,
+// `standards-discovery` and the scheduled task prompts from a commit of this repo into
+// ~/.agents/playbooks/, ~/.claude/skills/<name>/ and ~/.claude/scheduled-tasks/<name>/.
 //
 // Usage:
 //   node install.mjs --source <codyssey-skills checkout> [--ref <ref>]
@@ -10,11 +11,16 @@
 // bytes or its executable bit differ, so a second run with nothing new moves no mtime. Nothing is
 // ever deleted. The installed sha goes to ~/.agents/playbooks/.installed-sha, written last.
 //
+// A task prompt is written only when its task folder exists. Claude Desktop creates that folder
+// when the task is created, so the install updates a task and never creates one. A missing task
+// folder is listed under `skipped`.
+//
 // The install refuses while a live claim lock exists in $FACTORY_HOME/locks (same stale rule as
 // pick-up.mjs): a run's claim and release must not see two versions of the scripts.
 //
 // Targets: FACTORY_AGENTS_DIR (default ~/.agents), FACTORY_SKILLS_DIR (default ~/.claude/skills),
-// FACTORY_HOME (default ~/.factory). One JSON object on stdout, errors on stderr.
+// FACTORY_TASKS_DIR (default ~/.claude/scheduled-tasks), FACTORY_HOME (default ~/.factory).
+// One JSON object on stdout, errors on stderr.
 // Exit 0 installed (also when nothing changed), 1 unexpected error, 2 bad usage, 3 refused.
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -27,14 +33,18 @@ import { fileURLToPath } from 'node:url';
 import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
+export const KANON_SKILLS = ['standards-discovery'];
+export const FACTORY_TASKS = ['factory-pickup', 'factory-pickup-frontend', 'factory-pickup-tools'];
 export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 
 // The only place the install list lives: a path prefix in the commit -> its folder on disk.
-export function installMap({ agentsDir, skillsDir }) {
+export function installMap({ agentsDir, skillsDir, tasksDir }) {
   return [
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
     ...FACTORY_SKILLS.map((name) => ({ prefix: `factory/${name}/`, dir: join(skillsDir, name) })),
+    ...KANON_SKILLS.map((name) => ({ prefix: `kanon/${name}/`, dir: join(skillsDir, name) })),
+    ...FACTORY_TASKS.map((name) => ({ prefix: `scheduled-tasks/${name}/`, dir: join(tasksDir, name), existingOnly: true })),
   ];
 }
 
@@ -51,6 +61,7 @@ export function makeDeps(env = process.env) {
     stateDir: env.FACTORY_HOME || join(homedir(), '.factory'),
     agentsDir: env.FACTORY_AGENTS_DIR || join(homedir(), '.agents'),
     skillsDir: env.FACTORY_SKILLS_DIR || join(homedir(), '.claude', 'skills'),
+    tasksDir: env.FACTORY_TASKS_DIR || join(homedir(), '.claude', 'scheduled-tasks'),
     git: defaultGit,
     now: () => Date.now(),
   };
@@ -88,12 +99,16 @@ const isInside = (root, path) => {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 };
 
-// [{src, dest, mode, blob}] for every file of the commit that the map installs.
+// {entries: [{src, dest, mode, blob}], skipped: [dir]}: every file of the commit that the map
+// installs, and each `existingOnly` folder that is missing, whose files are left out.
 export function planInstall(d, { source, sha }) {
   const map = installMap(d);
   for (const { dir } of map) {
     if (lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`${dir} is a symlink; refusing to write through it`);
   }
+  const skipped = map
+    .filter((t) => t.existingOnly && !lstatSync(t.dir, { throwIfNoEntry: false })?.isDirectory())
+    .map((t) => t.dir);
   const realRoots = new Map(map.map(({ dir }) => [dir, realPathOfNearest(dir)]));
   const checkedDirs = new Set();
   const listing = d.git(['-C', source, 'ls-tree', '-r', '-z', sha]).toString('utf8');
@@ -104,7 +119,7 @@ export function planInstall(d, { source, sha }) {
     if (!m) throw new Error(`cannot parse ls-tree entry: ${rec}`);
     const [, mode, type, blob, src] = m;
     const target = map.find((t) => src.startsWith(t.prefix));
-    if (!target) continue;
+    if (!target || skipped.includes(target.dir)) continue;
     if (type !== 'blob' || (mode !== '100644' && mode !== '100755')) {
       throw new Error(`${src} is a ${type} with mode ${mode}; only regular files install`);
     }
@@ -118,8 +133,8 @@ export function planInstall(d, { source, sha }) {
     }
     entries.push({ src, dest, mode, blob });
   }
-  if (!entries.length) throw new Error(`${sha} has no playbooks/ or factory skill files to install`);
-  return entries;
+  if (!entries.length) throw new Error(`${sha} has no files to install`);
+  return { entries, skipped };
 }
 
 // Writes bytes through a temp file in the same folder and a rename. False when nothing differs.
@@ -140,7 +155,7 @@ function syncFile(dest, bytes, executable) {
   return true;
 }
 
-// -> {status: 'refused', locks} | {status: 'installed', sha, changed: [dest paths]}
+// -> {status: 'refused', locks} | {status: 'installed', sha, changed: [dest paths], skipped: [dirs]}
 export function install(d, { source, ref }) {
   const refusal = () => {
     const locks = liveLocks(d);
@@ -156,7 +171,7 @@ export function install(d, { source, ref }) {
   const sha = d.git(['-C', source, 'rev-parse', '--verify', `${target}^{commit}`]).toString('utf8').trim();
   const second = refusal();
   if (second) return second;
-  const entries = planInstall(d, { source, sha });
+  const { entries, skipped } = planInstall(d, { source, sha });
   // Every blob is read before the first write, so a git failure leaves the install untouched.
   // install.mjs is written after every other file: the new one imports exports that only the new
   // pick-up.mjs has, so a failure between the two writes must not leave a new installer on old scripts.
@@ -168,7 +183,7 @@ export function install(d, { source, ref }) {
     if (syncFile(e.dest, bytes, e.mode === '100755')) changed.push(e.dest);
   }
   if (syncFile(shaFile(d), Buffer.from(`${sha}\n`), false)) changed.push(shaFile(d));
-  return { status: 'installed', sha, changed };
+  return { status: 'installed', sha, changed, skipped };
 }
 
 // ---------- CLI ----------

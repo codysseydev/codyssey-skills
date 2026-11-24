@@ -1,0 +1,224 @@
+{
+  "family": "isolation",
+  "title": "Module & Application Isolation",
+  "intro": [
+    "Applies to: anything touching two modules, cross-module data, or two application surfaces (public app, admin panel, internal API). Isolation violations are the most expensive mistakes to unwind later; every MUST here is critical."
+  ],
+  "sections": [
+    {
+      "heading": "Module isolation",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ISO-001",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "A module **MUST NOT** import another module's classes: no models, enums, events, commands, handlers, services, or value objects across bounded contexts.",
+          "allowed_in": [
+            "pure infrastructure in the shared `Framework\\` namespace",
+            "pure infrastructure in the shared `Shared\\` namespace"
+          ],
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "One layer per module, with no dependency allowed between module layers; the shared `Framework\\` and `Shared\\` namespaces are allowed from every layer. Covers imports and `::class` references, not class names in strings.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-002",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Cross-module collaboration **MUST** go through an explicit contract (interface) or a domain event, never direct imports or new-ing up another module's classes.",
+          "status": "active"
+        },
+        {
+          "id": "ISO-003",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "The consumer **MUST** define the contract; the provider implements it. An interface lives in the module that needs the capability, not the one that fulfills it.",
+          "status": "active"
+        },
+        {
+          "id": "ISO-004",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "There is no shared kernel for domain concepts: a module **MUST** own its own copy of any value object it needs rather than importing another module's. Only a dedicated shared-infrastructure namespace (`Framework\\`, `Shared\\`) holding pure infrastructure **MAY** be used from anywhere.",
+          "allowed_in": [
+            "pure infrastructure in the shared `Framework\\` namespace",
+            "pure infrastructure in the shared `Shared\\` namespace"
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Cross-module data",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ISO-005",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Cross-module references **MUST** be plain unsigned integer/ULID columns, never Eloquent relationships (`belongsTo` another module's model) and never database foreign keys across modules.",
+          "detect": {
+            "signals": [
+              "belongsTo"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "The related model in `belongsTo` is a dependency on another module's layer, so the module-layer rules catch it. Database foreign keys in migrations are not covered.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-006",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Modules own their tables. A module **MUST NOT** add columns to another module's tables; it creates its own table keyed by the other module's id.",
+          "status": "active"
+        },
+        {
+          "id": "ISO-007",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Cross-module data access **MUST** be read-only, via an injected `ConnectionInterface` with id-based queries. A module **MUST NOT** insert, update, or delete rows in another module's tables.",
+          "detect": {
+            "signals": [
+              "ConnectionInterface"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "ISO-008",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Data another module owns but this module needs at runtime **MUST** be materialized: stored on this module's own table and kept in sync by an event listener, not fetched cross-module per request.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Application isolation",
+      "intro": [
+        "Separate application surfaces (the customer-facing app and an admin panel, for example) are separate applications, even inside one repository."
+      ],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ISO-009",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Application namespaces **MUST NOT** import from each other, in either direction: no shared models, enums, events, commands, handlers, or contracts.",
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "One layer per application namespace, with no dependency allowed in either direction.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-010",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Each application **MUST** own its read models (read-only, pointing at the same tables), its write models (carrying finders, invariants, and state transitions for anything it mutates), and its enums.",
+          "applies_to": [
+            "read models",
+            "write models",
+            "enums"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-011",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Cross-application event subscriptions **MUST NOT** exist: an application's provider never registers a listener on another application's event, by `::class` or by string FQCN. There is no listener exception.",
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "Catches a provider that names another application's event by `::class`. A listener registered by string FQCN is not covered.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-012",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every side effect of an application's action (history rows, audit rows, cache flushes, notification emails) **MUST** be handled by that application's own listeners. An application **MUST NOT** dispatch another application's domain events to reuse its cascades; it replicates the steps it actually needs with its own write models.",
+          "applies_to": [
+            "history rows",
+            "audit rows",
+            "cache flushes",
+            "notification emails"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-013",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "A handler **MUST NOT** be a pass-through whose body only dispatches an event with no preceding mutation; it does real work against a write model or it does not exist.",
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule that fails on a handler whose `handle()` body only dispatches an event. The rule does not exist yet.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ISO-014",
+          "family": "isolation",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Each application **MUST** authenticate through its own guard; guards and role enums are never shared across applications.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "What is NOT a violation",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "note": "Classes inside the same module using each other freely; the boundary is the bounded context, not the namespace segment."
+        },
+        {
+          "note": "Importing pure infrastructure from the shared `Framework\\`/`Shared\\` namespace."
+        },
+        {
+          "note": "A reporting or read-only context adding a query slice, an event listener, or a scheduled projection; only write commands are out of place there."
+        }
+      ]
+    }
+  ]
+}

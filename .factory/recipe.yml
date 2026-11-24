@@ -17,6 +17,12 @@ checks:
     run: python3 -m unittest discover -s factory/event-model/tests
   - name: factory-onboard-tests
     run: python3 -m unittest discover -s factory/factory-onboard/tests
+  - name: standards-discovery-tests
+    run: python3 -m unittest discover -s kanon/standards-discovery/tests
   - name: install-tests
     run: node --test playbooks/scripts/install.test.mjs
+  - name: kanon-catalog-check
+    run: node kanon/scripts/catalog.mjs check --base origin/main
+  - name: kanon-catalog-tests
+    run: node --test kanon/scripts/catalog.test.mjs
 teardown: []
