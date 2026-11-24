@@ -524,16 +524,22 @@ def check_work(work, repo, kanon_root):
     policy_mod, inventory = _sibling("check-policy.py"), _sibling("inventory.py")
     kanon = load_kanon(kanon_root)
 
-    ignored = set()
+    patterns = None
     try:
         policy = json.loads(_read(os.path.join(work, "policy.json")))
         if policy.get("result") != "continue":
             add("policy.json", "the policy check did not say continue")
-        ignored = inventory.ignored_by(repo, inventory.ignore_patterns(policy))
+        patterns = inventory.ignore_patterns(policy)
     except (OSError, ValueError, AttributeError) as error:
         add("policy.json", f"missing or unreadable in the work folder: {error}")
     except inventory.Stop as stop:
         add("policy.json", str(stop))
+    listing = None
+    try:
+        listing = json.loads(_read(os.path.join(work, "inventory.json")))
+        inventory_read_at, inventory_branches = listing["read_at"], set(listing["branches"])
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        add("inventory.json", f"missing or unreadable in the work folder: {error}")
 
     # the overlay
     entries = []
@@ -567,6 +573,16 @@ def check_work(work, repo, kanon_root):
         sha = resolve_commit(repo, report["read_at"].lower())
         if sha is None:
             add("Read at", f"{report['read_at']} is not a commit in the repo")
+        elif listing is not None and sha != inventory_read_at:
+            add("Read at", f"{sha} differs from read_at in inventory.json ({inventory_read_at})")
+            sha = None
+    ignored = set()
+    if sha and patterns:
+        try:
+            ignored = inventory.ignored_by(repo, patterns, sha)
+        except inventory.Stop as stop:
+            add("policy.json", str(stop))
+            sha = None
 
     # each overlay entry
     by_key = {}
@@ -621,6 +637,9 @@ def check_work(work, repo, kanon_root):
         where = row["where"]
         if sha:
             for item in row["citations"]:
+                if item["kind"] == "branch" and listing is not None and item["name"] not in inventory_branches:
+                    add(where, f"branch:{item['name']}: not in the branch list of inventory.json")
+                    continue
                 problem = check_citation(repo, sha, item, ignored)
                 if problem:
                     add(where, problem)

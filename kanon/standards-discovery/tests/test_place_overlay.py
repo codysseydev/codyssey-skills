@@ -98,15 +98,19 @@ class AllowingRecordMakesABranch(Placement):
 
     def test_a_branch_of_that_name_with_other_files_stops(self):
         self.place(ALLOWING_COMMIT)
-        put(self.work, "standards-report.md", read(self.work, "standards-report.md") + "\nmore\n")
+        put(self.work, ".ai/rules/project/testing.md", read(self.work, ".ai/rules/project/testing.md") + "\n- More.\n")
         code, out = self.place(ALLOWING_COMMIT)
         self.assertEqual((code, out["result"]), (1, "stop"))
         self.assertIn("standards-discovery/", out["reason"])
 
     def test_a_bad_branch_name_is_refused_before_anything_is_made(self):
         before = snapshot(self.repo)
-        code, out = self.place(ALLOWING_COMMIT, "--branch", "bad..name")
+        code, out, err = run_script(
+            "place-overlay.py", "place", "--record", ALLOWING_COMMIT, "--model", MODEL, "--work", self.work,
+            "--repo", self.repo, "--branch", "bad..name",
+        )
         self.assertEqual(code, 2)
+        self.assertIn("branch", err)
         self.assertEqual(snapshot(self.repo), before)
 
     def test_a_failure_after_the_branch_is_made_leaves_no_branch_or_worktree(self):

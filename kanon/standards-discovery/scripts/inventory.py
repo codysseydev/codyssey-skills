@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 IGNORE_FILES = (".aiignore", ".cursorignore")
 DROPPED_FOLDERS = ("vendor", "node_modules")
@@ -50,10 +51,10 @@ class Stop(Exception):
     pass
 
 
-def git(repo, *args):
+def git(repo, *args, env=None):
     """Run a read-only git command in repo. Returns the CompletedProcess."""
     return subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, *args], capture_output=True,
+        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, *args], capture_output=True, env=env,
     )
 
 
@@ -76,14 +77,24 @@ def ignore_patterns(policy):
     return patterns
 
 
-def ignored_by(repo, patterns):
-    """The tracked paths that git's own matcher says the patterns cover."""
+def ignored_by(repo, patterns, sha=None):
+    """The tracked paths that git's own matcher says the patterns cover.
+
+    With sha, the paths of that commit's tree instead of the index, read through a temporary index.
+    """
     if not patterns:
         return set()
     args = ["ls-files", "-z", "-c", "-i"]
     for pattern in patterns:
         args += ["-x", pattern]
-    proc = git(repo, *args)
+    if sha is None:
+        proc = git(repo, *args)
+    else:
+        with tempfile.TemporaryDirectory(prefix="ignored-by-") as scratch:
+            env = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
+            if git(repo, "read-tree", sha, env=env).returncode != 0:
+                raise Stop(f"cannot read the tree of {sha}")
+            proc = git(repo, *args, env=env)
     if proc.returncode != 0:
         raise Stop(f"git ls-files failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return set(_names(proc))
@@ -156,7 +167,7 @@ def build(repo, policy):
     sib = siblings(repo, php) if read_at else {}
     listed = {p for paths in sources.values() for p in paths} | {p for paths in sib.values() for p in paths}
     if read_at:
-        differs = set(_names(git(repo, "diff", "--name-only", "-z", "HEAD")))
+        differs = set(_names(git(repo, "diff", "--no-ext-diff", "--name-only", "-z", "HEAD")))
         dirty = sorted(listed & differs)
         if dirty:
             raise Stop("these files differ from HEAD, and the checker reads the commit: " + ", ".join(dirty))

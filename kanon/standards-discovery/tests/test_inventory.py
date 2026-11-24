@@ -237,7 +237,7 @@ class NoCode(Inventory):
         self.assertEqual((code, out["result"], out["code_files"]), (0, "no-code", 0))
 
     def test_a_config_file_is_not_code(self):
-        repo = self.plain_repo({"README.md": "# r\n", "vite.config.js": "x\n", "eslint.config.js": "x\n"})
+        repo = self.plain_repo({"README.md": "# r\n", "vite.config.js": "x\n", "tailwind.config.ts": "x\n"})
         self.assertEqual(self.run_inventory(repo, self.fake_policy())[1]["result"], "no-code")
 
     def test_readme_and_claude_md_give_an_inventory(self):

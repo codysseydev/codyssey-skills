@@ -388,6 +388,38 @@ class ReportCitations(Golden):
         self.assertProblem("Read at")
 
 
+class ReadAtAndIgnoredPaths(Golden):
+    def test_a_read_at_that_differs_from_the_inventorys_stops(self):
+        tree = git(self.repo, "rev-parse", "HEAD^{tree}")
+        other = git(self.repo, "commit-tree", tree, "-p", "HEAD", "-m", "feat: other")
+        self.edit("standards-report.md", "Read at: " + self.info["read_at"], "Read at: " + other)
+        self.assertProblem("inventory.json", "Read at")
+
+    def test_a_missing_inventory_json_is_a_problem(self):
+        os.remove(os.path.join(self.work, "inventory.json"))
+        self.assertProblem("inventory.json")
+
+    def test_a_citation_into_a_path_at_read_at_but_not_in_the_index_is_ignored(self):
+        git(self.repo, "rm", "-q", "--cached", "app/Legacy/OldBilling.php")
+        self.edit(
+            "standards-report.md",
+            '`app/Orders/CreateOrderHandler.php:13` "DB::transaction"',
+            '`app/Legacy/OldBilling.php:3` "secret pricing"',
+        )
+        self.assertProblem("ignored")
+
+    def test_a_branch_that_is_not_in_the_inventory_list_fails(self):
+        git(self.repo, "branch", "feature/later")
+        self.edit("standards-report.md", "branch:feature/ORD-12-cancel-refund", "branch:feature/later")
+        self.assertProblem("inventory.json", "feature/later")
+
+    def test_ignored_by_can_match_the_tree_of_a_commit(self):
+        git(self.repo, "rm", "-q", "--cached", "app/Legacy/OldBilling.php")
+        inventory = load_script("inventory.py")
+        self.assertEqual(inventory.ignored_by(self.repo, ["app/Legacy/"]), set())
+        self.assertEqual(inventory.ignored_by(self.repo, ["app/Legacy/"], self.info["read_at"]), {"app/Legacy/OldBilling.php"})
+
+
 class ReportAndOverlayAgree(Golden):
     def test_a_row_with_no_entry_fails(self):
         self.edit(".ai/kanon.yml", ORCH_011, "")

@@ -127,6 +127,9 @@ def make_work(client, dest, record, repo):
     code, out, err = run_script("check-policy.py", "--record", record, "--repo", repo, "--model", MODEL)
     assert code == 0, (out, err)
     put(dest, "policy.json", out)
+    code, out, err = run_script("inventory.py", "--policy", os.path.join(dest, "policy.json"), "--repo", repo)
+    assert code == 0, (out, err)
+    put(dest, "inventory.json", out)
     return dest
 
 
