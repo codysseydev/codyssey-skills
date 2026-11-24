@@ -27,7 +27,7 @@ Setup starts no containers or servers. Nothing to remove.
 ## Notes
 
 - `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
-- The factory runs the installed copies, not this repo: `~/.agents/playbooks/` and the five factory skills and `standards-discovery` in `~/.claude/skills/`. `node playbooks/scripts/install.mjs --source <checkout>` syncs them from `origin/main` (README "Install"), and the scheduled pick-up runs it before `claim` when the factory is armed. A merged change to `playbooks/`, `factory/` or `kanon/standards-discovery/` takes effect on the next install, not at merge. The install never deletes, so a file removed from the repo stays installed. A run on this repo edits its worktree, never the installed copies.
+- The factory runs the installed copies, not this repo: `~/.agents/playbooks/`, the five factory skills and `standards-discovery` in `~/.claude/skills/`, and the lane prompts in `~/.claude/scheduled-tasks/`. `node playbooks/scripts/install.mjs --source <checkout>` syncs them from `origin/main` (README "Install"), and the scheduled pick-up runs it before `claim` when the factory is armed. A merged change to `playbooks/`, `factory/`, `kanon/standards-discovery/` or `scheduled-tasks/` takes effect on the next install, not at merge. The install never deletes, so a file removed from the repo stays installed. A run on this repo edits its worktree, never the installed copies.
 
 ## Post-merge
 

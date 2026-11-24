@@ -2,14 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
-  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync,
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FACTORY_SKILLS, KANON_SKILLS, install, makeDeps } from './install.mjs';
+import { FACTORY_SKILLS, FACTORY_TASKS, KANON_SKILLS, install, makeDeps } from './install.mjs';
+
+// The real ~/.claude/scheduled-tasks holds the live Desktop task prompts. Every run below gets its
+// own FACTORY_TASKS_DIR; this default only catches a run that forgets it.
+process.env.FACTORY_TASKS_DIR = mkdtempSync(join(tmpdir(), 'install-tasks-'));
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'install.mjs');
+const REPO = join(dirname(SCRIPT), '..', '..');
 const H = 3600 * 1000;
 
 const GIT_ENV = {
@@ -48,6 +53,8 @@ const baseFiles = (v) => [
   ['kanon/laravel-kanon/SKILL.md', 'not listed\n'],
   ['factory/event-model/scripts/check.py', `check ${v}\n`],
   ['factory/not-listed/SKILL.md', 'not listed\n'],
+  ...FACTORY_TASKS.map((name) => [`scheduled-tasks/${name}/SKILL.md`, `${name} prompt ${v}\n`]),
+  ['scheduled-tasks/not-listed/SKILL.md', 'not listed\n'],
   ['README.md', `readme ${v}\n`],
 ];
 
@@ -66,12 +73,14 @@ function fixture() {
   git(root, 'clone', '-q', bare, source);
   const agentsDir = join(root, 'agents');
   const skillsDir = join(root, 'skills');
+  const tasksDir = join(root, 'tasks');
   const home = join(root, 'home');
   for (const dir of [agentsDir, skillsDir, home]) mkdirSync(dir);
+  for (const name of FACTORY_TASKS) mkdirSync(join(tasksDir, name), { recursive: true });
   const runScript = (script, ...args) => {
     const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, FACTORY_HOME: home, FACTORY_AGENTS_DIR: agentsDir, FACTORY_SKILLS_DIR: skillsDir },
+      env: { ...process.env, FACTORY_HOME: home, FACTORY_AGENTS_DIR: agentsDir, FACTORY_SKILLS_DIR: skillsDir, FACTORY_TASKS_DIR: tasksDir },
     });
     let out;
     try {
@@ -82,7 +91,7 @@ function fixture() {
     return { code: r.status, out, stderr: r.stderr };
   };
   const run = (...args) => runScript(SCRIPT, ...args);
-  return { root, bare, seed, source, agentsDir, skillsDir, home, sha1, run, runScript };
+  return { root, bare, seed, source, agentsDir, skillsDir, tasksDir, home, sha1, run, runScript };
 }
 
 const read = (...p) => readFileSync(join(...p), 'utf8');
@@ -113,6 +122,8 @@ function rawLock(home, name, content, mtimeMs) {
 const nothingWritten = (f) => {
   assert.deepEqual(listFiles(f.agentsDir), []);
   assert.deepEqual(listFiles(f.skillsDir), []);
+  assert.deepEqual(listFiles(f.tasksDir), []);
+  assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
 };
 
 test('installs playbooks, the five factory skills and standards-discovery from the ref and records the sha', () => {
@@ -131,7 +142,7 @@ test('installs playbooks, the five factory skills and standards-discovery from t
   assert.equal(statSync(join(f.agentsDir, 'playbooks/factory.md')).mode & 0o111, 0);
   assert.ok(out.changed.includes(join(f.agentsDir, 'playbooks/factory.md')));
   assert.ok(out.changed.includes(join(f.agentsDir, 'playbooks/.installed-sha')));
-  assert.equal(out.changed.length, listFiles(f.agentsDir).length + listFiles(f.skillsDir).length);
+  assert.equal(out.changed.length, listFiles(f.agentsDir).length + listFiles(f.skillsDir).length + listFiles(f.tasksDir).length);
 });
 
 test('a dirty working tree in the source is not installed', () => {
@@ -178,6 +189,7 @@ test('a second run with nothing new changes no file and no mtime', () => {
   const files = [
     ...listFiles(f.agentsDir).map((p) => join(f.agentsDir, p)),
     ...listFiles(f.skillsDir).map((p) => join(f.skillsDir, p)),
+    ...listFiles(f.tasksDir).map((p) => join(f.tasksDir, p)),
   ];
   for (const file of files) utimesSync(file, old, old);
   const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
@@ -273,13 +285,14 @@ test('one live lock among stale ones refuses and names only the live one', () =>
   assert.deepEqual(out.locks, [live]);
 });
 
-test('a folder under factory/ or kanon/ that is not in the list is not installed', () => {
+test('a folder under factory/, kanon/ or scheduled-tasks/ that is not in the list is not installed', () => {
   const f = fixture();
   assert.equal(f.run('--source', f.source, '--ref', 'HEAD').code, 0);
   assert.ok(!existsSync(join(f.skillsDir, 'not-listed')));
   assert.ok(!existsSync(join(f.skillsDir, 'laravel-kanon')));
   assert.ok(!existsSync(join(f.agentsDir, 'README.md')));
   assert.deepEqual(readdirSync(f.skillsDir).sort(), [...FACTORY_SKILLS, ...KANON_SKILLS].sort());
+  assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
 });
 
 test('a bad ref exits 1 and writes nothing', () => {
@@ -321,11 +334,12 @@ test('usage errors exit 2 and write nothing', () => {
 
 // install() with a git dep that wraps the real one, for failures the CLI cannot be made to hit.
 function depsWith(f, wrap) {
-  const real = makeDeps({}).git;
+  const real = makeDeps({ FACTORY_TASKS_DIR: f.tasksDir }).git;
   return {
     stateDir: f.home,
     agentsDir: f.agentsDir,
     skillsDir: f.skillsDir,
+    tasksDir: f.tasksDir,
     git: (args) => wrap(args, real),
     now: () => Date.now(),
   };
@@ -387,4 +401,79 @@ test('a lock that appears during the fetch refuses and writes nothing', () => {
   assert.equal(result.status, 'refused');
   assert.deepEqual(result.locks, [join(f.home, 'locks', 'o-r-1')]);
   nothingWritten(f);
+});
+
+const prompt = (f, name) => join(f.tasksDir, name, 'SKILL.md');
+const repoPrompt = (name) => readFileSync(join(REPO, 'scheduled-tasks', name, 'SKILL.md'));
+
+test('installs each task prompt byte for byte into its existing task folder', () => {
+  const f = fixture();
+  commit(f.seed, FACTORY_TASKS.map((name) => [`scheduled-tasks/${name}/SKILL.md`, repoPrompt(name)]), 'real prompts');
+  git(f.seed, 'push', '-q', 'origin', 'main');
+  const { code, out } = f.run('--source', f.source);
+  assert.equal(code, 0);
+  assert.deepEqual(out.skipped, []);
+  for (const name of FACTORY_TASKS) {
+    assert.ok(readFileSync(prompt(f, name)).equals(repoPrompt(name)), name);
+    assert.ok(out.changed.includes(prompt(f, name)), name);
+  }
+});
+
+test('a rerun leaves the installed prompts and their mtimes alone', () => {
+  const f = fixture();
+  assert.equal(f.run('--source', f.source, '--ref', 'HEAD').code, 0);
+  const old = new Date('2020-01-01T00:00:00Z');
+  for (const name of FACTORY_TASKS) utimesSync(prompt(f, name), old, old);
+  const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 0);
+  assert.deepEqual(out.changed, []);
+  for (const name of FACTORY_TASKS) assert.equal(statSync(prompt(f, name)).mtimeMs, old.getTime(), name);
+});
+
+test('a live lock refuses and leaves the installed prompts as they were', () => {
+  const f = fixture();
+  assert.equal(f.run('--source', f.source, '--ref', 'HEAD').code, 0);
+  commit(f.seed, FACTORY_TASKS.map((name) => [`scheduled-tasks/${name}/SKILL.md`, `${name} prompt v2\n`]), 'v2 prompts');
+  git(f.seed, 'push', '-q', 'origin', 'main');
+  writeLock(f.home, 'o-r-1', Date.now());
+  assert.equal(f.run('--source', f.source).code, 3);
+  for (const name of FACTORY_TASKS) assert.equal(read(prompt(f, name)), `${name} prompt v1\n`);
+});
+
+test('a missing task folder is not created and is listed under skipped', () => {
+  const f = fixture();
+  const [missing, ...present] = FACTORY_TASKS;
+  rmSync(join(f.tasksDir, missing), { recursive: true });
+  const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 0);
+  assert.deepEqual(out.skipped, [join(f.tasksDir, missing)]);
+  assert.ok(!existsSync(join(f.tasksDir, missing)));
+  for (const name of present) assert.equal(read(prompt(f, name)), `${name} prompt v1\n`);
+  assert.equal(read(f.agentsDir, 'playbooks/factory.md'), 'playbook v1\n');
+});
+
+test('each repo prompt has the frontmatter Desktop reads and no home path', () => {
+  for (const name of FACTORY_TASKS) {
+    const text = repoPrompt(name).toString('utf8');
+    const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
+    assert.ok(front, `${name}: no frontmatter`);
+    assert.match(front[1], new RegExp(`^name: ${name}$`, 'm'), name);
+    assert.match(front[1], /^description: \S/m, name);
+    assert.ok(!text.includes('/Users/'), `${name}: has a /Users/ path`);
+  }
+});
+
+test('each repo prompt runs the install before it claims', () => {
+  for (const name of FACTORY_TASKS) {
+    const text = repoPrompt(name).toString('utf8');
+    const installAt = text.indexOf('scripts/install.mjs');
+    const claimAt = text.indexOf('scripts/pick-up.mjs claim');
+    assert.ok(installAt !== -1 && claimAt !== -1, name);
+    assert.ok(installAt < claimAt, `${name}: install comes after claim`);
+  }
+});
+
+test('scheduled-tasks/ in the repo holds exactly the listed task folders', () => {
+  const folders = readdirSync(join(REPO, 'scheduled-tasks'), { withFileTypes: true }).filter((e) => e.isDirectory());
+  assert.deepEqual(folders.map((e) => e.name).sort(), [...FACTORY_TASKS].sort());
 });
