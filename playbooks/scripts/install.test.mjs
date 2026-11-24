@@ -7,7 +7,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FACTORY_SKILLS, FACTORY_TASKS, install, makeDeps } from './install.mjs';
+import { FACTORY_SKILLS, FACTORY_TASKS, KANON_SKILLS, install, makeDeps } from './install.mjs';
 
 // The real ~/.claude/scheduled-tasks holds the live Desktop task prompts. Every run below gets its
 // own FACTORY_TASKS_DIR; this default only catches a run that forgets it.
@@ -48,6 +48,9 @@ const baseFiles = (v) => [
   ['playbooks/scripts/install.mjs', `install ${v}\n`],
   ['playbooks/scripts/run.sh', `#!/bin/sh\necho ${v}\n`, 0o755],
   ...FACTORY_SKILLS.map((name) => [`factory/${name}/SKILL.md`, `${name} ${v}\n`]),
+  ...KANON_SKILLS.map((name) => [`kanon/${name}/SKILL.md`, `${name} ${v}\n`]),
+  ['kanon/standards-discovery/scripts/check-policy.py', `check-policy ${v}\n`],
+  ['kanon/laravel-kanon/SKILL.md', 'not listed\n'],
   ['factory/event-model/scripts/check.py', `check ${v}\n`],
   ['factory/not-listed/SKILL.md', 'not listed\n'],
   ...FACTORY_TASKS.map((name) => [`scheduled-tasks/${name}/SKILL.md`, `${name} prompt ${v}\n`]),
@@ -123,7 +126,7 @@ const nothingWritten = (f) => {
   assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
 };
 
-test('installs playbooks and the five skills from the ref and records the sha', () => {
+test('installs playbooks, the five factory skills and standards-discovery from the ref and records the sha', () => {
   const f = fixture();
   const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
   assert.equal(code, 0);
@@ -131,7 +134,8 @@ test('installs playbooks and the five skills from the ref and records the sha', 
   assert.equal(out.sha, f.sha1);
   assert.equal(read(f.agentsDir, 'playbooks/factory.md'), 'playbook v1\n');
   assert.equal(read(f.agentsDir, 'playbooks/scripts/pick-up.mjs'), 'pick-up v1\n');
-  for (const name of FACTORY_SKILLS) assert.equal(read(f.skillsDir, name, 'SKILL.md'), `${name} v1\n`);
+  for (const name of [...FACTORY_SKILLS, ...KANON_SKILLS]) assert.equal(read(f.skillsDir, name, 'SKILL.md'), `${name} v1\n`);
+  assert.equal(read(f.skillsDir, 'standards-discovery/scripts/check-policy.py'), 'check-policy v1\n');
   assert.equal(read(f.skillsDir, 'event-model/scripts/check.py'), 'check v1\n');
   assert.equal(read(f.agentsDir, 'playbooks/.installed-sha'), `${f.sha1}\n`);
   assert.ok(statSync(join(f.agentsDir, 'playbooks/scripts/run.sh')).mode & 0o100, 'executable bit kept');
@@ -281,12 +285,13 @@ test('one live lock among stale ones refuses and names only the live one', () =>
   assert.deepEqual(out.locks, [live]);
 });
 
-test('a folder under factory/ that is not in the list is not installed', () => {
+test('a folder under factory/, kanon/ or scheduled-tasks/ that is not in the list is not installed', () => {
   const f = fixture();
   assert.equal(f.run('--source', f.source, '--ref', 'HEAD').code, 0);
   assert.ok(!existsSync(join(f.skillsDir, 'not-listed')));
+  assert.ok(!existsSync(join(f.skillsDir, 'laravel-kanon')));
   assert.ok(!existsSync(join(f.agentsDir, 'README.md')));
-  assert.deepEqual(readdirSync(f.skillsDir).sort(), [...FACTORY_SKILLS].sort());
+  assert.deepEqual(readdirSync(f.skillsDir).sort(), [...FACTORY_SKILLS, ...KANON_SKILLS].sort());
   assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
 });
 

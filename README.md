@@ -8,7 +8,7 @@ Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), and a Symfony overlay of the Kanon (`symfony-kanon`) | Any Laravel or Symfony project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), and `standards-discovery`, the AI policy check that comes before reading a client's code | Any Laravel or Symfony project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -27,6 +27,13 @@ Five folders, five different jobs:
   `$container->get()`, writes go through a Messenger command to one handler). It reads
   `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
   install it next to `laravel-kanon`. It has no audit yet.
+- `standards-discovery`: reads a client's codebase and writes its conventions as a project
+  overlay (project-first mode). Today it does one thing: before any client code is read, it
+  checks the client's AI policy record and stops when the record is missing, incomplete or
+  forbids the step, naming the field that blocks. When the record allows it, it scans the
+  repo's policy files (`.aiignore`, `.cursorignore`, `README`, `CONTRIBUTING`) for warnings.
+  The record template is `kanon/standards-discovery/references/policy-record.md`.
+  Discovery, the standards report and the overlay writer come later.
 
 Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
 rulebook's `references/` folder, so the two folders must sit next to each other.
@@ -122,8 +129,8 @@ side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it re
 files from `laravel-kanon`'s `references/` folder.
 
 For the playbook, the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
-`event-model`, `factory-onboard`) and the scheduled task prompts, run the install script from a
-checkout of this repo:
+`event-model`, `factory-onboard`), `standards-discovery` and the scheduled task prompts, run the
+install script from a checkout of this repo:
 
 ```
 node playbooks/scripts/install.mjs --source .
@@ -133,7 +140,7 @@ The first install runs the script from the checkout. Later runs use the installe
 `node ~/.agents/playbooks/scripts/install.mjs --source <checkout>`. It fetches the checkout's
 `origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
 from the commit, not the working tree, so a dirty checkout does not matter. It copies
-`playbooks/` into `~/.agents/playbooks/`, each factory skill into `~/.claude/skills/<name>/` and
+`playbooks/` into `~/.agents/playbooks/`, each of those skills into `~/.claude/skills/<name>/` and
 each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to
 `~/.agents/playbooks/.installed-sha`, rewrites only files that changed, and never deletes a file.
 It writes a task prompt only when the task folder exists, which Claude Desktop creates with the

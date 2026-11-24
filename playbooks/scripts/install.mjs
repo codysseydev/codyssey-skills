@@ -1,6 +1,6 @@
-// Install script for the factory's installed copies: sync `playbooks/`, the factory skills and the
-// scheduled task prompts from a commit of this repo into ~/.agents/playbooks/,
-// ~/.claude/skills/<name>/ and ~/.claude/scheduled-tasks/<name>/.
+// Install script for the factory's installed copies: sync `playbooks/`, the factory skills,
+// `standards-discovery` and the scheduled task prompts from a commit of this repo into
+// ~/.agents/playbooks/, ~/.claude/skills/<name>/ and ~/.claude/scheduled-tasks/<name>/.
 //
 // Usage:
 //   node install.mjs --source <codyssey-skills checkout> [--ref <ref>]
@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
+export const KANON_SKILLS = ['standards-discovery'];
 export const FACTORY_TASKS = ['factory-pickup', 'factory-pickup-frontend', 'factory-pickup-tools'];
 export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
@@ -42,6 +43,7 @@ export function installMap({ agentsDir, skillsDir, tasksDir }) {
   return [
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
     ...FACTORY_SKILLS.map((name) => ({ prefix: `factory/${name}/`, dir: join(skillsDir, name) })),
+    ...KANON_SKILLS.map((name) => ({ prefix: `kanon/${name}/`, dir: join(skillsDir, name) })),
     ...FACTORY_TASKS.map((name) => ({ prefix: `scheduled-tasks/${name}/`, dir: join(tasksDir, name), existingOnly: true })),
   ];
 }
