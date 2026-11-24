@@ -1,6 +1,6 @@
 # Plan for #79, factory.md sends gate evidence, owner counts and PR numbers to the dashboard
 
-Issue codysseydev/codyssey-skills#79. Base origin/main 6485e3a. Branch `factory/79`.
+Issue codysseydev/codyssey-skills#79. Base origin/main 6485e3a, merged with b4123a7 during implement. Branch `factory/79`.
 
 Kind: feature
 
@@ -10,7 +10,7 @@ Every factory stage event carries the fields the dashboard reads: `evidence` on 
 
 ## What origin/main already says
 
-Most of the issue is already in `playbooks/factory.md`. Line numbers are origin/main 6485e3a.
+Most of the issue is already in `playbooks/factory.md`. Line numbers are origin/main 6485e3a. At the branch head the edits sit in stage 5, stage 6, Dashboard events and Counting the owner.
 
 | Issue item | State on origin/main |
 |---|---|
@@ -26,7 +26,7 @@ Most of the issue is already in `playbooks/factory.md`. Line numbers are origin/
 `GET https://factory.codyssey.dev/api/stage-events?repo=<repo>` with the ingest token, 2026-11-23 about 19:00 UTC, repos codyssey, codyssey-frontend and codyssey-skills (273 events, all time).
 
 - This run's `triage` event for #79 was sent with `owner_count` all zeros. It came back stored as an object, so dashboard PR #13 (merged 2026-11-23T11:00Z) is deployed.
-- `verify`: 40 events, 12 with `evidence`, from 12 issues. Some runs already send it, but the count includes runs from before the field existed, so it does not measure the gap. The gap is the text: line 92 does not ask for `evidence` on the first `verify`, and the dashboard's evidence view reads it from `verify` events only (dashboard README, "Event contract").
+- `verify`: 40 events, 12 with `evidence`, from 12 issues. Some runs already send it, but the count includes runs from before the field existed, so it does not measure the gap. The gap is the text: line 92 does not ask for `evidence` on the first `verify`, and the dashboard shows `evidence` from any event that carries it, normally `verify` (dashboard `src/lib/evidenceLinks.ts`).
 - `pr`: 32 events, 30 with `pr_number`, 10 with `evidence`, `owner_count` and `trial_decision`.
 - `failed`: 1 event, 0 with `owner_count`. `archived`: 5 events, 1 with `owner_count`. The dashboard counts owner asks from the latest event of an issue that has an `owner_count`.
 - `cost_usd`: the desktop app's `get_usage` tool, called in this session, returns plan-limit percentages (Team plan) and context-window tokens. It returns no dollar figure. A session cannot read its own spend today.
@@ -38,7 +38,7 @@ Most of the issue is already in `playbooks/factory.md`. Line numbers are origin/
 1. Line 92, stage 5. Replace the bullet `- Report `verify`.` with the bullet below, at the same three-space indent:
 
    ```
-   - Report `verify` with `evidence` (the `evidence.json` content) and `owner_count`. The dashboard's evidence view reads `evidence` from `verify` events only.
+   - Report `verify` with `evidence` (the `evidence.json` content) and `owner_count`. The dashboard shows `evidence` from any event that carries it, normally `verify` (dashboard `src/lib/evidenceLinks.ts`).
    ```
 
 2. Line 93, stage 6. Replace "Report `pr` with the merge assessment, `evidence`, `owner_count` and `trial_decision` (see the trial bullet below)" with "Report `pr` with the merge assessment, `pr_number` set to the PR's number, `evidence`, `owner_count` and `trial_decision` (see the trial bullet below)".
@@ -101,15 +101,23 @@ One delegate, one worktree (`factory/79`), one file, five edits, no fan-out. Tru
 
 - Dashboard changes. The contract already accepts every field.
 - A `cost_usd` estimate (decision 3).
-- The installed `~/.agents/playbooks/factory.md` lags origin/main by the #31 attempt-number change. The tools-lane scheduled task prompt that started this run has no install step, although `factory.md` says the scheduled pick-up installs first when armed. This change reaches runs only after an install.
+- The installed `~/.agents/playbooks/factory.md` lags origin/main by the #31 attempt-number change. The tools-lane prompt installs at step 1, so this change reaches runs on the first armed tick after merge.
 - Event model. Skip, no journey for internal tooling. This repo has no brain vault of its own.
-
-## Owner follow-ups
-
-- Add the install step to the tools-lane scheduled task prompt, or run `node playbooks/scripts/install.mjs --source <checkout>` after merge (README "Install").
 
 ## Open decisions
 
 1. Where `owner_count` goes. Chosen: every event a run sends for its claimed issue, starting from the totals already on the issue. One rule, and the dashboard's "latest event that has one" reading stays right on any stage. Alternative: only `waiting`, `failed` and `archived`, as the issue lists.
 2. The stale fallback at line 127. Chosen: replace it with a rule for a field that fails validation. Alternative: delete it with no replacement.
 3. `cost_usd`. Chosen: say in the playbook that it is not sent, and why. Alternative: a follow-up issue for a script that estimates cost from the session transcript's token usage and model prices. On a Team plan that is an estimate, not the spend.
+
+## Review round 1
+
+- Resumed plan runs: every run, whatever action it starts at, reads the totals on the issue before its first event.
+- `evidence` is not verify-only: the dashboard shows it from any event that carries it, normally `verify`.
+- How to read the totals: a subagent runs the `curl` against the stage-events endpoint with the pick-up URL and token.
+- Comment fallback: stop comments end with an `Owner count:` line, so the fallback has something to read.
+- The owner action that resumed the run counts as the new run's first entry.
+- Dashboard events gets an every-event `owner_count` bullet, with the `failed` stale-lock exception.
+- `cost_usd` wording: no tool a run can call returns dollars.
+- Validation limits are named, and dropped field content goes in the `summary`.
+- The re-sent `verify` carries `pr_number`.
