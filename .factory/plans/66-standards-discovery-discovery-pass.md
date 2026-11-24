@@ -436,62 +436,74 @@ sequenceDiagram
 - `info/exclude` is shared by every worktree of the client checkout. A loaded overlay is hidden in all of them, which is the intent.
 - The no-code rule counts a fresh framework skeleton as code. A client repo that is only `laravel new` output gets an overlay built from framework defaults (decision h, option C).
 
-## Open decisions
+## Decisions
 
 a. Checker language and schema form.
+   Decided 2026-11-24 by the owner: A.
    - **A. Python, stdlib, with a JSON Schema file and a Python port of the catalog validator's keyword subset (recommended).** Same language as `check-policy.py`, so it imports `parse_frontmatter`, `check` and `FIELDS` directly. The schema file is the one the issue asks to commit. Cost: about 50 lines that copy `kanon/scripts/catalog.mjs:73-130`.
    - B. Node, importing `validate` from `kanon/scripts/catalog.mjs`. No copy of the validator, but `catalog.mjs` is not installed, a YAML subset parser is still needed in JS, and the record read would shell out to Python.
    - C. Python with the shape as a table in code and no schema file. Least code, and nothing to commit as "a schema".
 
 b. The overlay's shape. #44 names "adopt, change and off entries" and no layout.
+   Decided 2026-11-24 by the owner: A.
    - **A. One `overlay:` list, each entry with `effect:` (recommended).** One entry per rule is one list to check for duplicates. The report row and the entry carry the same fields. A later catalog-format entry stays one list.
    - B. Three lists, `adopt:`, `change:`, `off:`. Reads well, but `off:` as a key is a YAML 1.1 boolean (Ruby read `{false=>[...]}`), so it needs quoting too, and a rule could sit in two lists.
 
 c. The YAML 1.1 boolean words.
+   Decided 2026-11-24 by the owner: A.
    - **A. Keep `off` and require quotes on `off`, `on`, `yes`, `no`, `true`, `false`, `y`, `n`, `null` and `~` (recommended).** Keeps #44's word. Every YAML reader then agrees.
    - B. Rename the effect to a word no reader turns into a boolean, for example `disable`. No quoting rule, but it changes #44's vocabulary.
    - C. Accept plain `off`. YAML 1.2 readers agree. Ruby's Psych read `false`, and PyYAML resolves it the same way (not run here).
 
 d. Naming a rule from a family that has IDs.
+   Decided 2026-11-24 by the owner: A.
    - **A. ID required once the family has a catalog file (recommended).** Matches the issue's "after that, by ID". One name per rule makes the duplicate check exact. Cost: a client overlay's sentence entries fail when their family gains IDs, and the message names the ID to use.
    - B. Both forms accepted always. No migration, but one rule can then appear twice under two names.
 
 e. How the installed skill finds the Kanon. Today it cannot: the install copies no catalog and no references, and the hand copy of `laravel-kanon` is stale.
+   Decided 2026-11-24 by the owner: A.
    - **A. Install a snapshot of `kanon/catalog/` and both `references/` folders into the skill folder through three `installMap` entries (recommended).** The checker and the agent read the same text, from `origin/main`, refreshed by every install. Cost: `install.mjs` and `install.test.mjs` edits, and files removed from the repo stay installed.
    - B. A required `--kanon-root` pointing at the owner's codyssey-skills checkout. No install change, but the run reads a working copy that can be stale or dirty, which `install.mjs` avoids by reading the commit.
    - C. A generated `references/kanon-index.json` (IDs and sentences) committed in the skill, with a recipe check that it matches. Self-contained, but a second copy of every rule and one more gate.
 
 f. Acceptance criterion 3, "nothing is written to the client repository", next to the vault's local load through `.git/info/exclude`.
+   Decided 2026-11-24 by the owner: A.
    - **A. `place` writes nothing under the repo, `.git` included. A separate `load` command, run when the owner wants the overlay active, copies the files and edits `info/exclude` (recommended).** The criterion holds literally for the discovery run, and the test is a byte and mtime snapshot. The vault's local load still exists as an explicit step. Cost: two commands, and the owner runs `load` again after a rerun.
    - B. Nothing reaches git. `place` copies the files and edits `info/exclude` in the same run. The test is an empty `git status` and an unchanged `HEAD`. One command, but the working tree and `.git/info/exclude` are written, which a literal reading of the criterion forbids.
    - C. Never load locally. The overlay lives only in the brain, and readers find it there. Drops the vault's `.git/info/exclude` design, and every reader of `.ai/kanon.yml` (#44's audit, the writing skill) needs the brain path.
 
 g. Where the report goes when AI files are allowed.
+   Decided 2026-11-24 by the owner: A.
    - **A. `.ai/standards-report.md` in the same commit as the overlay (recommended).** The vault groups "the report and the overlay" (`:321`). The client sees the evidence next to the rules. Cost: a file whose line numbers go stale in the client's repo.
    - B. The report stays in the brain. The PR body carries a summary. Nothing stale in the client repo, but the client reviews rules without the evidence.
    - C. Both. Two copies to keep in step.
 
 h. What "no code" means. The issue says a repo with no code "stays canon-first until the client has rules of their own". The vault's readiness drill expects a repo with a style guide and no code to be project-first (`:338`).
+   Decided 2026-11-24 by the owner: A.
    - **A. No source file and no rule source in the tracked tree (recommended).** `README.md`, `LICENSE` and `composer.json` alone are no code. An unborn branch is no code. A `CLAUDE.md` or a linter config alone gives an overlay from the written rules, which fits the drill.
    - B. No source file, whatever is written down. Simpler, and the drill repo then stays canon-first.
    - C. As A, and a bare framework skeleton counts as no code too. Closer to "the client's own code", but needs a skeleton file list per framework.
 
 i. How much of discovery is a script.
+   Decided 2026-11-24 by the owner: A.
    - **A. A script lists the inputs and the agent reads them (recommended).** Tracked files only, policy ignores through git's matcher, sources by kind, siblings, commit and branch lists, `read_at`, `no-code`. The ignore handling and the no-code rule get tests.
    - B. Prose in `SKILL.md` only. Nothing to build, and nothing proves an ignored path stays unread.
    - C. A, plus extracting settings from configs (PHP CS Fixer rules, the PHPStan level). Deterministic for those, but one parser per tool, and a PHP CS Fixer config is PHP code.
 
 j. The report format.
+   Decided 2026-11-24 by the owner: A.
    - **A. One table, each evidence item with a short quote the checker finds on the cited line, and `Silent on` as one bullet per Kanon family with no entry, compared with the computed set (recommended).** Both parts are checked. Cost: the agent copies a quote per citation.
    - B. The same table without quotes. A citation then only has to land inside the file.
    - C. One section per convention, free text. Easier to read, and much harder to check.
 
 k. Conventions the Kanon has no rule for (the fixture's `final_class` setting, Conventional Commits). The issue and #44 define only adopt, change and off.
+   Decided 2026-11-24 by the owner: A.
    - **A. A report row with Kanon rule `none` and effect `project-only`, and the rule in a prose file under `.ai/rules/project/` when the code shows it but nothing writes it down. No overlay entry (recommended).** Keeps #44's format. The writing skill finds the rule in `.ai/rules/`, which `playbooks/factory.md:102` already treats as project rules.
    - B. Leave them out. The report is shorter, and #67's answer key (the backend's 23 rules) will count them as missed.
    - C. A fourth effect, `add`, in `.ai/kanon.yml`. Changes the format #44 decided.
 
 l. Where the overlay writer's step lives. The #65 plan said #66 adds it to `STEPS` in `check-policy.py` (`.factory/plans/65-standards-discovery-policy-record.md:93`), and #85 owns that file now.
+   Decided 2026-11-24 by the owner: A.
    - **A. `place-overlay.py` runs `check(raw, "read-code", ctx)` and reads `commit_ai_files` through the imported `FIELDS` (recommended).** No edit to `check-policy.py`, no conflict with #85. Cost: the rule "placement follows `commit_ai_files`" lives in a second script.
    - B. Add a `write-overlay` step to `STEPS` after #85 merges, and make #66 depend on #85. One table holds every rule, at the cost of a wait.
    - C. Edit `check-policy.py` now. Conflicts with #85's branch.
