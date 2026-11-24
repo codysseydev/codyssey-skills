@@ -6,9 +6,9 @@ description: >-
   Router app of your own when the user invokes /nextjs-kanon, says "kanon" or "the
   canon" in a Next.js repo, or starts a greenfield Next.js frontend. It fixes the
   stack (App Router, React Compiler, Tailwind 4, TanStack Query, React Hook Form,
-  Vitest) and prescribes static-first pages, one API client, no Server Actions, typed
-  boundaries and strict tests as MUST/MUST NOT requirements that deliberately IGNORE
-  the host project's own conventions. Do NOT auto-apply this in a codebase with
+  Vitest) and prescribes static-first pages, one API client and no Server Actions as
+  MUST/MUST NOT requirements that deliberately IGNORE the host project's own
+  conventions. Do NOT auto-apply this in a codebase with
   established team standards (e.g. an employer's monorepo) unless the user explicitly
   asks for the canon there. This is the rulebook for WRITING code; to AUDIT existing
   changes against it, use nextjs-kanon-audit instead.
