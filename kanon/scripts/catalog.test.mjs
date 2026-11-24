@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -567,7 +568,8 @@ test('the validator enforces type, required, enum, pattern, items, minItems and 
   assert.match(messages(['x']).join('\n'), /expected object/);
 });
 
-const spans = (text) => text.match(/`[^`]+`/g) ?? [];
+// Inner whitespace is collapsed: prose files may wrap a span across a line break that `generate` never writes.
+const spans = (text) => (text.match(/`[^`]+`/g) ?? []).map((s) => s.replace(/\s+/g, ' '));
 
 // The families of `root` that have a catalog file, with their prefix-table row.
 const convertedRows = (root) =>
@@ -627,6 +629,44 @@ test('a converted family with no base fixture is reported by name', (t) => {
   assert.deepEqual(baseFixtureProblems(root, fixtures, repoRoot), [
     `zz-test: missing base fixture ${path.join(fixtures, 'zz-test.base.md')}`,
   ]);
+});
+
+test('code spans that differ only in inner whitespace match the base fixture', (t) => {
+  const root = makeRoot(t);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  for (const sec of zz.sections) {
+    for (const entry of sec.entries) {
+      entry.family = 'zz-test';
+      entry.rule = 'Classes **MUST** be `final readonly`.';
+    }
+  }
+  writeJson(root, 'kanon/catalog/zz-test.json', zz);
+  const rows = readJson(root, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz/references/zz-test.md' });
+  writeJson(root, 'kanon/catalog/families.json', rows);
+
+  const fixturesDir = mkdtempSync(path.join(tmpdir(), 'kanon-fixtures-'));
+  t.after(() => rmSync(fixturesDir, { recursive: true, force: true }));
+  for (const name of readdirSync(fixtures)) {
+    if (name.endsWith('.base.md')) cpSync(path.join(fixtures, name), path.join(fixturesDir, name));
+  }
+
+  const gen = run(root, 'generate');
+  assert.equal(gen.status, 0, gen.out);
+  const generated = stripIds(read(root, 'kanon/zz/references/zz-test.md'));
+  assert.ok(generated.includes('`final readonly`'));
+  const fixtureFile = path.join(fixturesDir, 'zz-test.base.md');
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  readonly`'));
+  assert.deepEqual(baseFixtureProblems(root, fixturesDir, root), []);
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  mutable`'));
+  assert.ok(
+    baseFixtureProblems(root, fixturesDir, root).includes(
+      'zz-test: code spans differ from the base fixture'
+    )
+  );
 });
 
 test('every converted family keeps why inside its rule or items', () => {
