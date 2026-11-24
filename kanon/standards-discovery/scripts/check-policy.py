@@ -184,6 +184,7 @@ def check(raw, step, ctx):
 def _git(repo, *args):
     try:
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env["GIT_NO_REPLACE_OBJECTS"] = "1"
         return subprocess.run(["git", "-C", repo, *args], capture_output=True, env=env)
     except OSError as error:
         raise RuntimeError(str(error))
@@ -436,7 +437,10 @@ def disk_files(repo):
 
 
 def git_files(repo, ref):
-    """Like disk_files, read from the tree at ref. Returns (files, blobs): the (path, kind) list and {path: oid}."""
+    """Like disk_files, read from the tree at ref. Returns (files, blobs): the (path, kind) list and {path: oid}.
+
+    Names match without regard to case and are reported as they stand in the tree.
+    """
     files, blobs = [], {}
 
     def add(rel, mode, oid, kind):
@@ -445,31 +449,33 @@ def git_files(repo, ref):
         if found == kind:
             blobs[rel] = oid
 
+    def named(entries, wanted):
+        return [entry for entry in sorted(entries, key=lambda entry: entry[2]) if entry[2].casefold() == wanted]
+
     try:
         root = _list_tree(repo, "--full-tree", ref)
     except RuntimeError:
         return [(".", "unreadable")], blobs
-    by_name = {name: (mode, oid) for mode, oid, name in root}
-    for name in IGNORE_FILES:
-        if name in by_name:
-            add(name, *by_name[name], "ignore-file")
-    for folder, pattern in (("", README_OR_CONTRIBUTING), (".github", CONTRIBUTING), ("docs", CONTRIBUTING)):
-        if folder:
-            mode = by_name.get(folder, (None,))[0]
+    for wanted in IGNORE_FILES:
+        for mode, oid, name in named(root, wanted):
+            add(name, mode, oid, "ignore-file")
+    for mode, oid, name in sorted(root, key=lambda entry: entry[2]):
+        if README_OR_CONTRIBUTING.fullmatch(name):
+            add(name, mode, oid, "clause")
+    for wanted in (".github", "docs"):
+        for mode, oid, folder in named(root, wanted):
             if mode == "120000":
                 files.append((folder, "symlink"))
             if mode != "040000":
                 continue
             try:
-                entries = _list_tree(repo, "--full-tree", f"{ref}:{folder}")
+                entries = _list_tree(repo, oid)
             except RuntimeError:
                 files.append((folder, "unreadable"))
                 continue
-        else:
-            entries = root
-        for mode, oid, name in sorted(entries, key=lambda entry: entry[2]):
-            if pattern.fullmatch(name):
-                add(os.path.join(folder, name), mode, oid, "clause")
+            for mode, oid, name in sorted(entries, key=lambda entry: entry[2]):
+                if CONTRIBUTING.fullmatch(name):
+                    add(os.path.join(folder, name), mode, oid, "clause")
     return files, blobs
 
 

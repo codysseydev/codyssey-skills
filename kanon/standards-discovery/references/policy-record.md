@@ -75,14 +75,14 @@ Rules for the registry:
 - Keys are `owner/name`, matched without regard to case. Each part holds letters, digits, `.`, `_` and `-`, is not `.` or `..`, and the key does not end in `.git`. A key in any other form (a URL, `git@...`, a trailing slash, spaces) stops the check on `record`. Two keys that differ only in case stop it too. `--repo-name` follows the same rule, and a bad one is a usage error, exit 2.
 - A record path is absolute, and `~` at its start expands to the home folder. A relative path stops the check on `record`.
 - A registry path with no file at it counts as empty, and so does one under a folder that does not exist. A registry file that is there but cannot be read stops the check on `record`: bad JSON, an exact duplicate key, a dangling symlink at the file's own path or at a folder on its path, a folder in its place, or a folder on the path that cannot be entered.
-- The mode is read from `.ai/kanon.yml` on origin/main, with the git environment variables (`GIT_DIR` and the rest) removed. These stop the check on `mode`:
+- The mode is read from `.ai/kanon.yml` on origin/main, with the git environment variables (`GIT_DIR` and the rest) removed and `git replace` refs ignored. These stop the check on `mode`:
   - a `--repo` that is not the top level of its git repo;
   - two `mode:` lines, or an empty one (`mode:`, `mode: ""`);
   - a root entry that is `.ai` in another case, or an entry of `.ai/` that is `kanon.yml` or `kanon.yaml` in another case (`.AI`, `Kanon.yml`, `kanon.yaml`);
   - `.ai` that is not a folder (a symlink, a file, a gitlink), or `.ai/kanon.yml` that is not a regular file (a symlink, a folder, a gitlink);
   - a file the reader below does not accept.
 - A missing `.ai/` or `.ai/kanon.yml` means canon-first. A mode of `100755` is a regular file.
-- The scan of the repo's policy files in a factory run reads origin/main through git as well. It opens no file under `--repo`. A checkout whose README differs from origin/main does not change the warnings. The `--record` form scans the working tree.
+- The scan of the repo's policy files in a factory run reads origin/main through git as well. It opens no file under `--repo`. It matches `.aiignore`, `.cursorignore`, `.github`, `docs`, README and CONTRIBUTING without regard to case and reports each entry under the name it has in the tree. A checkout whose README differs from origin/main does not change the warnings. The `--record` form scans the working tree.
 
 The reader for `.ai/kanon.yml` is not a YAML parser. It accepts only this, after a byte order mark is removed. Each line is one of:
 

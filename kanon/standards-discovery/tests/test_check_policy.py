@@ -94,7 +94,6 @@ class TempDirs(unittest.TestCase):
         git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         return repo
 
-
     def plumbing_repo(self, root_entries):
         """A repo whose origin/main root tree is built by hand: [(mode, name, content | tree-entries | oid)]."""
         repo = self.tmp()
@@ -459,6 +458,14 @@ class ClientDetection(TempDirs):
         git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual(cp.client_record({}, "o/r", repo), ("canon-first", None, []))
 
+    def test_replace_refs_do_not_swap_the_commit_that_is_read(self):
+        repo = self.origin_repo("mode: project-first\n")
+        real = git(repo, "rev-parse", "HEAD")
+        git(repo, "rm", "-q", ".ai/kanon.yml")
+        git(repo, "commit", "-q", "-m", "without the file")
+        git(repo, "replace", real, git(repo, "rev-parse", "HEAD"))
+        self.assertEqual(cp.client_record({}, "o/r", repo)[0], "project-first")
+
     def test_git_environment_variables_do_not_redirect_the_lookup(self):
         a = self.origin_repo("mode: project-first\n")
         b = self.origin_repo()
@@ -622,6 +629,27 @@ class Scan(TempDirs):
             ]),
         )
         self.assertIn({"file": "README.md", "line": 2, "signal": "ai-clause", "text": "We use AI tools here."}, warnings)
+
+    def test_the_git_scan_matches_names_without_regard_to_case(self):
+        repo = self.plumbing_repo([
+            ("100644", ".AIIgnore", "secrets/\n"),
+            ("100644", ".cursorignore", "a/\n"),
+            ("100644", ".CursorIgnore", "b/\n"),
+            ("040000", "Docs", [("100644", "CONTRIBUTING.md", "Copilot\n")]),
+            ("040000", "docs", [("100644", "Contributing.md", "Cursor is banned\n")]),
+            ("040000", ".GitHub", [("100644", "contributing", "No AI\n")]),
+        ])
+        scan_git = getattr(cp, "scan_git", None)
+        self.assertIsNotNone(scan_git, "check-policy.py has no scan_git")
+        self.assertEqual(
+            sorted((w["file"], w["signal"]) for w in scan_git(repo)),
+            sorted([
+                (".AIIgnore", "ignore-file"), (".cursorignore", "ignore-file"), (".CursorIgnore", "ignore-file"),
+                (os.path.join("Docs", "CONTRIBUTING.md"), "ai-clause"),
+                (os.path.join("docs", "Contributing.md"), "ai-clause"),
+                (os.path.join(".GitHub", "contributing"), "ai-clause"),
+            ]),
+        )
 
     def test_the_git_scan_classifies_entries_by_mode(self):
         repo = self.plumbing_repo([
