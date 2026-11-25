@@ -13,10 +13,10 @@ that point one way.
 
 Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolute.
 **SHOULD** and **SHOULD NOT** hold unless there is a concrete reason not to, and the
-reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
-rule that enforces a rule, where one exists.
+reason is stated. **MAY** is optional. A `Check:` line names the guard-test row, the lint
+rule, or the sheet's check idea for a rule, where one exists.
 
-The terms come from the course "Building Maintainable PHP Applications: Patterns and Principles" https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles.
+The terms come from the course "Building Maintainable PHP Applications: Patterns and Principles" <https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles>.
 The course is PHP, so each rule says what its term means in TypeScript.
 
 - **DESIGN-001. Tools, not rules** Use a pattern when a specific pain shows up, not because it exists. A chain of types that carry the same fields (`RequestDto -> ServiceDto -> CommandDto`) is the over-engineering trap; one typed shape per boundary is enough. A reviewer does not ask for a new layer, class or abstraction without a named pain. **SHOULD.**
@@ -71,7 +71,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Source: readonly Is Not Immutability https://codyssey.dev/quick-tips/readonly-is-not-immutability
   - From: NX-10
 
-- **DESIGN-005. One transition table for a status that gates UI actions** When two or more UI actions are gated by the same status field, the allowed moves live in one `Record<Status, readonly Status[]>` typed by the status union, next to the status type, and components and hooks ask `canTransition(from, to)` instead of comparing `status` literals. A flow with effects (an optimistic update, a call that can fail) keeps its moves in one action of the client store (DATA-021). The table is a hint for the UI: the API enforces the real transition, as it enforces access (ACCESS-007). **SHOULD.**
+- **DESIGN-005. One transition table for a status that gates UI actions** When two or more UI actions are gated by the same status field, the allowed moves live in one `Record<Status, readonly Status[]>` typed by the status union, next to the status type, and components and hooks ask `canTransition({ from, to })` instead of comparing `status` literals. A flow with effects (an optimistic update, a call that can fail) keeps its moves in one action of the client store (DATA-021). The table is a hint for the UI: the API enforces the real transition, as it enforces access (ACCESS-007). **SHOULD.**
   - Why: when each button checks `status === 'draft' || status === 'scheduled'` on its own, the rule about which move is legal is owned by nothing and is copied across components. One table reads top to bottom, and a new status fails to compile until its row exists.
   - Check: not shipped. An idea for review: a status type compared with `===` or `!==` in two or more components or hooks outside its own module, with no transition table for it, is a finding.
   - Source: The State Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-state-pattern
@@ -119,7 +119,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Randomness: `Math.random()` and `crypto.randomUUID()` inside `utils/` logic are hidden dependencies, like the clock and environment reads. The function takes the random value, or a function that makes one, as an argument.
   - Environment: `process.env` is read in one module, `src/lib/env.ts` (DATA-042).
   - Storage and location: `localStorage`, `sessionStorage` and `window.location` are read inside a small wrapper module, such as `src/lib/authSession.ts`, or inside a hook, never in a rule function.
-  - Why: the same code runs on the server and in the browser, whose time zones differ, so a function that reads the clock or the environment itself gives different answers in each and cannot be tested without faking globals. An argument makes the input visible and keeps the test plain.
+  - Why: the same code runs on the server and in the browser, whose time zones can differ, so a function that reads the clock or the environment itself gives different answers in each and cannot be tested without faking globals. An argument makes the input visible and keeps the test plain.
   - Source: Dependency Injection vs the Service Locator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location
   - Source: A Facade Is Service Location Too https://codyssey.dev/quick-tips/a-facade-is-service-location-too
   - Source: Service Location Is a Hidden Dependency https://codyssey.dev/quick-tips/service-location-is-a-hidden-dependency
@@ -165,7 +165,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Source: The Strategy Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-strategy-pattern
   - From: P11
 
-- **DESIGN-016. Dependencies point one way** STRUCT-011 and STRUCT-012 state the direction: only `src/features/global-ui/` is shared across features, imports run from `app/` to `src/features/` to the shared folders such as `src/lib/`, and nothing shared imports a feature. The course calls the same idea honest dependencies: a module lists what it needs at its edge, in its imports, and nothing hides behind a global. **SHOULD.**
+- **DESIGN-016. Dependencies point one way** Imports follow the direction STRUCT-011 and STRUCT-012 set. The course calls this idea honest dependencies: a module lists what it needs at its edge, in its imports, and nothing hides behind a global. **SHOULD.**
   - Why: a shared layer that imports a feature can no longer be reused or tested alone, and a cycle between features means neither can be removed.
   - Source: Dependency Injection vs the Service Locator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location
   - From: P12
@@ -194,10 +194,10 @@ The course is PHP, so each rule says what its term means in TypeScript.
 **Considered and not proposed.**
 
 - Branded id types (DESIGN-008): the ids are opaque strings used for URLs and display, so the payoff is low.
-- A repository or adapter layer over `apiClient`: the services are already that boundary, and adding one would be the "chain of the same fields" trap of DESIGN-001 (The Repository Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern).
+- A repository or adapter layer over `apiClient`: the services are already that boundary, and adding one would be the "chain of the same fields" trap of DESIGN-001 (The Repository Pattern <https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern>).
 - Runtime schema validation of API responses, for example with Zod: the API is first-party and typed. Revisit if the API stops being first-party.
 - Factory classes: a frontend object rarely needs services plus a runtime choice to construct.
-- Server Actions for mutations, which the Next.js docs offer (https://nextjs.org/docs/app/getting-started/mutating-data): the app calls a separate API through `apiClient`, and DATA-070 rules them out.
-- Turning on `cacheComponents` (https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents): caching is decided by the prerendering and revalidate rules, DATA-001 to DATA-008.
-- Suspense around async content and wider `next/dynamic` use, which the vendored React skills suggest: they conflict with DATA-001 and DATA-019.
+- Server Actions for mutations, which the Next.js docs offer (<https://nextjs.org/docs/app/getting-started/mutating-data>): the app calls a separate API through `apiClient`, and DATA-070 rules them out.
+- Turning on `cacheComponents` (<https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents>): caching is decided by the prerendering and revalidate rules, DATA-001 to DATA-008.
+- Suspense around async content and wider `next/dynamic` use: they conflict with DATA-001 and DATA-019.
 - `<ViewTransition>`: it needs an experimental flag, and `router.back()` does not animate.
