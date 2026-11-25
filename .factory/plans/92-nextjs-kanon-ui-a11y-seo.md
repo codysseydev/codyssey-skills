@@ -250,9 +250,27 @@ From the worktree root at the head commit, clean tree:
 - The template repository, its guard test and its lint config (stage 2), and `bootstrap --frontend nextjs` (stage 3).
 - Any change to `codysseydev/codyssey-frontend`, including the C5 lesson fix.
 
-## Open questions
+## Decisions
 
-Each has the recommended option first. The entry table and the drafts use the recommended option.
+The owner approved this plan in an interactive session on 2026-11-25 and accepted the recommended answer to each question below (option A each time):
+
+1. Names: the entries write concrete file and helper names, and the PR lists them under "Names for the index.md follow-up". `index.md` is not edited.
+2. U27, U45 and U52 cite the Next.js docs pages (`Link`, `Image`) instead of the retired skill.
+3. The "not a violation" notes of U27, U28, U30, U31 and U58 move, generalized, into the closing `What is NOT a violation` section, each with its pack id.
+4. UI-068 (NX-17) cites DATA-053 for reporting.
+
+Owner decisions for every rule issue (2026-11-25):
+
+- Rules cite concrete generic file and helper names even when the names table lacks them. The PR lists every name introduced.
+- Every entry gets a neutral one-line `Why:`. The PR lists every Why written fresh (no reason in the source rule or the sheet).
+- A Source line is `- Source: <title> <URL>` or `- Source: <title> vault: Content/<path>.md`, with no quote. A lesson's point goes into the Why. A source that cites the retired `next-best-practices` skill is replaced by the matching nextjs.org docs page.
+- A source is live only if its codyssey.dev page title is not "Coming <date>". Not live means the vault path, checked at write time.
+- S28 cases a and h belong to the untrusted-content add-on (#96).
+- The issue's acceptance greps decide what counts as a Codyssey name; `vault: Content/` paths may carry the course name.
+- Other rules are cited by pack id from the id map only.
+- NX-16 is MUST and NX-17 is SHOULD. UI-053 (U63) is narrowed as the SKILL.md clash list says.
+
+The questions as asked, with the recommended option first:
 
 1. Entries need template file and symbol names that the names table in `index.md` does not list, while the issue says #92 touches no other file. Which way?
    - **A. Write the names in the entries, list them in the PR, and add them to the names table in one follow-up after #89 to #96 merge (recommended).** The entries stay concrete, the way the Laravel Kanon names its files, and the parallel issues do not edit `index.md` at the same time.
