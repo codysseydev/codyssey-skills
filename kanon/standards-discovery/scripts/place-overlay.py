@@ -23,6 +23,7 @@ import datetime
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -138,12 +139,12 @@ def place_on_branch(repo, work, branch, subject):
 
 # ---------- load ----------
 
-def _through_a_link(repo, rel):
-    """True when rel, or a folder above it inside the repo, is a symlink."""
-    path = repo
-    for part in rel.split("/"):
+def _in_the_way(repo, rel):
+    """True when rel, or a folder above it inside the repo, is a symlink, or a folder above it is not a folder."""
+    path, parts = repo, rel.split("/")
+    for depth, part in enumerate(parts, start=1):
         path = os.path.join(path, part)
-        if os.path.islink(path):
+        if os.path.islink(path) or (depth < len(parts) and os.path.lexists(path) and not os.path.isdir(path)):
             return True
     return False
 
@@ -153,9 +154,17 @@ def load_into_tree(repo, work):
     tracked = [p for p in text_of(git(repo, "ls-files", "-z", "--", OVERLAY, RULES_DIR)).split("\0") if p]
     if tracked:
         return stop(reason="tracked in the repo, so loading would show as a change: " + ", ".join(tracked))
-    linked = [rel for rel, _ in files if _through_a_link(repo, rel)]
-    if linked:
-        return stop(reason="a symlink is in the way: " + ", ".join(linked))
+    blocked = [rel for rel, _ in files if _in_the_way(repo, rel)]
+    if blocked:
+        return stop(reason="a symlink or a file is in the way: " + ", ".join(blocked))
+    differ = [
+        rel for rel, src in files
+        if os.path.lexists(os.path.join(repo, rel)) and (
+            not os.path.isfile(os.path.join(repo, rel)) or read_bytes(os.path.join(repo, rel)) != read_bytes(src)
+        )
+    ]
+    if differ:
+        return stop(reason="already in the working tree with other content, so loading would overwrite it: " + ", ".join(differ))
     exclude = text_of(git(repo, "rev-parse", "--git-path", "info/exclude"))
     exclude = exclude if os.path.isabs(exclude) else os.path.join(repo, exclude)
     existing = open(exclude, encoding="utf-8").read() if os.path.exists(exclude) else ""
@@ -221,7 +230,10 @@ def main(argv=None):
     try:
         if args.command == "place":
             if commit_ai_files == "no":
-                cmd = f"python3 {os.path.join(HERE, 'place-overlay.py')} load --record {args.record} --model {args.model} --work {args.work} --repo {args.repo}"
+                cmd = shlex.join([
+                    "python3", os.path.join(HERE, "place-overlay.py"), "load", "--record", args.record,
+                    "--model", args.model, "--work", args.work, "--repo", args.repo,
+                ])
                 return emit(
                     {
                         "result": "kept-in-brain", "work": args.work,

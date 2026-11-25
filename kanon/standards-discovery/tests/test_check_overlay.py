@@ -472,6 +472,10 @@ class SilentOn(Golden):
         self.edit("standards-report.md", "- http-api\n", "- http-api\n- symfony\n")
         self.assertProblem("Silent on", "symfony")
 
+    def test_an_entry_outside_the_reports_framework_fails(self):
+        self.edit("standards-report.md", "Framework: laravel", "Framework: symfony")
+        self.assertProblem("overlay[0]", "ORCH-011", "not a symfony family")
+
     def test_the_symfony_set_is_symfony_php_core_and_reliability(self):
         module = co()
         kanon = module.load_kanon(REPO_ROOT)

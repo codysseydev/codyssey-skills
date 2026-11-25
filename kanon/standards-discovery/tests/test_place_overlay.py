@@ -1,5 +1,7 @@
 import datetime
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 import unittest
@@ -49,6 +51,16 @@ class ForbiddingRecordWritesNothing(Placement):
         self.assertIn("load", out["next"])
         self.assertEqual(snapshot(self.repo), before)
         self.assertEqual(self.status(self.repo), "")
+
+    def test_the_load_command_quotes_its_paths(self):
+        odd = os.path.join(self.tmp(), "work; touch pwned")
+        shutil.copytree(self.work, odd)
+        self.work = odd
+        code, out = self.place()
+        self.assertEqual(code, 0, out)
+        command = shlex.split(out["next"].split("run: ", 1)[1])
+        self.assertEqual(command[command.index("--work") + 1], odd)
+        self.assertEqual(command[command.index("--repo") + 1], self.repo)
 
     def test_the_work_folder_is_left_as_it_was(self):
         before = snapshot(self.work)
@@ -208,6 +220,31 @@ class Load(Placement):
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "track a rule")
         self.assertEqual(self.load()[0], 1)
+
+    def test_an_untracked_overlay_with_other_content_stops_before_any_write(self):
+        put(self.repo, ".ai/kanon.yml", "mode: canon-first\n")
+        before = snapshot(self.repo)
+        code, out = self.load()
+        self.assertEqual((code, out["result"]), (1, "stop"))
+        self.assertIn(".ai/kanon.yml", out["reason"])
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_an_untracked_rule_file_with_other_content_stops(self):
+        put(self.repo, ".ai/rules/project/testing.md", "---\npaths:\n  - x\n---\n")
+        before = snapshot(self.repo)
+        self.assertEqual(self.load()[0], 1)
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_an_untracked_file_named_ai_stops_before_any_write(self):
+        put(self.repo, ".ai", "a file, not a folder\n")
+        before = snapshot(self.repo)
+        code, out = self.load()
+        self.assertEqual((code, out["result"]), (1, "stop"))
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_an_untracked_copy_with_the_same_content_loads(self):
+        put(self.repo, ".ai/kanon.yml", read(self.work, ".ai/kanon.yml"))
+        self.assertEqual(self.load()[0], 0)
 
     def test_a_record_that_allows_commits_stops(self):
         before = snapshot(self.repo)

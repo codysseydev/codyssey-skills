@@ -31,7 +31,7 @@ The skill stops after step 1 today.
 | Record says `commit_ai_files: yes` | `place-overlay.py place` makes a branch (default `standards-discovery/<YYYY-MM-DD>`) in the client repo with one commit holding the overlay and the report. It works in a temporary worktree, so the owner's checkout keeps its branch, `HEAD` and uncommitted files. The agent asks the owner, then pushes and opens the PR. |
 | Record says `commit_ai_files: no` | `place-overlay.py place` writes nothing under the client repo, `.git` included. The files stay in the brain. |
 | `place-overlay.py load`, record says `commit_ai_files: no` | Copies `.ai/kanon.yml` and `.ai/rules/project/` into the working tree and adds two lines to `info/exclude`. `git status` stays empty. |
-| `load` when a target path is tracked, or the record says `yes` | Stop. A tracked path would show as a change. A `yes` repo gets the PR instead. |
+| `load` when a target path is tracked, exists untracked with other content, or sits behind a symlink or a file, or the record says `yes` | Stop before any write. A tracked path would show as a change, and an untracked one would be overwritten. A `yes` repo gets the PR instead. |
 | Record changed to forbid between steps | `place` reruns the `read-code` check and stops on it. |
 
 ## Data shape
@@ -161,7 +161,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 - Source: `written down`, `configured` or `pattern in code`.
 - Kanon rule: a catalog ID, the same one as the overlay entry, or `none`.
 - Effect: `adopt`, `change`, `off`, or `project-only` with Kanon rule `none` (open decision k).
-- Every overlay entry has a row with the same rule and effect, and every adopt, change or off row has an entry.
+- Every overlay entry has a row with the same rule and effect, and every adopt, change or off row has an entry. Every entry's family is in the `Framework`'s family set, the one `Silent on` is compared with.
 - `Silent on` lists each Kanon family with no overlay entry, one bullet per family name. The set to compare is every family in `families.json` except `symfony` for `Framework: laravel`, and `symfony`, `php-core` and `reliability` for `Framework: symfony` (the files `symfony-kanon` reads, `README.md:26-29`).
 
 ### Prose rule files
@@ -197,8 +197,8 @@ place-overlay.py load  --record <file> --model <id> --work <dir> --repo <client 
 - Both load `check-policy.py` and `check-overlay.py` by path with `importlib`. They run `check(raw, "read-code", ctx)` on the record, then read `commit_ai_files` with `FIELDS["commit_ai_files"][0]`. A stop prints the blocking fields and writes nothing.
 - `place` reruns the overlay check and refuses on any problem.
 - `place`, `yes`: `git worktree add -b <branch> <temp dir> HEAD` outside the repo, the files copied in, `git add -- <the paths>`, one commit, then `git worktree remove`. The owner's checkout keeps its branch, `HEAD` and uncommitted files. `--branch` defaults to `standards-discovery/<YYYY-MM-DD>` and `--subject` to `docs(ai): project overlay from standards-discovery`. `SKILL.md` tells the agent to pass a name and a subject in the client's own style, read from `inventory.json`. A branch of that name whose tip already holds the same files is a no-op. One that differs stops.
-- `place`, `no`: writes nothing under `--repo`. It prints the work folder and the `load` command.
-- `load`: finds the exclude file with `git rev-parse --git-path info/exclude`, which in a linked worktree resolves to the main repo's `.git/info/exclude`, shared by every worktree. It appends `/.ai/kanon.yml` and `/.ai/rules/project/` when absent, then copies the files. A second run changes nothing.
+- `place`, `no`: writes nothing under `--repo`. It prints the work folder and the `load` command, each argument quoted with `shlex.quote`.
+- `load`: finds the exclude file with `git rev-parse --git-path info/exclude`, which in a linked worktree resolves to the main repo's `.git/info/exclude`, shared by every worktree. Every stop comes before the first write. It appends `/.ai/kanon.yml` and `/.ai/rules/project/` when absent, then copies the files. A second run changes nothing.
 
 ## Changes
 
@@ -267,7 +267,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `change and rule files` | `change` without `rule`, `adopt` with `rule`, a `rule` path that does not exist, a rule file without `paths:` | fails |
 | `citations` | Past the end of the file, a quote not on the line, a path in `ignored`, `../x`, an absolute path, a blank line, a file absent at `Read at`, a row with no citation, an unknown commit, a commit not reachable from `Read at`, an unknown branch | fails |
 | `report and overlay agree` | A row with no entry, an entry with no row, a row whose effect differs from its entry | fails |
-| `silent on` | A family missing from the list, an extra family, `symfony` listed for `Framework: laravel` | fails |
+| `silent on` | A family missing from the list, an extra family, `symfony` listed for `Framework: laravel`, an `ORCH` entry under `Framework: symfony` | fails |
 | `check-policy reads the overlay's mode` | The golden `.ai/kanon.yml` committed at `refs/remotes/origin/main` of a temp repo. `client_record({}, ...)` gives `project-first` and stops on `record` | fails |
 | `kanon root` | A copy laid out as the installed skill folder resolves. A root without `families.json` exits 2 | fails |
 | `inventory of the fixture` (`test_inventory.py`) | The JSON above: sources by kind, siblings, `ignored`, `read_at` equals `HEAD`, subjects, branches | fails |
@@ -280,7 +280,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `forbidding record writes nothing to the repo` (`test_place_overlay.py`) | `allowing.md` (`commit_ai_files: no`): inventory, check and `place` in a row leave the repo snapshot unchanged. Acceptance criterion 3 | fails |
 | `allowing record makes a branch` | `allowing-commit.md`: branch `standards-discovery/<date>` with one commit holding exactly the overlay and the report. The checkout keeps its branch, `HEAD` and an uncommitted edit. `--branch` and `--subject` are used when given. A rerun is a no-op | fails |
 | `place refuses` | A failing overlay check, and `forbidding.md`: exit 1, the repo snapshot unchanged | fails |
-| `load` | In a linked worktree: the files land, `info/exclude` gains two lines once over two runs, `git --no-optional-locks status --porcelain` is empty. A tracked `.ai/kanon.yml` stops. A `yes` record stops | fails |
+| `load` | In a linked worktree: the files land, `info/exclude` gains two lines once over two runs, `git --no-optional-locks status --porcelain` is empty. A tracked `.ai/kanon.yml` stops. An untracked one with other content, and a file named `.ai`, stop with the repo unchanged. A `yes` record stops. The printed `load` command survives a work path holding `; ` | fails |
 | `install: the Kanon snapshot` (`install.test.mjs`) | The catalog and both reference folders land under `standards-discovery/kanon/`. `laravel-kanon` is still not installed | fails |
 
 ## Gates

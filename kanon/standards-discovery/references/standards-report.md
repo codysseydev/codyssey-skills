@@ -43,4 +43,4 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 
 ## Silent on
 
-One bullet per Kanon family with no overlay entry, using the family names from `kanon/catalog/families.json`. For `Framework: laravel` the set is every family except `symfony`. For `Framework: symfony` it is every family except `symfony`, `php-core` and `reliability`, which `symfony-kanon` reads. A missing family, an extra family and a wrong family all fail.
+One bullet per Kanon family with no overlay entry, using the family names from `kanon/catalog/families.json`. For `Framework: laravel` the set is every family except `symfony`. For `Framework: symfony` it is `symfony`, `php-core` and `reliability`, the files `symfony-kanon` reads. Every overlay entry's family must be in the same set. A missing family, an extra family and a wrong family all fail.

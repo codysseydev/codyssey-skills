@@ -253,11 +253,15 @@ def rule_label(key):
     return key[1]
 
 
+def framework_families(kanon, framework):
+    """The Kanon families that apply to a framework: the files its Kanon skill reads."""
+    names = {family["family"] for family in kanon["families"]}
+    return names & set(SYMFONY_FAMILIES) if framework == "symfony" else names - {"symfony"}
+
+
 def silent_set(kanon, framework, touched):
     """The families `Silent on` must list: the framework's families with no overlay entry."""
-    names = {family["family"] for family in kanon["families"]}
-    base = names & set(SYMFONY_FAMILIES) if framework == "symfony" else names - {"symfony"}
-    return base - set(touched)
+    return framework_families(kanon, framework) - set(touched)
 
 
 # ---------- the report ----------
@@ -570,11 +574,15 @@ def check_work(work, repo, kanon_root):
     # each overlay entry
     by_key = {}
     touched = set()
+    framework = report["framework"] if report and report["framework"] in FRAMEWORKS else None
     for index, entry in entries:
         family, key, problem = resolve(entry, kanon)
         where = f"{OVERLAY} overlay[{index}]"
         if problem:
             add(where, problem)
+            continue
+        if framework and family not in framework_families(kanon, framework):
+            add(where, f"{rule_label(key)}: {family} is not a {framework} family, so the {framework} Kanon has no such rule")
             continue
         touched.add(family)
         if key in by_key:
