@@ -11,3 +11,25 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 ## Writes
 
 - `SYM-002` Writes **MUST** go through a Symfony Messenger command dispatched to one handler, so every write shares one transaction and validation path. This is the Symfony counterpart of the Laravel command/handler slice (`architecture.md` in the `laravel-kanon` skill).
+
+## Messenger slices
+
+## Controllers
+
+## HTTP API
+
+## Authorization
+
+## Domain model
+
+## Doctrine persistence
+
+## Integrations
+
+## Console and scheduling
+
+## Performance
+
+## Module isolation
+
+## Testing

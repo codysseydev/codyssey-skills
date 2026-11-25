@@ -1,17 +1,33 @@
 # Symfony
 
-Applies to: Symfony controllers, services, Messenger message handlers, console
-commands.
+Applies to: Symfony controllers, services, Messenger message handlers, console commands.
 
 ## Dependency injection
 
-- Services **MUST NOT** be fetched with `$container->get()`; they **MUST** be
-  autowired through the constructor. This is the Symfony form of the
-  no-service-location rule in `php-core.md` (`laravel-kanon` skill).
+- Services **MUST NOT** be fetched with `$container->get()`; they **MUST** be autowired through the constructor. This is the Symfony form of the no-service-location rule in `php-core.md` (`laravel-kanon` skill).
 
 ## Writes
 
-- Writes **MUST** go through a Symfony Messenger command dispatched to one handler,
-  so every write shares one transaction and validation path. This is the Symfony
-  counterpart of the Laravel command/handler slice (`architecture.md` in the
-  `laravel-kanon` skill).
+- Writes **MUST** go through a Symfony Messenger command dispatched to one handler, so every write shares one transaction and validation path. This is the Symfony counterpart of the Laravel command/handler slice (`architecture.md` in the `laravel-kanon` skill).
+
+## Messenger slices
+
+## Controllers
+
+## HTTP API
+
+## Authorization
+
+## Domain model
+
+## Doctrine persistence
+
+## Integrations
+
+## Console and scheduling
+
+## Performance
+
+## Module isolation
+
+## Testing
