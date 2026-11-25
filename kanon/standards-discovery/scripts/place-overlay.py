@@ -15,7 +15,7 @@ place, commit_ai_files yes: one commit on a new branch of the client repo. Its p
   .ai, its folders or a target sits at `Read at` stops the run.
 place, commit_ai_files no: writes nothing under the repo, .git included. The files stay in the work folder.
 load, commit_ai_files no: copies .ai/kanon.yml and .ai/rules/project/ into the working tree and adds
-  two lines to info/exclude, so git status stays empty. Stops when a target path is tracked.
+  two lines to info/exclude, so git status stays empty. Stops when a target path is committed at HEAD.
 
 One JSON object on stdout. Exit 0 on success, 1 on `stop`, a failed git command or a file error, 2 for bad usage.
 Stdlib only.
@@ -177,9 +177,11 @@ def _in_the_way(repo, rel):
 
 def load_into_tree(repo, work):
     files = [(rel, src) for rel, src in files_to_place(work) if rel != REPORT_IN_REPO]
-    tracked = [p for p in text_of(git(repo, "ls-files", "-z", "--", OVERLAY, RULES_DIR)).split("\0") if p]
+    head = git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}", check=False)
+    listed = git(repo, "ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD", "--", OVERLAY, RULES_DIR) if head.returncode == 0 else None
+    tracked = [p for p in text_of(listed).split("\0") if p] if listed else []
     if tracked:
-        return stop(reason="tracked in the repo, so loading would show as a change: " + ", ".join(tracked))
+        return stop(reason="committed at HEAD, so loading would show as a change: " + ", ".join(tracked))
     blocked = [rel for rel, _ in files if _in_the_way(repo, rel)]
     if blocked:
         return stop(reason="a symlink or a file is in the way: " + ", ".join(blocked))

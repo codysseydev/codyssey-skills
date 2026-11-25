@@ -6,11 +6,13 @@
 --policy is the JSON that check-policy.py printed on `continue`. One JSON object on stdout.
 Exit 0 for `inventory` and `no-code`, 1 for `stop`, 2 for bad usage.
 
-The universe is the tracked files (`git ls-files`), never a folder walk. Paths the client's ignore
-files cover, symlinks and submodules appear in no list. The ignore files are read from the `read_at`
-commit through git, never from policy.json, and a working-tree copy that differs stops the run. The
-script reads through git only and runs no command that writes in the repo: every call is
-`git --no-optional-locks`, with hooks, fsmonitor and the split index turned off. Stdlib only.
+The universe is the tree of the `read_at` commit, never a folder walk. Paths the client's ignore
+files cover, symlinks and submodules appear in no list. The ignore files are read from `read_at`
+through git, never from policy.json, and a working-tree copy that differs stops the run. A listed
+file whose working-tree bytes differ from `read_at` stops it too. The script never reads the repo's
+index (reading a split index changes the mtime of its shared file) and runs no command that writes
+in the repo: every call is `git --no-optional-locks`, with hooks, fsmonitor and the split index
+turned off. Stdlib only.
 """
 import argparse
 import collections
@@ -133,7 +135,7 @@ def ignore_patterns(blob):
 
 
 def ignored_paths(repo, sha, committed):
-    """Every tracked path an ignore file at sha covers, in the index or in the tree of sha.
+    """Every path in the tree of sha that an ignore file at sha covers.
 
     Each file is matched in its own git run and the results are joined, so a `!` line in one file
     cannot bring back a path the other hides.
@@ -141,26 +143,23 @@ def ignored_paths(repo, sha, committed):
     ignored = set()
     for blob in committed.values():
         patterns = ignore_patterns(blob)
-        ignored |= ignored_by(repo, patterns) | ignored_by(repo, patterns, sha)
+        ignored |= ignored_by(repo, patterns, sha)
     return ignored
 
 
-def ignored_by(repo, patterns, sha=None):
-    """The tracked paths that git's own matcher says the patterns cover.
+def ignored_by(repo, patterns, sha):
+    """The paths of the tree of sha that git's own matcher says the patterns cover.
 
-    With sha, the paths of that commit's tree instead of the index, read through a temporary index.
+    The tree is read into a temporary index outside the repo. The repo's own index is never read.
     """
     if not patterns:
         return set()
     args = ["ls-files", "-z", "-c", "-i", *[f"--exclude={pattern}" for pattern in patterns]]
-    if sha is None:
-        proc = git(repo, *args)
-    else:
-        with tempfile.TemporaryDirectory(prefix="ignored-by-") as scratch:
-            env = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
-            if git(repo, "read-tree", sha, env=env).returncode != 0:
-                raise Stop(f"cannot read the tree of {sha}")
-            proc = git(repo, *args, env=env)
+    with tempfile.TemporaryDirectory(prefix="ignored-by-") as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
+        if git(repo, "read-tree", sha, env=env).returncode != 0:
+            raise Stop(f"cannot read the tree of {sha}")
+        proc = git(repo, *args, env=env)
     if proc.returncode != 0:
         raise Stop(f"git ls-files failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return set(_names(proc))
@@ -231,6 +230,26 @@ def listed_paths(found):
     return {p for paths in found["sources"].values() for p in paths} | {p for paths in found["siblings"].values() for p in paths}
 
 
+def differs_from(repo, sha, path):
+    """True when the working-tree file at path is not a regular file with the bytes path has at sha.
+
+    A symlink at path or at a folder above it counts as different, so the agent never reads through one.
+    """
+    here = repo
+    for part in path.split("/"):
+        here = os.path.join(here, part)
+        if os.path.islink(here):
+            return True
+    shown = git(repo, "cat-file", "blob", f"{sha}:{path}")
+    try:
+        if not stat.S_ISREG(os.lstat(here).st_mode):
+            return True
+        with open(here, "rb") as handle:
+            return shown.returncode != 0 or handle.read() != shown.stdout
+    except OSError:
+        return True
+
+
 EMPTY = {"tracked": [], "sources": {kind: [] for kind in SOURCE_KINDS}, "code": [], "siblings": {}}
 
 
@@ -240,7 +259,7 @@ def build(repo):
     head_proc = git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
     read_at = _text(head_proc).strip() or None
     if read_at is None:
-        if _names(git(repo, "ls-files", "-z")):
+        if [name for name in os.listdir(repo) if name != ".git"]:
             raise Stop("the branch has no commit, so there is nothing to read at a commit")
         found, ignored = EMPTY, set()
     else:
@@ -248,8 +267,7 @@ def build(repo):
         require_same_ignore_files(repo, committed)
         ignored = ignored_paths(repo, read_at, committed)
         found = listing(repo, read_at, ignored)
-        differs = set(_names(git(repo, "diff", "--no-ext-diff", "--name-only", "-z", "HEAD")))
-        dirty = sorted(listed_paths(found) & differs)
+        dirty = [path for path in sorted(listed_paths(found)) if differs_from(repo, read_at, path)]
         if dirty:
             raise Stop("these files differ from HEAD, and the checker reads the commit: " + ", ".join(dirty))
     sources = found["sources"]

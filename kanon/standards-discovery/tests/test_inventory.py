@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import unittest
 from unittest import mock
@@ -137,24 +138,25 @@ class IgnorePatterns(Inventory):
                 "b/secret_x.php": "<?php\n", "root.php": "<?php\n", "a/root.php": "<?php\n", "ok.php": "<?php\n",
             }
         )
+        self.head = git(self.repo, "rev-parse", "HEAD")
 
     def test_a_bare_name_matches_at_any_depth(self):
-        self.assertEqual(inv().ignored_by(self.repo, ["secrets"]), {"secrets/k.php", "secrets/keep.php", "a/secrets/k.php"})
+        self.assertEqual(inv().ignored_by(self.repo, ["secrets"], self.head), {"secrets/k.php", "secrets/keep.php", "a/secrets/k.php"})
 
     def test_a_double_star_pattern_matches(self):
-        self.assertIn("secrets/k.php", inv().ignored_by(self.repo, ["**/secret*"]))
-        self.assertIn("b/secret_x.php", inv().ignored_by(self.repo, ["**/secret*"]))
+        self.assertIn("secrets/k.php", inv().ignored_by(self.repo, ["**/secret*"], self.head))
+        self.assertIn("b/secret_x.php", inv().ignored_by(self.repo, ["**/secret*"], self.head))
 
     def test_a_rooted_pattern_matches_only_the_root(self):
-        self.assertEqual(inv().ignored_by(self.repo, ["/root.php"]), {"root.php"})
+        self.assertEqual(inv().ignored_by(self.repo, ["/root.php"], self.head), {"root.php"})
 
     def test_a_negated_child_of_an_ignored_folder_stays_ignored(self):
-        got = inv().ignored_by(self.repo, ["secrets/", "!secrets/keep.php"])
+        got = inv().ignored_by(self.repo, ["secrets/", "!secrets/keep.php"], self.head)
         self.assertIn("secrets/keep.php", got)
         self.assertIn("secrets/k.php", got)
 
     def test_no_patterns_ignore_nothing(self):
-        self.assertEqual(inv().ignored_by(self.repo, []), set())
+        self.assertEqual(inv().ignored_by(self.repo, [], self.head), set())
 
 
 class IgnoreFilesAtReadAt(Inventory):
@@ -241,13 +243,19 @@ class GitConfigOfTheClient(Inventory):
         self.assertEqual(code, 0)
         code, out = run_json("check-overlay.py", "--work", work, "--repo", repo, "--kanon-root", fs.REPO_ROOT)
         self.assertEqual((code, out["result"]), (0, "ok"), out)
-        self.assertEqual(self.without_shared_index_mtime(fs.snapshot(repo)), self.without_shared_index_mtime(before))
+        self.assertEqual(fs.snapshot(repo), before)
 
-    @staticmethod
-    def without_shared_index_mtime(snap):
-        # git refreshes the mtime of .git/sharedindex.<sha> on every read of a split index (read-cache.c,
-        # freshen_shared_index). Bytes still count, and so does any new file, such as a second shared index.
-        return {path: (value[0] if path.startswith(".git/sharedindex.") else value) for path, value in snap.items()}
+    def test_no_script_reads_the_real_index(self):
+        # git refreshes the mtime of a split index's shared index on every read of the index, so the
+        # scripts read the read_at tree and the working tree only. A broken index proves it.
+        repo, info = self.client()
+        work = fs.make_work(info, os.path.join(self.tmp(), "work"), os.path.join(RECORDS, "allowing.md"), repo)
+        code, expected = self.run_inventory(repo, os.path.join(work, "policy.json"))
+        put(repo, ".git/index", b"not an index")
+        self.assertNotEqual(subprocess.run(["git", "-C", repo, "ls-files"], capture_output=True).returncode, 0)
+        self.assertEqual(self.run_inventory(repo, os.path.join(work, "policy.json")), (code, expected))
+        code, out = run_json("check-overlay.py", "--work", work, "--repo", repo, "--kanon-root", fs.REPO_ROOT)
+        self.assertEqual((code, out["result"]), (0, "ok"), out)
 
     def test_a_folder_inside_the_repo_stops(self):
         repo, _ = self.client()
@@ -296,6 +304,28 @@ class SymlinksAndDirtyPaths(Inventory):
         code, out = self.run_inventory(repo, policy)
         self.assertEqual(code, 0)
         self.assertNotIn("NOTES.md", json.dumps(out))
+
+    def test_a_listed_file_replaced_by_a_symlink_stops(self):
+        repo, _ = self.client()
+        policy = self.policy(repo)
+        target = os.path.join(self.tmp(), "CLAUDE.md")
+        put(os.path.dirname(target), "CLAUDE.md", read_text(repo, "CLAUDE.md"))
+        os.remove(os.path.join(repo, "CLAUDE.md"))
+        os.symlink(target, os.path.join(repo, "CLAUDE.md"))
+        code, out = self.run_inventory(repo, policy)
+        self.assertEqual(code, 1)
+        self.assertIn("CLAUDE.md", out["reason"])
+
+    def test_a_listed_file_under_a_symlinked_folder_stops(self):
+        repo, _ = self.client()
+        policy = self.policy(repo)
+        elsewhere = os.path.join(self.tmp(), "Orders")
+        shutil.copytree(os.path.join(repo, "app", "Orders"), elsewhere)
+        shutil.rmtree(os.path.join(repo, "app", "Orders"))
+        os.symlink(elsewhere, os.path.join(repo, "app", "Orders"))
+        code, out = self.run_inventory(repo, policy)
+        self.assertEqual(code, 1)
+        self.assertIn("app/Orders/", out["reason"])
 
     def test_a_dirty_file_the_inventory_ignores_does_not_stop(self):
         repo, _ = self.client()

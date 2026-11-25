@@ -27,14 +27,14 @@ The skill stops after step 1 today.
 | `.aiignore` or `.cursorignore` at `Read at` is a symlink, a folder or a gitlink | `inventory.py` stops. The ignore patterns are unknown, so no path is safe to read. |
 | A working-tree `.aiignore` or `.cursorignore` differs from `Read at`, or exists on one side only | `inventory.py` and `check-overlay.py` stop and name the file. The patterns the owner sees must be the ones the scripts apply. |
 | `--repo` is a folder inside the checkout | All three scripts stop. Every path they print or check is relative to the top level. |
-| A tracked file the inventory would list differs from `HEAD` | `inventory.py` stops and names the files. The agent reads the working tree and the checker reads `Read at`, so the two must agree. |
+| A file the inventory would list differs in the working tree from its bytes at `Read at`, or is a symlink or sits under one | `inventory.py` stops and names the files. The agent reads the working tree and the checker reads `Read at`, so the two must agree. |
 | Policy check `continue`, code or rule sources present | `inventory.py` prints the input list. The agent reads it and writes the report, `.ai/kanon.yml` and `.ai/rules/project/*.md` into the work folder in the client's brain. |
 | `check-overlay.py` finds a problem | Exit 1 with every problem. The agent fixes the drafts and reruns. `place-overlay.py` refuses until it passes. |
 | Record says `commit_ai_files: yes` | `place-overlay.py place` makes a branch (default `standards-discovery/<YYYY-MM-DD>`) in the client repo with one commit holding the overlay and the report, on top of the report's `Read at`. It uses git plumbing on a temporary index, so the owner's checkout keeps its index, branch, `HEAD` and uncommitted files, and no hook runs. The agent asks the owner, then pushes and opens the PR. |
 | `commit_ai_files: yes`, and `.ai`, `.ai/rules`, `.ai/rules/project` or a target path is a symlink, a file or a gitlink at `Read at` | `place` stops with the path. It never replaces a tree entry. |
 | Record says `commit_ai_files: no` | `place-overlay.py place` writes nothing under the client repo, `.git` included. The files stay in the brain. |
 | `place-overlay.py load`, record says `commit_ai_files: no` | Copies `.ai/kanon.yml` and `.ai/rules/project/` into the working tree and adds two lines to `info/exclude`. `git status` stays empty. |
-| `load` when a target path is tracked, exists untracked with other content, or sits behind a symlink or a file, or the record says `yes` | Stop before any write. A tracked path would show as a change, and an untracked one would be overwritten. A `yes` repo gets the PR instead. |
+| `load` when a target path is committed at `HEAD`, exists untracked with other content, or sits behind a symlink or a file, or the record says `yes` | Stop before any write. A tracked path would show as a change, and an untracked one would be overwritten. A `yes` repo gets the PR instead. |
 | Record changed to forbid between steps | `place` reruns the `read-code` check and stops on it. |
 
 ## Data shape
@@ -123,11 +123,12 @@ standards-report.md
 ```
 
 - The universe is the tree of `read_at` (`git ls-tree -r --full-tree`, tracked files only), never a folder walk. `siblings` and `commit_subjects` read the history of `read_at` too, so `check-overlay.py` gets the same list from the same commit. Vendor folders are usually untracked, and `vendor/` and `node_modules/` are dropped too.
-- `ignored` comes from git's own matcher. The root `.aiignore` and `.cursorignore` (names matched without regard to case) are read from `read_at` with `ls-tree --full-tree` and `cat-file` on a regular-file blob. A symlink, a folder or a gitlink stops the inventory, because the patterns are unknown. Each file's patterns run through their own `git ls-files -z -c -i --exclude=<pattern>...`, once on the index and once on a temporary index of `read_at`, and the results are joined. A `!` line in one file cannot bring back what the other hides. `policy.json` is not an input to the ignore set (2026-11-25). An ignored path appears in no other list.
+- `ignored` comes from git's own matcher. The root `.aiignore` and `.cursorignore` (names matched without regard to case) are read from `read_at` with `ls-tree --full-tree` and `cat-file` on a regular-file blob. A symlink, a folder or a gitlink stops the inventory, because the patterns are unknown. Each file's patterns run through their own `git ls-files -z -c -i --exclude=<pattern>...` on a temporary index of `read_at` outside the repo, and the results are joined. A `!` line in one file cannot bring back what the other hides. `policy.json` is not an input to the ignore set (2026-11-25). An ignored path appears in no other list.
 - A working-tree `.aiignore` or `.cursorignore` that differs from `read_at`, including one present on one side only, stops the inventory and the overlay check.
 - `--repo` must be the top level of the checkout (`require_top_level` from `check-policy.py`). Every git call runs with `core.hooksPath=/dev/null`, `core.fsmonitor=false` and `core.splitIndex=false`.
 - Tracked symlinks and submodules (`git ls-files -s` modes `120000` and `160000`) are dropped from every list. A symlink can point outside the repo.
-- A listed path that differs from `HEAD` (`git --no-optional-locks diff --name-only HEAD`) stops the inventory with the paths.
+- A listed path whose working-tree file is not a regular file with its bytes at `read_at`, or that sits under a symlinked folder, stops the inventory with the paths. The comparison is in Python against `git cat-file blob <read_at>:<path>`.
+- No script reads the repo's index (2026-11-25). Git updates the mtime of a split index's `sharedindex.<sha>` on every read of the index, which would break criterion 3 in a repo with `core.splitIndex=true`. An unborn branch with anything in its working tree stops. `load` reads the targets' tracked state from the `HEAD` tree.
 - `sources` match the issue's list. Instructions: `CLAUDE.md` at any depth, `AGENTS.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`. Docs: root `README*`, `CONTRIBUTING*` at root, `.github/` and `docs/`, and `docs/**/*.md|rst|txt` (ADRs included). Linters: PHP CS Fixer, Pint, PHP_CodeSniffer, PHPStan, Deptrac, PHPArkitect, Rector, ESLint configs by their file names. CI: `.github/workflows/*.yml|yaml`, `.gitlab-ci.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`. Scripts: `composer.json`, `package.json`. PR templates: the GitHub locations.
 - `siblings`: PHP classes grouped by the last CamelCase word of the file name (`CreateOrderHandler` is a `Handler`), up to 3 per kind, the most recently committed first (order of `git log --name-only`), path as tie-break.
 - `commit_subjects`: the last 50 (`git log -50 --format=%s`). `branches`: local and remote branch names.
@@ -280,8 +281,8 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `inventory needs a continue` | A `stop` policy JSON: exit 1, and no git command runs in the repo | fails |
 | `ignore patterns use git's matcher` | `secrets` matches `a/secrets/k.php`, `**/secret*` matches `secrets/k.php`, a negated child of an ignored folder stays ignored | fails |
 | `ignore files at read_at` | Two ignore files where `.cursorignore` holds `!*.php`: the path `.aiignore` hides stays ignored. A `policy.json` without ignore warnings still ignores, in the inventory and the overlay check. An uncommitted ignore line, an untracked `.cursorignore` and a deleted `.aiignore` stop. A committed symlink, folder or gitlink `.aiignore` stops with nothing listed | fails |
-| `client git config` | With `core.splitIndex=true`, the inventory and the check add no file under the repo and change no bytes (git still refreshes the shared index's mtime on any read of a split index). A folder inside the repo as `--repo` stops | fails |
-| `symlinks and dirty paths` | A tracked symlink and a submodule appear in no list. An edited `CLAUDE.md` stops with its path | fails |
+| `client git config` | With `core.splitIndex=true`, the inventory, the check and `place` with a `no` record leave every byte and mtime under the repo, `.git` included, unchanged. With `.git/index` overwritten by garbage, the inventory prints the same JSON, the check passes, and `place` and `load` work. A folder inside the repo as `--repo` stops | fails |
+| `symlinks and dirty paths` | A tracked symlink and a submodule appear in no list. An edited `CLAUDE.md` stops with its path. A listed file replaced by a symlink, and one under a symlinked folder, stop | fails |
 | `no code` | An unborn repo and a repo with `README.md` and `composer.json` give `no-code`. A repo with only `README.md` and `CLAUDE.md` gives `inventory` | fails |
 | `inventory writes nothing` | A snapshot of every file under the repo, `.git` included (bytes and mtime), is the same before and after | fails |
 | `forbidding record writes nothing to the repo` (`test_place_overlay.py`) | `allowing.md` (`commit_ai_files: no`): inventory, check and `place` in a row leave the repo snapshot unchanged. Acceptance criterion 3 | fails |
@@ -519,3 +520,9 @@ l. Where the overlay writer's step lives. The #65 plan said #66 adds it to `STEP
    - **A. `place-overlay.py` runs `check(raw, "read-code", ctx)` and reads `commit_ai_files` through the imported `FIELDS` (recommended).** No edit to `check-policy.py`, no conflict with #85. Cost: the rule "placement follows `commit_ai_files`" lives in a second script.
    - B. Add a `write-overlay` step to `STEPS` after #85 merges, and make #66 depend on #85. One table holds every rule, at the cost of a wait.
    - C. Edit `check-policy.py` now. Conflicts with #85's branch.
+
+m. Reading a split index changes the mtime of `.git/sharedindex.<sha>`, so criterion 3's byte and mtime snapshot fails on a repo with `core.splitIndex=true`.
+   Decided 2026-11-25 by the owner: A.
+   - **A. No script reads the repo's index (recommended).** The ignore patterns match the `Read at` tree only, and the dirty check compares working-tree bytes with the `Read at` blobs.
+   - B. Accept an mtime-only change on split-index repos and document it.
+

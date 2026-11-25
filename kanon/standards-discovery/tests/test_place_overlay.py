@@ -71,6 +71,24 @@ class ForbiddingRecordWritesNothing(Placement):
         self.assertEqual(command[command.index("--work") + 1], odd)
         self.assertEqual(command[command.index("--repo") + 1], self.repo)
 
+    def test_a_split_index_repo_keeps_its_bytes_and_mtimes(self):
+        git(self.repo, "config", "core.splitIndex", "true")
+        git(self.repo, "update-index", "--split-index")
+        before = snapshot(self.repo)
+        code, out = run_json("inventory.py", "--policy", os.path.join(self.work, "policy.json"), "--repo", self.repo)
+        self.assertEqual(out["result"], "inventory")
+        code, out = run_json("check-overlay.py", "--work", self.work, "--repo", self.repo, "--kanon-root", REPO_ROOT)
+        self.assertEqual((code, out["result"]), (0, "ok"), out)
+        code, out = self.place()
+        self.assertEqual((code, out["result"]), (0, "kept-in-brain"))
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_a_broken_index_is_never_read(self):
+        put(self.repo, ".git/index", b"not an index")
+        self.assertEqual(self.place()[1]["result"], "kept-in-brain")
+        code, out = self.place(ALLOWING_COMMIT)
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+
     def test_the_work_folder_is_left_as_it_was(self):
         before = snapshot(self.work)
         self.place()
@@ -332,6 +350,11 @@ class Load(Placement):
         self.assertEqual((code, out["result"]), (1, "stop"))
         self.assertIn(".ai/kanon.yml", out["reason"])
         self.assertEqual(snapshot(self.repo), before)
+
+    def test_load_never_reads_the_index(self):
+        put(self.repo, ".git/index", b"not an index")
+        code, out = self.load()
+        self.assertEqual((code, out["result"]), (0, "loaded"), out)
 
     def test_a_tracked_rule_file_stops(self):
         put(self.repo, ".ai/rules/project/testing.md", "---\npaths:\n  - x\n---\n")

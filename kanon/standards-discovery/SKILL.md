@@ -57,7 +57,7 @@ python3 <skill dir>/scripts/inventory.py --policy <work>/policy.json --repo <rep
 The script reads the tracked files through git and prints the paths that may be read, by kind, plus `ignored`, sibling files, the last commit subjects, the branch names and `read_at`, the commit all later checks use. It reads `.aiignore` and `.cursorignore` from `read_at`, matches each file's patterns with git's own matcher, and joins the results, so a `!` line in one file cannot bring back what the other hides. `--repo` is the top level of the checkout, not a folder inside it.
 
 - `no-code`: the tracked tree has no source file and no rule source. Tell the owner the repo stays canon-first until the client has rules of their own. Write no overlay. Stop.
-- Exit 1 (`stop`): an ignore file at `read_at` is a symlink, a folder or a gitlink, so its patterns are unknown; a working-tree `.aiignore` or `.cursorignore` differs from `read_at`; a listed file differs from `HEAD`; or `--repo` is not the top level. Report the reason. Ask the owner to fix the cause, then rerun.
+- Exit 1 (`stop`): an ignore file at `read_at` is a symlink, a folder or a gitlink, so its patterns are unknown; a working-tree `.aiignore` or `.cursorignore` differs from `read_at`; a listed file in the working tree differs from its bytes at `read_at`, or is a symlink; or `--repo` is not the top level. Report the reason. Ask the owner to fix the cause, then rerun.
 - Exit 0 (`inventory`): go on.
 
 ## Step 3: read
@@ -91,7 +91,7 @@ python3 <skill dir>/scripts/place-overlay.py place --record <record> --model <mo
 The script reruns the policy check and the overlay check, then reads `commit_ai_files` from the record.
 
 - `yes`: it makes the branch with one commit holding `.ai/kanon.yml`, `.ai/rules/project/` and `.ai/standards-report.md`, on top of the report's `Read at` commit. It builds the commit with git plumbing on a temporary index, so the owner's checkout keeps its index, branch, `HEAD` and uncommitted files, and no hook runs. It stops when `.ai`, one of its folders or a target path is a symlink, a file or a gitlink at `Read at`. Ask the owner before the push and the PR, because both reach the client.
-- `no`: it writes nothing under the repo. The files stay in the work folder. Tell the owner that `place-overlay.py load` with the same `--record`, `--model`, `--work` and `--repo` copies the overlay into the working tree and adds two lines to `.git/info/exclude`, so `git status` stays empty. `load` stops when a target path is tracked, already exists with other content, or sits behind a symlink or a file, and when the record says `yes`.
+- `no`: it writes nothing under the repo. The files stay in the work folder. Tell the owner that `place-overlay.py load` with the same `--record`, `--model`, `--work` and `--repo` copies the overlay into the working tree and adds two lines to `.git/info/exclude`, so `git status` stays empty. `load` stops when a target path is committed at `HEAD`, already exists with other content, or sits behind a symlink or a file, and when the record says `yes`.
 - Exit 1: the record, the overlay check or a branch of that name blocks. Report it.
 
 When the overlay lands on origin/main, the repo is project-first, and factory runs on it stop on `record` until the owner's registry has an entry for the client. Tell the owner.
