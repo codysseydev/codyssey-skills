@@ -318,6 +318,14 @@ class CitationStrictness(Golden):
         self.assertIn("separator", text)
         self.assertIn("ignored", text)
 
+    def test_a_second_conventions_heading_fails(self):
+        self.edit("standards-report.md", "## Silent on", "## Conventions\n\n| Convention | Evidence | Source | Kanon rule | Effect |\n|---|---|---|---|---|\n\n## Silent on")
+        self.assertProblem("Conventions", "more than one")
+
+    def test_a_second_silent_on_heading_fails(self):
+        self.edit("standards-report.md", "- http-api\n", "- http-api\n\n## Silent on\n\n- authorization\n")
+        self.assertProblem("Silent on", "more than one")
+
     def test_a_separator_with_alignment_colons_passes(self):
         self.edit("standards-report.md", "|---|---|---|---|---|\n", "| :--- | --- | :---: | --- | ---: |\n")
         self.assertEqual(self.check()[0], 0)

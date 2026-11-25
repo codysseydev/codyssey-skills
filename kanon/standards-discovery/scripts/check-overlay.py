@@ -354,6 +354,9 @@ def parse_report(text):
         add("Framework", f"the report needs `Framework: laravel` or `Framework: symfony` (got {report['framework']})")
 
     headings = {line.strip(): number for number, line in enumerate(lines) if line.startswith("## ")}
+    for name in ("Conventions", "Silent on"):
+        if sum(1 for line in lines if line.startswith("## ") and line.strip() == f"## {name}") > 1:
+            add(name, f"the report has more than one `## {name}` section")
     if "## Conventions" not in headings:
         add("Conventions", "the report needs a `## Conventions` section")
     if "## Silent on" not in headings:

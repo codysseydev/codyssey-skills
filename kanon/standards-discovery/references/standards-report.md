@@ -31,6 +31,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 
 ## Rows
 
+- The report has one `## Conventions` section and one `## Silent on` section.
 - The table starts with the header row and the `|---|---|---|---|---|` separator, in that order.
 - Evidence items are `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that appears on the cited lines (whitespace collapsed). A range spans at most 20 lines. Separate items with `; `.
 - A quote has at least 3 characters that are not spaces, one of them a letter or a digit. It holds no `"`, no `|` and no backtick. On a line full of them, quote a fragment without them.

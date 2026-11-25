@@ -162,6 +162,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 ```
 
 - `Read at` is the commit every citation is checked against, through `git show <sha>:<path>`. A moved working tree does not break the check.
+- The report has one `## Conventions` and one `## Silent on` heading. A second one of either fails, because the parser reads one section per name and an earlier table would go unchecked (decision p).
 - The table's first line is the header and its second line the `|---|` separator. A table without the separator fails, and its first line after the header is checked as a row.
 - Evidence items: `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that must appear on the cited lines (whitespace collapsed). A range spans at most 20 lines, in the report and in the overlay's `evidence`. A quote has at least 3 characters that are not spaces, one of them a letter or a digit, so a space or one common letter cannot pass on any line. A quote holds no `"`, `|` or backtick. On a line full of them (a JSON line in `composer.json`, a Markdown table row), the agent quotes a fragment without them, such as `php-cs-fixer fix --dry-run --diff`. No escape grammar to get wrong. Items are separated by `; `. Git history uses `` `commit:<sha>` "<text in the subject>" `` and `` `branch:<name>` ``. Every row needs at least one item. Open decision j.
 - Source: `written down`, `configured` or `pattern in code`.
@@ -268,7 +269,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `rule resolution` | A made-up ID, an ID of a family without a catalog file (names the family), a `file` and `sentence` entry (the schema refuses it), a report row naming a file and a sentence | fails |
 | `one entry per rule` | Two `ORCH-011` entries | fails |
 | `overlay evidence` | An evidence item on a blank line, past the end, or missing from its row's citations | fails |
-| `citation strictness` | A quote of spaces, one letter or punctuation only, a commit quote of one letter, a 21-line range in the report and in the overlay, a table without its separator (its first row is still checked) | fails |
+| `citation strictness` | A second `## Conventions` or `## Silent on` heading, a quote of spaces, one letter or punctuation only, a commit quote of one letter, a 21-line range in the report and in the overlay, a table without its separator (its first row is still checked) | fails |
 | `quote and path forms` | A quote holding a double quote or a pipe fails. `docs/Coding Standards.md:3` with a quoted YAML value passes. A row citing `composer.json:7` passes | fails |
 | `change and rule files` | `change` without `rule`, `adopt` with `rule`, a `rule` path that does not exist, a rule file without `paths:` | fails |
 | `listed paths` | A citation of `.aiignore` (tracked, not a source) fails though an edited `inventory.json` lists it. The same path as overlay evidence fails. A fourth sibling of a kind is not listed | fails |
@@ -535,3 +536,8 @@ o. Characters YAML readers disagree on in `.ai/kanon.yml`. A U+2028 inside a com
    Decided 2026-11-25 by the owner: A.
    - **A. Reject `\x85`, U+2028, U+2029, a lone `\r`, and every double-quoted escape except `\"` and `\\`, naming the line (recommended).**
    - B. Leave them.
+
+p. A report with a second `## Conventions` or `## Silent on` heading. The parser kept the last one, so an earlier table went unchecked.
+   Decided 2026-11-25 by the owner: A.
+   - **A. `check-overlay.py` refuses a report with more than one of either heading (recommended).**
+   - B. Leave it.
