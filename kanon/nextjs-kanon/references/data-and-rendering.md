@@ -198,7 +198,191 @@ rule that enforces a rule, where one exists.
 
 ## State management
 
+- **DATA-021. Pick state by what it is.** TanStack Query for server state and caching; a
+  small external store with selector subscriptions (XState Store is the named
+  implementation) for complex UI state, feature-level state and async flows shared across
+  components, including an optimistic update (DATA-032); local React state (`useState`,
+  `useRef`) for simple UI state. No store for simple toggles or one-off local state. Server
+  data is never copied into a store or `useState` as state the UI reads, beyond the in-flight
+  optimistic value of one store action; a list page's store holds only UI state such as
+  `visibleCount`. **SHOULD.**
+  - Why: a copy of server data in a store goes stale when the query refetches, so the page shows the previous data for a frame.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D19 (core part)
+
+- **DATA-022. A feature exposes one combined hook** (`use<Feature>`) that joins query data,
+  store state, store actions (including async ones) and handlers, so the entry component has
+  one source. **SHOULD.**
+  - Why: the query never knows about page state and the store never knows about retries, and the hook is the one place they meet.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D20
+
+- **DATA-023. Define each query once with `queryOptions()`.** The key, `queryFn` and shared
+  options live in one function in the feature's `hooks/` folder (`<thing>QueryOptions(slug)`),
+  exported when a file besides the hook reads or writes the query (STRUCT-032). The hook,
+  seeding, `invalidateQueries` and `setQueryData` all use it. No inline key arrays, no second
+  definition of the same key. Every query hook file defines its query with `queryOptions()` or
+  `infiniteQueryOptions()`. A server seed is a parameter of the factory, so the seed and the
+  key are written once. Code that reads every query under a shared key prefix
+  (`getQueriesData`) checks each entry's shape before using it, because different queries
+  under one prefix can hold different shapes (a list and infinite pages). **SHOULD.**
+  - Why: one options object passes to `useQuery` and to the imperative APIs, so the key and the fetcher cannot drift apart.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - Source: Query Options https://tanstack.com/query/latest/docs/framework/react/guides/query-options
+  - From: D21
+
+- **DATA-024. A hook that wraps a query is named `use<Thing>Query`** (`useThingsQuery` for a
+  list) and lives in `hooks/`. The combined hook (DATA-022) is `use<Thing>`. **SHOULD.**
+  - Why: the name tells a reader whether a hook returns one query or the joined feature state.
+  - From: D22
+
+- **DATA-025. Render "no data yet" from `isPending`, failure from `isError`, and check
+  `isError` first.** Use `isLoading` only when the code needs "pending and fetching" (a
+  spinner for an enabled query). When an endpoint answers "none" with a 404 (an optional
+  record the member has not created yet), the service turns it into `null`, so the query
+  never errors for an expected state. A list endpoint that answers 200 with an empty array
+  needs no `null`. **SHOULD.**
+  - Why: an errored query with no data flips back to pending on the next fetch, so a UI that tests `isPending` first shows its loading state again after a failure and can refetch in a loop.
+  - Source: Migrating to TanStack Query v5 https://tanstack.com/query/latest/docs/framework/react/guides/migrating-to-v5
+  - From: D23
+
+- **DATA-026. Retry is decided once.** `QueryProvider` sets the default through
+  `shouldRetryQuery` (`src/lib/queryRetry.ts`): no retry on a 4xx response (a 429 included,
+  DATA-071), up to three retries otherwise, with exponential backoff. It finds the status on
+  the error or on its `cause`, so a service that wraps the HTTP failure needs no retry rule of
+  its own. A hook sets `retry` only for a reason written in a comment, and never decides by
+  string-matching `error.message` for a status. Recognise a not-found with
+  `isNotFoundError`; add a typed error where a new case is needed; where the API sends a
+  stable error `code`, check the code, never the sentence. Mutation hooks decide their own
+  retry through `shouldRetryMutation` (DATA-027). **SHOULD.**
+  - Why: a query is never retried after a 4xx, because the same request would get the same answer.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D24
+
+- **DATA-027. A mutation is retried at most once, and only after a network error or a 5xx.**
+  The default lives in the QueryClient provider, next to the query retry default of
+  DATA-026. A write that is not idempotent and carries no idempotency key is not retried (see
+  DATA-032). **SHOULD.**
+  - Why: a write that reached the server before the network failed runs twice when it is retried, so only a write that is safe to repeat gets the one retry.
+  - Check: a unit test of `shouldRetryMutation`: a 4xx gives no retry, the first 5xx retries, the second 5xx does not, and a request with no response retries once; a grep finds no `retry:` above 1 in a `useMutation`.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - Source: The Decorator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-decorator-pattern
+  - From: NX-06
+
+- **DATA-028. Every store exports a typed actions object**, with event names from an enum in
+  `types/*.enums.ts`. Components, hooks and services call the actions; only the store file
+  sends events to the store (`store.send(...)` in XState Store). An event that sets one field
+  takes the field name and a value of that field's type, never
+  `field: keyof State; value: string`. Event names follow DATA-029. **MUST.**
+  - Why: the actions object is the store's whole public surface, and a string-typed field and value let any field take any value past the type checker.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D25
+
+- **DATA-029. A store event and its action are named in the past tense for what happened**
+  (`lessonCompletionToggled`, `cancelRequested`), not for the field they write (`SetStatus`,
+  `UpdateFlag`). **SHOULD.**
+  - Why: a name that says what happened keeps the decision inside the store, while a setter name hands the caller the store's internals.
+  - Check: a guard test fails when a member of an event enum in `types/*.enums.ts` that feeds a store `on:` block matches `^(Set|Update)[A-Z]`; in review, an action that takes `(field, value)` is a setter.
+  - Source: Tell, Don't Ask https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/tell-dont-ask
+  - Source: Name Your Events in the Past Tense vault: Content/Quick Tips/20 - Name Your Events in the Past Tense.md
+  - From: NX-09
+
+- **DATA-030. A store resets its state on unmount when the state is feature-scoped.**
+  **SHOULD.**
+  - Why: a store created at module scope outlives the page, so without a reset the next visit starts from the last visit's state.
+  - From: D26
+
+- **DATA-031. A store is seeded from server data or props once, in an effect behind an
+  `is<Thing>Initialized` flag.** Never re-sync it in the render body. **SHOULD.**
+  - Why: a re-sync in the render body writes the server copy over what the user is typing on every render.
+  - From: D55
+
+- **DATA-032. One owner per optimistic update: a store action or a mutation hook, never a
+  component.** An optimistic update cancels in-flight queries for the key and snapshots the
+  old value, restores the snapshot on error, and invalidates the key when settled. The
+  sequence lives in `runOptimisticUpdate` (`src/lib/optimisticUpdate.ts`), which both owners
+  call. Either a store action or a `useMutation` hook may own a server-state change; on the
+  `useMutation` path a `useFeatureMutation` wrapper (`src/lib/useFeatureMutation.ts`) owns
+  the toast. A call that cannot be repeated (a single-use verification link, an order, a sent
+  message) is not started from an effect keyed on state alone: start it from a click, or
+  guard it so a remount or a Strict Mode re-run cannot send it twice (a ref set before the
+  call, or a mutation key). **SHOULD.**
+  - Why: one owner runs the whole cancel, snapshot, restore and invalidate sequence, so a failed save always rolls back.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D69 (core part)
+
+- **DATA-033. Query timings are named, and defaults are not repeated.** A query hook sets
+  `staleTime` and `gcTime` from named constants in `src/constants/queryTimings.ts`
+  (`STALE_SHORT`, `STALE_MEMBER`, `STALE_MEDIUM`, `STALE_HOURLY`, `STALE_STATIC`, `GC_SHORT`,
+  `GC_MEDIUM`, `GC_DAY`, `GC_STATIC`), and only when the value differs from the
+  `QueryProvider` default (60 s stale, 5 min gc). It does not repeat `retryDelay`,
+  `refetchOnMount: true`, `refetchOnReconnect: true` or `refetchOnWindowFocus: true` (the
+  defaults), and it sets no option that cannot take effect (for example
+  `placeholderData: (previousData) => previousData` on a query whose key never changes).
+  `staleTime: 0` stays a literal where a poll or `fetchQuery` must skip the cache.
+  **SHOULD.**
+  - Why: a named timing says what kind of data it is for, and a repeated default hides which hooks really differ from it.
+  - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
+  - From: D74
+
 ## Forms
+
+Every form uses React Hook Form with a Standard Schema validator. Zod is the named
+implementation.
+
+- **DATA-034. Every form uses React Hook Form with a Zod schema passed through its
+  resolver** (`zodResolver` from `@hookform/resolvers`). A single-field control (a search
+  box, a newsletter box) uses it too, so one pattern covers all forms. **SHOULD.**
+  - Why: one pattern for every form means one way to read a form's values, errors and submit state.
+  - From: D43
+
+- **DATA-035. Form schemas.** A form's schema lives in `utils/<form>Schema.ts` and exports
+  `<form>Schema`, a `z.object`. A field shared by forms is defined once in `src/lib` and
+  composed, never retyped: `emailField` (`src/lib/emailSchema.ts`) and `passwordField`
+  (`src/lib/passwordValidationSchema.ts`, which holds the only minimum-length rule).
+  `passwordValidationSchema` is the base object schema; a form that also needs an email
+  extends it with `passwordValidationSchema.extend({ email: emailField })`. Import as
+  `import * as z from 'zod'`. Messages are full phrases ("<Field> is required", "Please enter
+  a valid email address", "<Field> must be at least N characters", "Passwords must match").
+  A create form and an edit form do not share one schema that branches on a mode flag (a
+  `.refine` that reads the mode); each has its own `z.object`, composed from the shared
+  fields. A field the submit handler reads unconditionally is required in the schema (no
+  `.optional()`); `.optional()` is only for a field the service treats as optional, with a
+  default chosen on purpose. The `z.infer` type of the schema matches the service parameter
+  without a cast. A heavy schema used only on submit is imported inside the handler.
+  **SHOULD.**
+  - Why: a shared field keeps one rule and one message on every form, and a schema per form never branches on which form it serves.
+  - Source: Input Validation vs Domain Validation: Where Each Belongs https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation
+  - Source: Put the Date Rule in a DateRange vault: Content/Quick Tips/51 - Put the Date Rule in a DateRange.md
+  - Source: One Form Request per Write Action vault: Content/Quick Tips/06 - One Form Request per Write Action.md
+  - Source: Require Every Field the Controller Reads vault: Content/Quick Tips/48 - Require Every Field the Controller Reads.md
+  - From: D44
+
+- **DATA-036. A form schema checks shape and format only.** It checks presence, type, format
+  and length. Uniqueness, availability, entitlement and pricing stay with the API, and the
+  form shows the API's 409 or 422 field errors (DATA-037). A limit copied from the backend
+  carries a comment that names the backend request class. **SHOULD.**
+  - Why: "email is already taken" cannot live in a schema, because it needs a lookup only the API can make.
+  - Check: a grep of `utils/*Schema.ts` fails a `.refine(` or `.superRefine(` whose callback imports a service or `apiClient`, and any async refine; it flags a literal limit (`.min(`, `.max(`, `.regex(`) with no comment naming its backend source.
+  - Source: Input Validation vs Domain Validation: Where Each Belongs https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation
+  - Source: Value Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/value-objects
+  - Source: Keep the Form Request Rule When the Value Object Checks It Too vault: Content/Quick Tips/52 - Keep the Form Request Rule When the Value Object Checks It Too.md
+  - From: NX-05
+
+- **DATA-037. Submit flow.** `onSubmit` calls a function from the feature's `services/`,
+  never `apiClient` directly. On failure it maps the error with `parseApiFormError`, shows it
+  with `showToast(..., 'error')` and puts the message and the field errors into the form
+  library's status and error state; success shows a toast and resets or navigates. A request
+  that two forms send (a sign-up box in the header and one in the footer) is one service
+  function both forms call. Service location follows DATA-039. **SHOULD.**
+  - Why: the service owns the request and the form owns what the user sees, so one failure reads the same way on every form.
+  - From: D45
+
+- **DATA-038. The form library owns field values, errors and submitting state.** A store
+  holds only UI that outlives the form (a show-password toggle, for example), never a copy of
+  the values. **SHOULD.**
+  - Why: two copies of a field value drift apart, and the form library already tracks values, errors and submit state.
+  - From: D46
 
 ## API calls and configuration
 
