@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/php-core.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # PHP Core
 
 Applies to: every production PHP class, whatever the framework. These rules hold in Laravel and Symfony alike; framework overlays name the framework-specific calls (`orchestration-di.md` for Laravel, the `symfony-kanon` skill's `references/symfony.md` for Symfony).

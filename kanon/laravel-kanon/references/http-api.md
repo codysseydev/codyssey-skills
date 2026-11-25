@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/http-api.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Routes, HTTP & API Serialization
 
 Applies to: route files, middleware wiring, Form Request field rules, HTTP statuses, API resources, response shape, inbound webhooks.

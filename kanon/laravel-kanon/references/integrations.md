@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/integrations.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Third-Party Integrations
 
 Applies to: payment providers, outbound HTTP, vendor SDKs, external APIs of any kind, decoded external payloads, classes that consume config values.

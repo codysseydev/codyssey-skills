@@ -208,6 +208,7 @@
           "scope": "laravel",
           "keyword": "MUST",
           "rule": "Calls to external systems **MUST** run in queued jobs, never synchronously inside a request-cycle handler (see `orchestration-di.md`).",
+          "duplicate_of": "ORCH-029",
           "status": "active"
         },
         {

@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/models-domain.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Models, Enums, DTOs, Events & Exceptions
 
 Applies to: Eloquent models (with their observers, accessors and casts), enums, domain events, value objects/DTOs, specifications, read models, exceptions.

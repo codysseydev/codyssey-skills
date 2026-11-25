@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/architecture.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Architecture: Modules & Vertical Slices
 
 Applies to: overall code organization, new features, module layout, slice shape, folder structure, placement of capabilities.

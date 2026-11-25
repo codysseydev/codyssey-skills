@@ -138,6 +138,7 @@
               "can:"
             ]
           },
+          "duplicate_of": "AUTH-006",
           "status": "active"
         }
       ]

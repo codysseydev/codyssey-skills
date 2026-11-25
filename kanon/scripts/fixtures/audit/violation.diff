@@ -1,0 +1,29 @@
+diff --git a/app/Modules/Billing/Features/RenewSubscription/RenewSubscriptionHandler.php b/app/Modules/Billing/Features/RenewSubscription/RenewSubscriptionHandler.php
+new file mode 100644
+--- /dev/null
++++ b/app/Modules/Billing/Features/RenewSubscription/RenewSubscriptionHandler.php
+@@ -0,0 +1,24 @@
++<?php
++
++declare(strict_types=1);
++
++namespace App\Modules\Billing\Features\RenewSubscription;
++
++use App\Modules\Billing\Contracts\SubscriptionRepository;
++use Illuminate\Support\Facades\Log;
++
++final readonly class RenewSubscriptionHandler
++{
++    public function __construct(
++        private SubscriptionRepository $subscriptions,
++    ) {}
++
++    public function handle(RenewSubscription $command): void
++    {
++        $subscription = $this->subscriptions->get($command->subscriptionId);
++        $subscription->renew($command->renewedAt);
++        $this->subscriptions->save($subscription);
++
++        Log::info('Subscription renewed', ['subscription' => $command->subscriptionId]);
++    }
++}

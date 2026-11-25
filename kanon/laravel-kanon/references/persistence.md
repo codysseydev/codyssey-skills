@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/persistence.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Migrations, Factories, Config & Providers
 
 Applies to: migrations, model factories, config files, service providers, scheduled tasks.
