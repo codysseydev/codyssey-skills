@@ -35,7 +35,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 - Evidence items are `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that appears on the cited lines (whitespace collapsed). A range spans at most 20 lines. Separate items with `; `.
 - A quote has at least 3 characters that are not spaces, one of them a letter or a digit. It holds no `"`, no `|` and no backtick. On a line full of them, quote a fragment without them.
 - Git history uses `` `commit:<sha>` "<text in the subject>" `` and `` `branch:<name>` ``. The commit must be `Read at` or reachable from it. The branch must be in `inventory.json`.
-- Every row has at least one evidence item. A path in `ignored` is never cited.
+- Every row has at least one evidence item. A path in `ignored` is never cited. Every cited path, here and in the overlay's `evidence`, is a source or a sibling the inventory lists. The checker recomputes that list at `Read at`, so editing `inventory.json` does not widen it.
 - Source is `written down` (a rule file, README or doc), `configured` (a linter, CI or script config) or `pattern in code`.
 - Kanon rule is a catalog ID, the same one as the overlay entry, or `none`.
 - Effect is `adopt`, `change`, `off` or `project-only`. `project-only` goes with `none`, and `none` goes with `project-only`.

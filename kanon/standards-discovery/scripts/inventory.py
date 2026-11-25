@@ -166,15 +166,13 @@ def ignored_by(repo, patterns, sha=None):
     return set(_names(proc))
 
 
-def tracked_files(repo):
-    """Regular tracked files, without links and submodules and without vendor folders."""
-    proc = git(repo, "ls-files", "-z", "-s")
+def tracked_files(repo, sha):
+    """The regular files in the tree of sha, without links and submodules and without vendor folders."""
+    proc = git(repo, "ls-tree", "-r", "-z", "--full-tree", sha)
     if proc.returncode != 0:
-        raise Stop(f"git ls-files failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
+        raise Stop(f"git ls-tree failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     paths = set()
-    for entry in _text(proc).split("\0"):
-        if not entry:
-            continue
+    for entry in _names(proc):
         meta, _, path = entry.partition("\t")
         if meta.split()[0] in (SYMLINK, GITLINK):
             continue
@@ -194,9 +192,9 @@ def sibling_kind(path):
     return last_word.group(0) if last_word else stem
 
 
-def siblings(repo, php_files):
-    """Up to 3 PHP files per class kind, the most recently committed first."""
-    order = _names(git(repo, "log", "--format=", "--name-only", "-z"))
+def siblings(repo, php_files, sha):
+    """Up to 3 PHP files per class kind, the most recently committed before sha first."""
+    order = _names(git(repo, "log", "--format=", "--name-only", "-z", sha, "--"))
     rank = {}
     for index, name in enumerate(order):
         rank.setdefault(name, index)
@@ -215,41 +213,56 @@ def branches(repo):
     return sorted(names)
 
 
+def listing(repo, sha, ignored):
+    """What may be read at commit sha: {"files", "sources", "code", "siblings"}, ignored paths left out.
+
+    check-overlay.py calls this too, so the paths a citation may name never come from inventory.json.
+    """
+    files = [f for f in tracked_files(repo, sha) if f not in ignored]
+    sources = classify(files)
+    code = [f for f in files if CODE_FILE.fullmatch(f) and not CONFIG_FILE.fullmatch(f.rsplit("/", 1)[-1]) and f not in sources["linters"]]
+    php = [f for f in code if f.endswith(".php")]
+    return {"files": files, "sources": sources, "code": code, "siblings": siblings(repo, php, sha)}
+
+
+def listed_paths(found):
+    """The paths the agent may read: every source and every sibling."""
+    return {p for paths in found["sources"].values() for p in paths} | {p for paths in found["siblings"].values() for p in paths}
+
+
+EMPTY = {"files": [], "sources": {kind: [] for kind in SOURCE_KINDS}, "code": [], "siblings": {}}
+
+
 def build(repo):
     """The inventory for repo. Raises Stop when the tree says not to read."""
     require_top_level(repo)
     head_proc = git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
     read_at = _text(head_proc).strip() or None
-    universe = tracked_files(repo)
-    ignored = set()
-    if read_at:
+    if read_at is None:
+        if _names(git(repo, "ls-files", "-z")):
+            raise Stop("the branch has no commit, so there is nothing to read at a commit")
+        found, ignored = EMPTY, set()
+    else:
         committed = ignore_files_at(repo, read_at)
         require_same_ignore_files(repo, committed)
         ignored = ignored_paths(repo, read_at, committed)
-    files = [f for f in universe if f not in ignored]
-    if read_at is None and files:
-        raise Stop("the branch has no commit, so there is nothing to read at a commit")
-    sources = classify(files)
-    code = [f for f in files if CODE_FILE.fullmatch(f) and not CONFIG_FILE.fullmatch(f.rsplit("/", 1)[-1]) and f not in sources["linters"]]
-    php = [f for f in code if f.endswith(".php")]
-    sib = siblings(repo, php) if read_at else {}
-    listed = {p for paths in sources.values() for p in paths} | {p for paths in sib.values() for p in paths}
-    if read_at:
+        found = listing(repo, read_at, ignored)
         differs = set(_names(git(repo, "diff", "--no-ext-diff", "--name-only", "-z", "HEAD")))
-        dirty = sorted(listed & differs)
+        dirty = sorted(listed_paths(found) & differs)
         if dirty:
             raise Stop("these files differ from HEAD, and the checker reads the commit: " + ", ".join(dirty))
+    sources = found["sources"]
     rule_sources = sources["instructions"] + sources["linters"] + [
         f for f in sources["docs"] if f.startswith("docs/") or "contributing" in f.lower()
     ]
     return {
-        "result": "inventory" if code or rule_sources else "no-code",
+        "result": "inventory" if found["code"] or rule_sources else "no-code",
         "read_at": read_at,
-        "ignored": sorted(ignored & set(universe)),
+        "ignored": sorted(ignored & set(tracked_files(repo, read_at))) if read_at else [],
         "sources": sources,
-        "code_files": len(code),
-        "siblings": sib,
-        "commit_subjects": _text(git(repo, "log", "-50", "--format=%s")).splitlines() if read_at else [],
+        "code_files": len(found["code"]),
+        "siblings": found["siblings"],
+        "commit_subjects": _text(git(repo, "log", "-50", "--format=%s", read_at, "--")).splitlines() if read_at else [],
         "branches": branches(repo),
     }
 

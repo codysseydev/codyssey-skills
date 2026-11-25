@@ -447,8 +447,11 @@ def quote_problem(quote):
     return None
 
 
-def check_citation(repo, sha, item, ignored):
-    """None when the citation holds at commit sha, else the problem as text."""
+def check_citation(repo, sha, item, ignored, listed):
+    """None when the citation holds at commit sha, else the problem as text.
+
+    listed is the set of paths the inventory lists at sha, recomputed from the repo.
+    """
     weak = quote_problem(item["quote"]) if item.get("quote") is not None else None
     if item["kind"] == "branch":
         refs = _out(_git(repo, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")).splitlines()
@@ -473,6 +476,8 @@ def check_citation(repo, sha, item, ignored):
         return f"{name}: not a repo-relative path"
     if path in ignored:
         return f"{name}: the path is ignored by the AI policy"
+    if path not in listed:
+        return f"{name}: not a path the inventory lists at Read at (a source or a sibling)"
     if end < start:
         return f"{name}: the range runs backwards"
     if end - start + 1 > MAX_SPAN:
@@ -565,12 +570,13 @@ def check_work(work, repo, kanon_root):
         elif listing is not None and sha != inventory_read_at:
             add("Read at", f"{sha} differs from read_at in inventory.json ({inventory_read_at})")
             sha = None
-    ignored = set()
+    ignored, listed = set(), set()
     if sha:
         try:
             committed = inventory.ignore_files_at(repo, sha)
             inventory.require_same_ignore_files(repo, committed)
             ignored = inventory.ignored_paths(repo, sha, committed)
+            listed = inventory.listed_paths(inventory.listing(repo, sha, ignored))
         except inventory.Stop as stop:
             add("ignore files", str(stop))
             sha = None
@@ -605,7 +611,7 @@ def check_work(work, repo, kanon_root):
             if sha and parts:
                 item = {"kind": "file", "path": parts.group(1), "start": int(parts.group(2)),
                         "end": int(parts.group(3)) if parts.group(3) else None, "quote": None}
-                problem = check_citation(repo, sha, item, ignored)
+                problem = check_citation(repo, sha, item, ignored, listed)
                 if problem:
                     add(where, f"{rule_label(key)}: evidence {problem}")
 
@@ -635,7 +641,7 @@ def check_work(work, repo, kanon_root):
                 if item["kind"] == "branch" and listing is not None and item["name"] not in inventory_branches:
                     add(where, f"branch:{item['name']}: not in the branch list of inventory.json")
                     continue
-                problem = check_citation(repo, sha, item, ignored)
+                problem = check_citation(repo, sha, item, ignored, listed)
                 if problem:
                     add(where, problem)
         if not row["ok"]:

@@ -316,7 +316,9 @@ class Citations(TempDirs):
         item.setdefault("kind", "file")
         item.setdefault("quote", None)
         item.setdefault("end", None)
-        return co().check_citation(self.repo, self.sha, item, {"app/Legacy/OldBilling.php"})
+        ignored = {"app/Legacy/OldBilling.php"}
+        listed = co().inventory.listed_paths(co().inventory.listing(self.repo, self.sha, ignored))
+        return co().check_citation(self.repo, self.sha, item, ignored, listed)
 
     def test_a_line_with_its_quote_passes(self):
         self.assertIsNone(self.cite(path="CLAUDE.md", start=7, quote="Test methods use the"))
@@ -347,11 +349,11 @@ class Citations(TempDirs):
 
     def test_a_file_absent_at_read_at_fails(self):
         put(self.repo, "later.php", "<?php\n")
-        self.assertIn("not in the repo", self.cite(path="later.php", start=1))
-        self.assertIn("not in the repo", self.cite(path="nope.php", start=1))
+        self.assertIn("not a path the inventory lists", self.cite(path="later.php", start=1))
+        self.assertIn("not a path the inventory lists", self.cite(path="nope.php", start=1))
 
     def test_a_folder_fails(self):
-        self.assertIn("not in the repo", self.cite(path="app", start=1))
+        self.assertIn("not a path the inventory lists", self.cite(path="app", start=1))
 
     def test_the_file_is_read_at_the_commit_not_the_working_tree(self):
         put(self.repo, "CLAUDE.md", "changed\n")
@@ -359,26 +361,26 @@ class Citations(TempDirs):
 
     def test_a_commit_in_history_passes_with_a_subject_quote(self):
         item = {"kind": "commit", "sha": self.info["commit_2"], "quote": "feat(orders)"}
-        self.assertIsNone(co().check_citation(self.repo, self.sha, item, set()))
+        self.assertIsNone(co().check_citation(self.repo, self.sha, item, set(), set()))
 
     def test_an_unknown_commit_fails(self):
         item = {"kind": "commit", "sha": "deadbeef", "quote": "x"}
-        self.assertIn("commit", co().check_citation(self.repo, self.sha, item, set()))
+        self.assertIn("commit", co().check_citation(self.repo, self.sha, item, set(), set()))
 
     def test_a_commit_not_reachable_from_read_at_fails(self):
         tree = git(self.repo, "rev-parse", "HEAD^{tree}")
         later = git(self.repo, "commit-tree", tree, "-p", "HEAD", "-m", "feat: later")
         item = {"kind": "commit", "sha": later[:10], "quote": "later"}
-        self.assertIn("reachable", co().check_citation(self.repo, self.sha, item, set()))
+        self.assertIn("reachable", co().check_citation(self.repo, self.sha, item, set(), set()))
 
     def test_a_commit_quote_not_in_the_subject_fails(self):
         item = {"kind": "commit", "sha": self.info["commit_2"], "quote": "fix(orders)"}
-        self.assertIn("subject", co().check_citation(self.repo, self.sha, item, set()))
+        self.assertIn("subject", co().check_citation(self.repo, self.sha, item, set(), set()))
 
     def test_a_known_branch_passes_and_an_unknown_one_fails(self):
         known = {"kind": "branch", "name": "feature/ORD-12-cancel-refund"}
-        self.assertIsNone(co().check_citation(self.repo, self.sha, known, set()))
-        self.assertIn("branch", co().check_citation(self.repo, self.sha, {"kind": "branch", "name": "nope"}, set()))
+        self.assertIsNone(co().check_citation(self.repo, self.sha, known, set(), set()))
+        self.assertIn("branch", co().check_citation(self.repo, self.sha, {"kind": "branch", "name": "nope"}, set(), set()))
 
 
 class ReportCitations(Golden):
@@ -446,6 +448,27 @@ class ReadAtAndIgnoredPaths(Golden):
     def test_an_uncommitted_ignore_line_is_a_problem(self):
         put(self.repo, ".aiignore", read(self.repo, ".aiignore") + "app/Orders/\n")
         self.assertProblem(".aiignore", "differs")
+
+    def test_a_citation_outside_the_listed_paths_fails_even_when_inventory_json_lists_it(self):
+        listing = json.loads(read(self.work, "inventory.json"))
+        listing["sources"]["docs"].append(".aiignore")
+        put(self.work, "inventory.json", json.dumps(listing))
+        self.edit("standards-report.md", '`composer.json:7` "php-cs-fixer fix --dry-run --diff"', '`.aiignore:2` "app/Legacy/"')
+        self.assertProblem(".aiignore:2", "not a path the inventory lists")
+
+    def test_overlay_evidence_outside_the_listed_paths_fails(self):
+        self.edit("standards-report.md", '`CLAUDE.md:12` "Use Laravel facades"', '`.aiignore:2` "app/Legacy/"')
+        self.edit(".ai/kanon.yml", "CLAUDE.md:12", ".aiignore:2")
+        self.assertProblem("overlay[1]", ".aiignore:2", "not a path the inventory lists")
+
+    def test_a_fourth_sibling_of_a_kind_is_not_listed(self):
+        for name in ("A", "B", "C"):
+            put(self.repo, f"app/Orders/{name}Handler.php", "<?php\n")
+            git(self.repo, "add", "-A")
+            git(self.repo, "commit", "-q", "-m", f"add {name}")
+        listed = co().inventory.listed_paths(co().inventory.listing(self.repo, git(self.repo, "rev-parse", "HEAD"), set()))
+        self.assertIn("app/Orders/CHandler.php", listed)
+        self.assertNotIn("app/Orders/CreateOrderHandler.php", listed)
 
     def test_a_folder_inside_the_repo_is_a_problem(self):
         code, result = run_json("check-overlay.py", "--work", self.work, "--repo", os.path.join(self.repo, "app"), "--kanon-root", REPO_ROOT)

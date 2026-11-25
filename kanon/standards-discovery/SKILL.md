@@ -78,7 +78,7 @@ Read the Kanon from `<skill dir>/kanon/`: `catalog/families.json` lists the fami
 python3 <skill dir>/scripts/check-overlay.py --work <work> --repo <repo>
 ```
 
-It prints `ok` or every problem with where it is. Fix the drafts and rerun until it exits 0. It proves the overlay matches the schema, every entry names a real Kanon rule, every citation resolves in the repo at `read_at`, and the report and the overlay agree. It cannot prove a convention is right, so review the rows you are least sure of.
+It prints `ok` or every problem with where it is. Fix the drafts and rerun until it exits 0. It proves the overlay matches the schema, every entry names a real Kanon rule, every citation resolves in the repo at `read_at` and names a path the inventory lists there, and the report and the overlay agree. It recomputes that list from the repo and does not trust the lists in `inventory.json`. It cannot prove a convention is right, so review the rows you are least sure of.
 
 ## Step 6: place
 
