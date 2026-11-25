@@ -39,7 +39,7 @@ These are not open questions. The PR lists them.
 - The A8 sanitizer clause goes to the untrusted-content add-on (id map row UNTRUSTED-010, written by #96), so it is left out of ACCESS-003. The safety pass fix proposed folding a generalized form into core; the id map and the issue win.
 - Test file names the source rules cite are dropped, as issue step 6 says, and listed in the PR by role: the redirect helper test, the URL helper test, the route guard hook test, the keep-list test and the consent tests. The safety pass proposed a renamed path for the A1 test; the issue's later step wins.
 - How-to links to the source project's guides are dropped. They are not public.
-- ACCESS-011 keeps only the portable guard assertions. The deploy-host header assertion goes to the Cloudflare overlay, the vendor and API-host assertions go to their add-ons or the source project's overlay, and a Not migrated note is dropped.
+- ACCESS-011 keeps only the portable guard assertions. The deploy-host header assertion goes to the Cloudflare overlay, and the vendor and API-host assertions go to their add-ons or the source project's overlay.
 - ACCESS-014 keeps its OWASP ASVS Source line, since the notes policy keeps a public doc. It cites the pinned requirement page with no quote, because the source rule's quoted words are not the ASVS wording.
 - Storage keys use an `<app>_` placeholder, in the style of `<name>` in `index.md`.
 - The ACCESS-001 Why uses a reserved documentation domain (RFC 2606) for the attacker host, so no real host appears.
@@ -137,7 +137,14 @@ Rules for every rule issue, set the same day:
 
 The owner answered the rule-wording findings of the independent review on 2026-11-25 and 2026-11-26:
 
-1. ACCESS-011: no `'unsafe-eval'` in the enforced policy is a strict MUST NOT, with no vendor exception. A vendor that needs it goes in the Report-Only policy, not the enforced one. The guard assertion stays.
+1. ACCESS-011: no `'unsafe-eval'` in the enforced policy is a strict MUST NOT. The guard assertion stays.
 2. ACCESS-007: the Why states its point in plain terms, so it does not repeat the sentence of the CQS lesson nearly word for word.
 3. ACCESS-007: "a client guard runs after the HTML is served" stays as written.
 4. The intro sentence about Check lines matches the entry format of `index.md`: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. This issue changes it in `access-and-security.md` only; each other rule file is its own issue.
+
+Owner answers of 2026-11-26 on the rule wording:
+
+5. ACCESS-011: no `'unsafe-eval'` in the enforced policy is a strict MUST NOT, stated as a plain rule.
+6. ACCESS-011: a Report-Only policy only reports and never allows a script, so a vendor script that needs `eval` stays blocked by the enforced policy. A Report-Only policy may be used only to trial dropping a script's need for `eval` and to collect the reports.
+7. ACCESS-011 Check line: the guard asserts that the enforced policy's `script-src` and `default-src` have no `'unsafe-eval'`, that `img-src` includes `https:` and has no `http:`, and that `upgrade-insecure-requests` is set.
+8. ACCESS-010: content access is decided by the API response; the client never infers it from an HTTP status or from client state.

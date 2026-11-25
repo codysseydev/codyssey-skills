@@ -61,14 +61,14 @@ rule, or the sheet's check idea for a rule, where one exists.
 
 ## Gated content
 
-- **ACCESS-010. The client never turns an HTTP error status into an access decision; the API's response flags decide.** **SHOULD.**
+- **ACCESS-010. Content access is decided by the API response; the client never infers it from an HTTP status or from client state.** **SHOULD.**
   - From: Layer calls tab (written fresh)
 
 ## Headers, scripts and secrets
 
-- **ACCESS-011. A new third-party script, frame or connect origin goes into the CSP in `next.config.*` in the same change.** The policy keeps one `connect-src` entry per vendor. Three parts are absolute, and the guard checks them: the enforced policy never contains `'unsafe-eval'`, `img-src` allows `https:` and not `http:`, and `upgrade-insecure-requests` is set. `'unsafe-eval'` has no exception: a vendor that needs it goes in the Report-Only policy, not the enforced one. Do not add an empty `catch` to the `headers()` code of `next.config.*`: the scan of DATA-049 covers only `src/` and `app/`. **SHOULD; MUST NOT for `'unsafe-eval'` in the enforced policy; MUST for the other two guarded parts.**
+- **ACCESS-011. A new third-party script, frame or connect origin goes into the CSP in `next.config.*` in the same change.** The policy keeps one `connect-src` entry per vendor. Three parts are absolute, and the guard checks them: the enforced policy never contains `'unsafe-eval'`, `img-src` allows `https:` and not `http:`, and `upgrade-insecure-requests` is set. A Report-Only policy only reports and never allows a script, so a vendor script that needs `eval` stays blocked by the enforced policy. A Report-Only policy may be used only to trial dropping a script's need for `eval` and to collect the reports. Do not add an empty `catch` to the `headers()` code of `next.config.*`: the scan of DATA-049 covers only `src/` and `app/`. **SHOULD; MUST NOT for `'unsafe-eval'` in the enforced policy; MUST for the other two guarded parts.**
   - Why: a nonce-based CSP needs a header per request, and a static page is built when no request exists, so the policy lists origins instead.
-  - Check: the `next.config` headers guard, ACCESS-011 row: string assertions that the enforced `script-src` has no `'unsafe-eval'`, `img-src` has no `http:`, and `upgrade-insecure-requests` is set.
+  - Check: the `next.config` headers guard, ACCESS-011 row: string assertions that the enforced policy's `script-src` and `default-src` have no `'unsafe-eval'`, `img-src` includes `https:` and has no `http:`, and `upgrade-insecure-requests` is set.
   - From: A10 (core part)
 - **ACCESS-012. A route handler that purges a cache or changes data checks its caller first.** Such a handler under `app/**/route.ts` calls the shared check `isAuthorizedPurge(request, secret)` in `src/lib/routeAuth.ts` before it acts. The check compares a shared secret from the request with a constant-time compare, and the handler answers 404 when the secret is not configured. Every such handler uses the one check. **SHOULD.**
   - Why: a route handler is a public URL that anyone can call; a constant-time compare gives nothing away through response timing, and a 404 keeps a handler with no secret shut without confirming that it exists.
