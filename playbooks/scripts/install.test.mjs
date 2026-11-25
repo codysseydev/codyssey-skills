@@ -473,6 +473,16 @@ test('each repo prompt runs the install before it claims', () => {
   }
 });
 
+test('each repo prompt runs the policy check before it reads the project file', () => {
+  for (const name of FACTORY_TASKS) {
+    const text = repoPrompt(name).toString('utf8');
+    const checkAt = text.indexOf('check-policy');
+    const readAt = text.indexOf('show origin/main:.factory/playbook.md');
+    assert.ok(checkAt !== -1 && readAt !== -1, name);
+    assert.ok(checkAt < readAt, `${name}: the project file is read before the policy check`);
+  }
+});
+
 test('scheduled-tasks/ in the repo holds exactly the listed task folders', () => {
   const folders = readdirSync(join(REPO, 'scheduled-tasks'), { withFileTypes: true }).filter((e) => e.isDirectory());
   assert.deepEqual(folders.map((e) => e.name).sort(), [...FACTORY_TASKS].sort());
