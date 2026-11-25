@@ -39,7 +39,9 @@ Rules use RFC-2119 keywords, and they mean it:
    `.claude/skills/laravel-kanon/references/` in a project install,
    `~/.claude/skills/laravel-kanon/references/` in a global install.
 2. Follow MUST/MUST NOT rules absolutely; note SHOULD deviations with justification.
-3. When you finish, list any canon rules you could not satisfy and why.
+3. When you finish, list by ID (for example `SYM-001`) any canon rules you could not satisfy and why.
+
+Each rule in the reference files starts with its ID, a stable code such as `SYM-001`.
 
 | You are writing | Read |
 |---|---|

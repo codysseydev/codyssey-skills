@@ -22,7 +22,7 @@ Five folders, five different jobs:
   established team standards.
 - `laravel-kanon-audit`: the audit, run after writing. It checks a branch or diff
   against the same reference files, one subagent per rule family, and takes each
-  finding's severity from the rule's keyword.
+  finding's severity from the rule's keyword. Every finding cites the rule's ID.
 - `symfony-kanon`: a minimal Symfony overlay of the Kanon with two rules (no
   `$container->get()`, writes go through a Messenger command to one handler). It reads
   `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
@@ -42,6 +42,32 @@ Five folders, five different jobs:
 
 Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
 rulebook's `references/` folder, so the two folders must sit next to each other.
+
+### Changing a rule
+
+The rules live in `kanon/catalog/<family>.json`, one file per rule family, checked
+against `kanon/catalog/schema.json`. The `references/*.md` files the skills read are
+generated from them and say so on line 1. Do not edit them by hand.
+
+- Add a rule: add an entry to the family's file with the next unused number after the
+  family's prefix. Prefixes are in `kanon/catalog/families.json`, for example `ORCH-038`.
+  IDs are never reused.
+- Change a rule: edit its entry. Its ID stays.
+- Deprecate a rule: set `"status": "deprecated"`. Never delete an entry. The generator
+  leaves deprecated entries out of the reference, and the check fails when an ID that
+  exists on `origin/main` is gone.
+- `duplicate_of` on an entry names the rule it repeats. The check fails when that ID
+  does not exist.
+
+Then regenerate and check:
+
+```bash
+node kanon/scripts/catalog.mjs generate
+node kanon/scripts/catalog.mjs check --base origin/main
+```
+
+Commit the catalog and the regenerated references together. The check fails when a
+generated reference was edited by hand, so edit the catalog and regenerate instead.
 
 ## general/
 
