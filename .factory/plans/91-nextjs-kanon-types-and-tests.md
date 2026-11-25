@@ -14,11 +14,11 @@ Fill `kanon/nextjs-kanon/references/types-and-tests.md` with 38 rule entries in 
 - Review sheet, revision 26, read from an export of the sheet. Candidates NX-14, Clauses X1, Conflicts C10, Layer calls T17, T21 and T32, and the 18 Sources rows on types-and-tests rules.
 - #95's body. It words T12 and T19 from its Vite+ checks and adds them to this file after #91 merges.
 
-The recount's 32 core and 5 split rows for this file come from before the sheet's T21 layer call. That call moved T21 to split, which gives the 33 and 6 in `index.md`. This is not a mismatch.
+After the owner's decisions, the recount lists 33 core rules, 5 split rules and 1 rule of the source project's overlay (T21) for this file, 39 in all. The sheet's T21 layer call moves T21 to split, which gives the 33 core and 6 split in `index.md`. NX-14 makes 40. This is not a mismatch.
 
 ## Entries
 
-The file's existing sections hold the entries in the frontend's prose order, which is the id map order: `Typing` (TYPES-001 to 016), `Test placement and shape` (TYPES-017 to 034), `What a change ships with` (TYPES-035 to 040). No rule's keyword changes. The issue's decisions set T17, T21, T27, T32 and T34 as core and keep their keywords. Clause X1 adds text to T24 but does not change its keyword.
+The file's existing sections hold the entries in the frontend's prose order, which is the id map order: `Typing` (TYPES-001 to 016), `Test placement and shape` (TYPES-017 to 034), `What a change ships with` (TYPES-035 to 040). No MUST, SHOULD or MAY level changes. T38 and T39 lose their new-code scope (reading 4). The issue's decisions set T17, T21, T27, T32 and T34 as core and keep their keywords. Clause X1 adds text to T24 but does not change its keyword.
 
 Column key:
 - **Kw**: the keyword in the frontend rule.
@@ -174,11 +174,11 @@ The prototype entries for these are in a scratch file outside the repo.
 
 - **Q1. Reserved slots.** Should the gaps at TYPES-022 and TYPES-036 hold any line?
   - (a) **Recommended.** A bare gap: no line, since the id map already reserves both ids.
-  - (b) One HTML comment per gap that names the reserved id and its source id, with no issue number. #95 deletes it.
+  - (b) One HTML comment per gap that names only the reserved pack id, with no source id and no issue number, so the cross-reference grep stays clean. #95 deletes it.
 - **Q2. Why lines.** Most source rules state no reason. Examples are T1, T4 to T9, T13 to T17 and T20 to T23. What does such an entry get?
   - (a) **Recommended.** A one-line Why written fresh from the rule's own wording or its sheet source. The PR lists every fresh Why for review.
   - (b) A Why line only where the source states a reason.
-- **Q3. Source line shape.** The entry format shows title and link. The T17 decision asks for a cleaned quote, and five rules carry two or three sources. What does a Source line hold?
+- **Q3. Source line shape.** The entry format shows title and link. The T17 decision asks for a cleaned quote, and four rules carry two or three sources (T16, T18, T24, T29). What does a Source line hold?
   - (a) **Recommended.** One `- Source:` line per source: title, the sheet's quote, then the URL or vault path.
   - (b) Title and URL or vault path only, with no quote anywhere.
   - (c) Title and URL, plus the quote on T17 only.
