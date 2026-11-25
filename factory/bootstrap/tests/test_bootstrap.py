@@ -81,6 +81,32 @@ class BootstrapTest(unittest.TestCase):
                              capture_output=True, text=True).stdout
         self.assertIn("event model journey setup", log)
 
+    def run_stack(self, env, *extra, slug="acme-app", root=None):
+        return subprocess.run([sys.executable, SCRIPT, "--name", "Acme App", "--slug", slug, "--pitch", "x",
+                               "--modules", "Billing", "--root", root or self.root, "--brain-template", self.brain_tpl,
+                               "--dry-run", *extra], capture_output=True, text=True, env=env)
+
+    def test_stack_picks_its_pack(self):
+        laravel = fake(self.tmp, "laravel-pack", FAKE_PACK.replace("echo %s", "echo laravel-%s"))
+        symfony = fake(self.tmp, "symfony-pack", FAKE_PACK.replace("echo %s", "echo symfony-%s"))
+        env = dict(os.environ, FACTORY_LARAVEL_PACK=laravel, FACTORY_SYMFONY_PACK=symfony)
+        for n, (extra, marker) in enumerate((
+                (("--stack", "symfony"), "symfony-Billing"),
+                (("--stack", "laravel"), "laravel-Billing"),
+                ((), "laravel-Billing"))):
+            with self.subTest(extra=extra):
+                p = self.run_stack(env, *extra, root=os.path.join(self.tmp, f"root{n}"))
+                self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+                report = json.loads(p.stdout)
+                self.assertTrue(report["passed"])
+                self.assertEqual(report["evidence"]["steps"][0]["output_tail"].strip(), marker)
+
+    def test_unknown_stack_refused(self):
+        p = self.run_stack(dict(os.environ), "--stack", "rails")
+        self.assertEqual(p.returncode, 2)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "acme-app")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "acme-app-docs")))
+
     def test_refuses_non_empty_target(self):
         os.makedirs(os.path.join(self.root, "acme-app"))
         open(os.path.join(self.root, "acme-app", "f"), "w").close()
