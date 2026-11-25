@@ -77,3 +77,74 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Source: The State Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-state-pattern
   - Source: Your Service Classes Are Where Logic Goes to Die vault: Content/Insights/Your Service Classes Are Where Logic Goes to Die.md
   - From: NX-12
+
+- **DESIGN-006. Convert untyped API data to typed data once, at the boundary** The service layer is the boundary. Data leaves it typed, in the shape the UI wants, and nothing inside re-checks it. **SHOULD.**
+  - The service call is typed (TYPES-003) and unwraps the API envelope there: callers receive the item or page, not `response.data.data`.
+  - When the UI needs a different shape than the API returns, one mapper function does the conversion, in `utils/`, named for its source (DESIGN-009), and the service or the query's `select` calls it. Components receive the mapped shape.
+  - Components and hooks do not use `?.` chains to cope with an uncertain shape, and do not `typeof`-check data a service already typed.
+  - A client-side input limit matches what the API accepts, so the service sends no request the API rejects, for example a minimum length for a search query.
+  - Why: once the data is typed at the edge, the rest of the code trusts its types and stops dealing with raw JSON. A check repeated in every component hides which shape is the real one, and an API rename touches one mapper instead of every reader.
+  - Source: Data Transfer Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/data-transfer-objects
+  - Source: Guard Clauses and Defensive Programming https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/guard-clauses-and-defensive-programming
+  - Source: Input Validation vs Domain Validation: Where Each Belongs https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation
+  - Source: The Repository Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern
+  - Source: Don't Return the Eloquent Model From a Handler vault: Content/Quick Tips/50 - Don't Return the Eloquent Model From a Handler.md
+  - Source: Turn Decoded JSON Into a DTO at the Edge vault: Content/Quick Tips/49 - Turn Decoded JSON Into a DTO at the Edge.md
+  - Source: Your Laravel Code Needs More Objects vault: Content/Insights/Your Laravel Code Needs More Objects.md
+  - Source: Feature Modules vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/38 - Feature Modules.md
+  - From: P4
+
+- **DESIGN-007. Read at most two property levels into an API object** A component, hook or util reads at most two property levels into an object that came from the API: `order.customer.name` is fine, `order.customer.address.country.code` is not. A deeper value comes from a named field that a mapper or a query `select` produces (DESIGN-006), or from a selector function beside the type (`shippingCountryCode(order)`). Fluent builders, array method chains and config objects are exempt. **SHOULD.**
+  - Why: each hop couples the caller to the shape of one more object on the path, so a change deep in the response breaks code that only wanted one value. Three hops or more is where the coupling starts to hurt.
+  - Check: review only. The review asks what sentence the chain is asking. A lint check comes only after its noise is measured on a real codebase.
+  - Source: The Law of Demeter https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-law-of-demeter
+  - Source: Stop Chaining Through Objects vault: Content/Quick Tips/18 - Stop Chaining Through Objects.md
+  - From: NX-11
+
+- **DESIGN-008. API types are data only (DTO)** A type in `types/*.types.ts` that describes an API response is a plain `type`: named, typed fields, no methods, no validation. A rule about it is a function (DESIGN-003), not a method. **SHOULD.**
+  - A value object (a type that refuses invalid values and has no identity) is worth adding only where a concept has real rules: a format, a constraint, a calculation or a comparison rule. Branded id types are not proposed (see the list at the end of this file).
+  - Why: a plain type survives the trip through JSON, the query cache and the server-to-client boundary as it is, while a class instance loses its methods on the way. The rules about the data stay in functions a test can call directly.
+  - Source: Data Transfer Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/data-transfer-objects
+  - Source: Value Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/value-objects
+  - From: P5
+
+- **DESIGN-009. Name a constructor for its source** A function that builds one shape from another says what it builds from: `fromApiLink`, `fromApiOrder`. Not `create`, `build`, `get`. One mapper per source, named `from<Source>`. A shared mapper that serves several API sources may be named for its target instead, such as `toAuthorSummary` shared by the post and the comment mappers. **SHOULD.**
+  - Why: a generic name like `create` or `transform` says nothing about the input, so two mappers for two sources look alike and get swapped. `fromApiOrder` tells the reader which shape goes in.
+  - Source: Named Constructors https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/named-constructors
+  - Source: Named Constructors Over new Plus Setters https://codyssey.dev/quick-tips/named-constructors-over-new-plus-setters
+  - From: P6
+
+- **DESIGN-010. Honest dependencies: pass in time, config and storage** Logic receives what it depends on as arguments. Only hooks, providers and one module per global touch the browser or the environment. **SHOULD.**
+  - Time: a function that needs "now" takes `now` as an argument (a number or a `Date`; a default of `Date.now()` is fine). No bare `Date.now()` or `new Date()` inside `utils/` or `src/lib/` logic.
+  - Randomness: `Math.random()` and `crypto.randomUUID()` inside `utils/` logic are hidden dependencies, like the clock and environment reads. The function takes the random value, or a function that makes one, as an argument.
+  - Environment: `process.env` is read in one module, `src/lib/env.ts` (DATA-042).
+  - Storage and location: `localStorage`, `sessionStorage` and `window.location` are read inside a small wrapper module, such as `src/lib/authSession.ts`, or inside a hook, never in a rule function.
+  - Why: the same code runs on the server and in the browser, whose clocks and time zones differ, so a function that reads the clock or the environment itself gives different answers in each and cannot be tested without faking globals. An argument makes the input visible and keeps the test plain.
+  - Source: Dependency Injection vs the Service Locator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location
+  - Source: A Facade Is Service Location Too https://codyssey.dev/quick-tips/a-facade-is-service-location-too
+  - Source: Service Location Is a Hidden Dependency https://codyssey.dev/quick-tips/service-location-is-a-hidden-dependency
+  - Source: The Singleton Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-singleton-pattern
+  - Source: Why Your Laravel Codebase Is Unmaintainable vault: Content/Insights/Why Your Laravel Codebase Is Unmaintainable.md
+  - From: P7
+
+- **DESIGN-011. Guard clauses: return early, keep the happy path flat** Check the bad case first and return or throw; do not nest the work inside `if` / `else`. **SHOULD.**
+  - A condition with a negation inside a negation is named, as in DESIGN-003: a pure function or named constants, not a nested `!`.
+  - Why: with the failure cases on the outside, every precondition has passed by the last line, so the happy path sits at the top indentation level and reads straight down.
+  - Source: Guard Clauses and Defensive Programming https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/guard-clauses-and-defensive-programming
+  - Source: Guard Clauses Beat Nested Ifs https://codyssey.dev/quick-tips/guard-clauses-beat-nested-ifs
+  - From: P8
+
+- **DESIGN-012. Fail loudly, with a named error** An expected failure is signalled with a named error class and recognised with `instanceof` or a helper such as `isNotFoundError`; it is not a string compared with `error.message`. Nothing is swallowed. **SHOULD.**
+  - An outcome the user's input causes is the exception: DESIGN-013 returns it as a discriminated union from a pure function, never from a `queryFn` or `mutationFn`.
+  - Why: a named error can be caught on its own and keeps its meaning when the message wording changes, and a swallowed error hides a fault. For example, a service throws `NotFoundError` from `src/lib/apiErrors.ts` for a 404, and the page calls `notFound()` for that case and rethrows every other error.
+  - Source: Guard Clauses and Defensive Programming https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/guard-clauses-and-defensive-programming
+  - Source: Exception Handling as Design https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/exception-handling-as-design
+  - Source: Throw a Domain Exception, Not a Framework One https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one
+  - Source: Skip Bad Rows, Don't Fail the Import vault: Content/Quick Tips/58 - Skip Bad Rows, Don't Fail the Import.md
+  - From: P9
+
+- **DESIGN-013. A discriminated union for outcomes the user's input causes** DESIGN-012 keeps named errors for faults and not-found. An outcome the user's input causes, which the caller handles case by case (an invalid or expired coupon code), is returned as a discriminated union (`{ ok: true; value: T } | { ok: false; reason: 'invalid' | 'expired' }`) by a pure function, and the caller handles it with an exhaustive `switch` (TYPES-015). A `queryFn` or `mutationFn` never returns such a union: it throws, so the query's error state sees the failure (DATA-025). **SHOULD.**
+  - Why: throwing for routine validation turns it into control flow and forces every caller into `try`/`catch`, while a union shows each case in the type. A union returned from a `queryFn` or `mutationFn` never reaches `isError`, so the error-state and retry rules (DATA-025, DATA-026) would not see it.
+  - Source: The Result Pattern: An Alternative to Throwing Exceptions https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/result-pattern
+  - Source: Result Objects When Failure Isn't Exceptional vault: Content/Quick Tips/10 - Result Objects When Failure Isn't Exceptional.md
+  - From: NX-13
