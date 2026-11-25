@@ -1,6 +1,6 @@
 # The project overlay
 
-The overlay is `.ai/kanon.yml` plus prose rule files in `.ai/rules/project/`. No file, or a file with no `mode:` key, means canon-first. This skill writes only `mode: project-first`. The schema is `kanon-yml.schema.json` in this folder. `scripts/check-overlay.py` enforces it.
+The overlay is `.ai/kanon.yml` plus prose rule files in `.ai/rules/project/`. No file, or a file with no `mode:` key, means canon-first. This skill writes only `mode: project-first`, and the checker refuses `canon-first`. The schema is `kanon-yml.schema.json` in this folder. `scripts/check-overlay.py` enforces it.
 
 ```yaml
 # Written by standards-discovery. The standards report names the commit it read.
@@ -43,7 +43,7 @@ A convention the Kanon has no rule for is not an overlay entry. It gets a `proje
 
 The file is read by a strict subset parser, and by other YAML readers in the client's tools. The subset gives every reader the same values.
 
-- `mode:` and `overlay:` sit at column 0, `mode:` once. Items are `  - key: value`, keys `    key: value`, list items `      - value`. Spaces only, no tabs. Full-line `#` comments are fine.
+- `mode:` and `overlay:` sit at column 0, `mode:` once. `overlay:` has at least one item: YAML readers take a bare `overlay:` as null, not as an empty list. Items are `  - key: value`, keys `    key: value`, list items `      - value`. Spaces only, no tabs. Full-line `#` comments are fine.
 - A value is a plain word with no spaces, no `: ` and no ` #`, or a single-quoted string (`''` for a quote, backslashes literal), or a JSON double-quoted string.
 - Quote `off`, `on`, `yes`, `no`, `true`, `false`, `y`, `n`, `null` and `~`. Some YAML readers turn a plain `off` into a boolean. The parser stops on the plain form and names the line.
 - Quote anything with a space, a colon followed by a space, or a hash after a space.

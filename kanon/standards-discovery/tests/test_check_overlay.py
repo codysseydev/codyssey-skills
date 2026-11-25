@@ -83,9 +83,18 @@ class SchemaMutations(Golden):
         self.edit(".ai/kanon.yml", "mode: project-first\n", "")
         self.assertProblem('missing required property \\"mode\\"')
 
-    def test_canon_first_is_valid_for_the_schema_but_a_bad_mode_is_not(self):
+    def test_a_mode_outside_the_schema_fails(self):
         self.edit(".ai/kanon.yml", "mode: project-first", "mode: both")
         self.assertProblem("mode", "must be one of")
+
+    def test_canon_first_fails_because_discovery_writes_project_first(self):
+        self.edit(".ai/kanon.yml", "mode: project-first", "mode: canon-first")
+        self.assertProblem("mode", "project-first")
+
+    def test_an_empty_overlay_key_fails(self):
+        # YAML readers take a bare `overlay:` as null, not as an empty list.
+        put(self.work, ".ai/kanon.yml", "mode: project-first\noverlay:\n")
+        self.assertProblem("overlay", "at least 1")
 
     def test_an_evidence_item_without_a_line_number_fails(self):
         self.edit(".ai/kanon.yml", "      - .php-cs-fixer.dist.php:9", "      - .php-cs-fixer.dist.php")

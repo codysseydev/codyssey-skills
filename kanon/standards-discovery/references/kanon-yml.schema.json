@@ -11,8 +11,9 @@
       "enum": ["canon-first", "project-first"]
     },
     "overlay": {
-      "description": "One entry per Kanon rule the project adopts, changes or switches off.",
+      "description": "One entry per Kanon rule the project adopts, changes or switches off. A bare overlay: key is null to YAML readers, so the list has at least one item.",
       "type": "array",
+      "minItems": 1,
       "items": { "$ref": "#/$defs/entry" }
     }
   },

@@ -57,7 +57,8 @@ overlay:
       - CLAUDE.md:7
 ```
 
-- `mode`: `canon-first` or `project-first` (#44). The skill writes only `project-first`.
+- `mode`: `canon-first` or `project-first` (#44). The skill writes only `project-first`, and `check-overlay.py` refuses `canon-first`.
+- `overlay` has at least one item (`minItems: 1`). A bare `overlay:` is null to YAML readers, not an empty list.
 - `overlay`: a list. Each entry names one Kanon rule by its catalog `id`. Decisions b and d.
 - `effect`: `adopt`, `change` or `off`. `change` needs `rule`, a file under `.ai/rules/project/`. `adopt` and `off` have no `rule`.
 - `evidence`: one or more `path:line` or `path:line-line` in the client repo. Each item must resolve at `Read at` (an existing, non-blank line) and must also appear among the citations of the entry's row in the report, where it carries a quote. A path may hold spaces (quote the YAML value then) but not `:` or a backtick.
@@ -256,7 +257,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | Test | Checks | At base |
 |---|---|---|
 | `golden overlay and report pass` (`test_check_overlay.py`) | The fixture repo and `fixtures/expected/`: exit 0, `ok`, no problems. Acceptance criteria 1 and 2 | fails |
-| `schema mutations` | An unknown effect, empty `evidence`, an unknown key, `id` and `file` in one entry, a missing `mode`: each named with its path | fails |
+| `schema mutations` | An unknown effect, empty `evidence`, an unknown key, `id` and `file` in one entry, a missing `mode`, `mode: canon-first`, a bare `overlay:` with no items: each named with its path | fails |
 | `parse errors name the line` | Plain `off`, a ` #` comment after a value, `: ` in a plain value, a tab, a duplicate key, a wrong indent, a second `mode` | fails |
 | `rule resolution` | A made-up ID, an ID of a family without a catalog file (names the family), a `file` and `sentence` entry (the schema refuses it), a report row naming a file and a sentence | fails |
 | `one entry per rule` | Two `ORCH-011` entries | fails |

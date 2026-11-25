@@ -541,6 +541,8 @@ def check_work(work, repo, kanon_root):
             if len(error["path"]) >= 2 and error["path"][0] == "overlay":
                 bad.add(error["path"][1])
         entries = [(i, e) for i, e in enumerate(parsed.get("overlay", [])) if isinstance(e, dict) and i not in bad]
+        if parsed.get("mode") == "canon-first":
+            add(f"{OVERLAY} mode", "standards-discovery writes mode: project-first")
 
     # the report
     report, report_problems = None, []
