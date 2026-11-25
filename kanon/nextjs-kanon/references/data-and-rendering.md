@@ -518,8 +518,182 @@ implementation.
 
 ## Browser storage, session and navigation
 
+- **DATA-054. Browser storage goes through one helper module** with guarded `get`, `set` and
+  `remove` (each in `try/catch`, so blocked storage never throws), in
+  `src/lib/browserStorage.ts`. Keys are exported constants named `<app>_<snake_case>`, not
+  versioned; a literal key string is never repeated outside its module; a stored JSON value is
+  parsed to `unknown` and narrowed by a type guard, not cast. A storage write after a
+  successful API call never turns that success into an error. The auth-flag half is
+  ACCESS-005. A comment-only `catch` that returns a safe default for a storage failure is not a
+  violation, and neither is an inline `<head>` script that runs before any bundle loads: it
+  cannot import the helper and keeps its storage calls inside a `try/catch`. **SHOULD.**
+  - Why: `getItem()` and `setItem()` throw in private browsing and when storage is blocked, so an unguarded call breaks the page for those visitors.
+  - Source: client-localstorage-schema https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/client-localstorage-schema.md
+  - From: D51
+
+- **DATA-055. A query that needs a signed-in member waits for the session check to settle.**
+  `AuthProvider` exposes one signal (`isSessionVerified`), false until `checkAuth` settles,
+  and the query adds it to its own preconditions (a verified email, a role).
+  `isAuthenticated` stays for header rendering and hydration. Only a 401 or 403 from the
+  session check ends the client session; a 5xx or a network failure keeps the member signed
+  in and retries. **SHOULD.**
+  - Why: the stored auth flag is only a hint and the session check is the authority, and a 5xx or a network failure says nothing about the session.
+  - Source: Authentication Across the Boundary vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/40 - Authentication Across the Boundary.md
+  - From: D52
+
+- **DATA-056. Gated UI waits for every query it reads.** A pending query is not a denial: a
+  gate that reads a role and a membership waits for both queries before it hides content or
+  redirects. **SHOULD.**
+  - Why: a gate that decides while a query is pending shows locked content to, or sends away, someone who has access.
+  - From: D53
+
+- **DATA-057. `fetchQuery` used for polling or reconciliation sets `staleTime: 0`.**
+  **SHOULD.**
+  - Why: `invalidateQueries` marks the key fresh, so a later `fetchQuery` resolves from the cache unless it sets `staleTime: 0`.
+  - From: D54
+
+- **DATA-058. A hard navigation after an auth state change goes through
+  `beginHardNavigation`** (`src/lib/navigation.ts`). A fixed delay before
+  `window.location.href` (`await new Promise(r => setTimeout(r, 100))`) is not a way to wait
+  for state; the helper orders the navigation. A navigation to another internal page that is
+  not an auth change uses `Link` or the router. **SHOULD.**
+  - Why: an auth change can start two navigations that race each other, and the helper runs them in order.
+  - From: D60
+
+- **DATA-059. Dates and prices go through the shared formatters.** A `toLocaleDateString`,
+  `toLocaleTimeString` or `toLocaleString` call outside `src/lib/formatDate.ts` sets
+  `timeZone`. A date in server-rendered markup uses the UTC-pinned `formatPublishDate`
+  (`src/lib/formatDate.ts`, with the format variant (`'long'`, `'short'`, `'day-month'`) as a
+  parameter); `formatDate` and `formatDateTime` (unpinned) only in client-only views; prices
+  use `src/lib/formatPrice.ts`; amounts are minor units and `formatPrice` reads the digit count
+  from `Intl`. A date sent to the API or read from the URL uses one fixed format
+  (`YYYY-MM-DD` or ISO 8601) through one helper; `new Date(string)` is not called on a
+  user-typed or ambiguous string such as `10/01/2026`, because a non-ISO format is
+  implementation-defined. **MUST** for the `timeZone` clause; **SHOULD** for the rest.
+  - Why: a date formatted without a fixed time zone can render one day on a UTC server and another in the reader's browser, which React reports as a hydration mismatch.
+  - Check: guard-test row DATA-059: every `toLocaleDateString`, `toLocaleTimeString` or `toLocaleString` call outside the shared date formatter sets `timeZone`.
+  - Source: Queries and Query Handlers https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/queries-and-query-handlers
+  - Source: The date Rule Accepts Dates Your Query Doesn't https://codyssey.dev/quick-tips/the-date-rule-accepts-dates-your-query-doesnt
+  - Source: Date.parse() https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/parse
+  - From: D61
+
+- **DATA-060. Window event names are named constants.** A `CustomEvent` or `Event` name used
+  on `window` is a named constant in the module that owns it, dispatched and listened to
+  through that module's helpers. The same name is not dispatched as `Event` in one file and
+  `CustomEvent` in another. The model is the auth events in `src/lib/authSession.ts`:
+  module-private names behind `broadcastAuth*` and `onAuth*` helpers. **SHOULD.**
+  - Why: a name typed in two files drifts without an error, and one module's helpers keep the name and the event type together.
+  - From: D78
+
+- **DATA-061. Third-party scripts load once, from one place, and only where needed.** A
+  site-wide script is a `next/script` in `app/layout.tsx` with `afterInteractive` and its site
+  id in one constant. A script only some flows need loads on demand from a loader module: a
+  promise cached once, a timeout, a fallback path, and a retry on the next click. Nothing else
+  injects a `<script>`. A script loaded for an optional purpose runs only after consent,
+  through the one consent module of ACCESS-015, and names its consent category in the
+  loader's comment; a script needed to deliver the page or to protect a form (a bot check on a
+  sign-up form, for example) says so. Each new origin also follows ACCESS-011 (the header
+  policy) in the same change. **SHOULD.**
+  - Why: every script is a request, a dependency and an origin to allow, so one place keeps each of them visible and loaded once.
+  - From: D68
+
 ## Hydration, layout and caching
+
+- **DATA-062. The first client render matches the server.** No `window`, `document`,
+  `localStorage` or `matchMedia` read in a `useState` or `useMemo` initializer or in the
+  render body; use `useSyncExternalStore` with a server snapshot, or an effect. DATA-013 is
+  one case of this rule, and STRUCT-016 covers server entries. **SHOULD.**
+  - Why: the server cannot read these values, so a first client render that reads them differs from the server HTML and fails hydration.
+  - From: D56
+
+- **DATA-063. Content that depends on member data does not push the page.** A notice, banner
+  or strip that renders after the auth state or a member query resolves is an overlay, sits in
+  a slot sized in advance, or is already in the server HTML. The same holds for client-only UI
+  that appears after a library initialises: carousel arrows that appear after the carousel
+  starts render a same-size slot until then. **SHOULD.**
+  - Why: content inserted after load moves everything below it, a layout shift that a signed-out test run never sees.
+  - From: D76
+
+- **DATA-064. Server code never reads member cookies or headers.** Only an allowlist imports
+  `next/headers`; nothing under `app/` or `src/features/` builds a server API client from
+  request data. DATA-003 and DATA-005 apply the same ban to pages. **MUST.**
+  - Why: `cookies()` and `headers()` make a route dynamic, which breaks static-first rendering on any host.
+  - Check: guard-test row DATA-064: only allowlisted files import `next/headers`.
+  - From: D57 (core part)
+
+- **DATA-065. No `loading.tsx` under `app/`, and no `Suspense` above the fetch of a page that
+  can call `notFound()`.** This rule wins over the
+  [`loading.js`](https://nextjs.org/docs/app/api-reference/file-conventions/loading) file
+  convention in the bundled Next.js docs. **MUST** for the file; **SHOULD** for the `Suspense`
+  half.
+  - Condition: the `Suspense` half assumes Cache Components is off. With Cache Components on, the newer docs direct runtime data into `<Suspense>`, and a request-time `notFound()` in the page runs after the shell is sent, so that check answers 200.
+  - Why: a streamed response starts with status 200, and a `loading.tsx` or `Suspense` fallback starts the stream, so a later `notFound()` can no longer send a 404 and the route answers a soft 404.
+  - Check: guard-test row DATA-065: no `loading.tsx` file exists under `app/`.
+  - Source: loading.js https://nextjs.org/docs/app/api-reference/file-conventions/loading
+  - From: D58
+
+- **DATA-066. Server module scope holds no request or user data.** **SHOULD.**
+  - Why: one server instance serves many requests, so module state set during one request is read by the next.
+  - Source: The Singleton Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-singleton-pattern
+  - Source: server-no-shared-module-state https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/server-no-shared-module-state.md
+  - From: D66
 
 ## React and effects
 
+- **DATA-067. No hand memoization for render speed in new code.** New code skips `useMemo`,
+  `useCallback` and `memo` unless a dependency array or an effect needs a stable identity.
+  Code MUST be correct without the compiler too: where dev or tests run uncompiled, a value
+  that loses its hook is a new identity on every render and must not feed an effect
+  dependency array. This rule wins over Vercel
+  [`rerender-memo`](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/rerender-memo.md).
+  **SHOULD.**
+  - Condition: the React Compiler is on (https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler), which the fixed stack does.
+  - Why: the compiler memoizes for render speed, so hand-written memoization in new code adds code without adding speed.
+  - Source: React Compiler https://react.dev/learn/react-compiler
+  - Source: reactCompiler https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler
+  - From: D62
+
+- **DATA-068. No effect that copies props or derived values into state.** Derive during
+  render, or reset with a `key`. An effect that reads browser storage after mount is not a
+  copy; its lint-disable carries the reason TYPES-039 asks for. **SHOULD.**
+  - Why: an effect that adjusts state on a prop change renders once with the stale value and again with the new one.
+  - Source: You Might Not Need an Effect https://react.dev/learn/you-might-not-need-an-effect
+  - From: D63
+
+- **DATA-069. An effect that adds a listener or timer returns its cleanup.** Nothing polls
+  for state an event already delivers. A poll loop or delayed chain started from a handler
+  stops on unmount and on sign-out (an `AbortSignal` or a mounted check). A poll that must
+  outlive the page, because it updates a global store or the query cache, reads the stored
+  auth flag (`src/lib/authSession.ts`) after each wait and stops on sign-out. **SHOULD.**
+  - Why: a listener or timer left behind keeps running after its component is gone, and a poll that runs past sign-out sends requests for a member who left.
+  - From: D64
+
+- **DATA-070. Mutations call the backend through `apiClient`, not Server Actions.** The
+  separate API has its own cookie auth, so `'use server'` has no place in the app. Vercel
+  [`server-auth-actions`](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/server-auth-actions.md)
+  does not apply: the app has no Server Actions to authenticate. **MUST.**
+  - Why: the API holds the session and owns every write, so a Server Action would add a second write path outside the client that carries the member's cookies.
+  - Source: Data Security https://nextjs.org/docs/app/guides/data-security
+  - From: D65
+
+- **DATA-071. A 429 shows a wait message and is never retried; resend buttons have a
+  cooldown; polls and client fetch loops have a cap; a failed fetch is not rendered as
+  empty.** A client loop that fetches until done has a page cap and stops on error.
+  `shouldRetryQuery` (DATA-026) already stops on any 4xx, so the wait message is the half
+  each screen adds. `toServiceError` maps a 429 to `RATE_LIMIT_MESSAGE`, and error toasts
+  built with `showErrorToast` show the title "Too many requests" on a 429; any other failure
+  keeps the toast's own text. Resend buttons share one `createCooldown`. **SHOULD.**
+  - Why: the API rate-limits per client, so a retry or an unbounded loop after a 429 extends the wait, and an empty render hides a failure the user should see.
+  - Source: Guard Clauses and Defensive Programming https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/guard-clauses-and-defensive-programming
+  - From: D67
+
 ## What is NOT a violation
+
+- The `fetch` calls in `src/lib/serverFetch.ts` and `src/lib/content.server.ts`: they are the
+  two sanctioned paths. A sitemap or feed helper that does not fetch page data is accepted
+  too.
+- `useSearchParams` in the allowlisted files of DATA-016; each has its reason in the guard
+  test.
+- A public page whose data is per-viewer but whose server render is not: seed with
+  `perViewerSeedUpdatedAt()` and keep the page prerendered.
+- `src/lib/JsonLd.tsx` escaping only `<`: that is the character that can close the element.
