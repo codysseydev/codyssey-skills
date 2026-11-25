@@ -22,8 +22,8 @@ links and navigation, forms, images and assets, page metadata, and structured da
 
 Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolute.
 **SHOULD** and **SHOULD NOT** hold unless there is a concrete reason not to, and the
-reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
-rule that enforces a rule, where one exists.
+reason is stated. **MAY** is optional. A `Check:` line names the guard-test row, the lint
+rule, or the sheet's check idea for a rule, where one exists.
 
 ## Tailwind and design tokens
 
@@ -239,9 +239,9 @@ rule that enforces a rule, where one exists.
   (the recommended set, with options for `alt-text` and `label-has-associated-control`), so
   label, alt, role and click-handler problems fail the lint; that lint enforces UI-020, UI-021
   and UI-024. `@storybook/addon-a11y` runs over the stories in the Storybook test project,
-  advisory first (`parameters.a11y.test: 'todo'`). A story whose violations are fixed, such as
-  a `Button` `Disabled` story, is set to `'error'`, and the rest stay `'todo'` until fixed. A
-  logo link has an accessible name such as `<Site name> home`. **MUST** for the lint,
+  advisory first (`parameters.a11y.test: 'todo'`). A story whose violations are fixed is set to
+  `'error'`, and the rest stay `'todo'` until fixed. For example, a header story is fixed once
+  its logo link has an accessible name such as `<Site name> home`. **MUST** for the lint,
   **SHOULD** for the Storybook addon.
   - Why: the lint reads markup only and jsdom cannot compute contrast, so the addon covers
     what the lint misses.
@@ -250,8 +250,9 @@ rule that enforces a rule, where one exists.
 
 - **UI-028. A modal moves focus in, keeps it inside, and returns it.** On open, focus goes to
   the first control or the dialog; Tab and Shift+Tab stay inside; on close, focus returns to
-  the control that opened it. The one dialog approach of UI-041 does this. Each modal has a
-  test that focus stays inside the dialog and returns to the opener on close. **SHOULD.**
+  the control that opened it. The dialog approach chosen in UI-041 must provide this focus
+  handling. Each modal has a test that focus stays inside the dialog and returns to the opener
+  on close. **SHOULD.**
   - Why: focus left behind the modal lets a keyboard user tab into a page they cannot see, and
     focus lost on close drops them at the top of the page.
   - From: U53 (core part)
@@ -283,9 +284,10 @@ rule that enforces a rule, where one exists.
   - From: U57
 
 - **UI-032. A message that disappears on a timer can be read at the reader's pace.** An error
-  toast stays until dismissed. A success, info or warning toast stays 8000 ms. Every timed
-  message pauses its timer while hovered or focused, has a visible Close button, wraps its text
-  (at most three lines) and never truncates text that comes from the API. **MUST.**
+  toast stays until dismissed. A success, info or warning toast stays 8000 ms and pauses its
+  timer while hovered or focused. Every toast, the error toast included, has a visible Close
+  button, wraps its text (at most three lines) and never truncates text that comes from the
+  API. **MUST.**
   - Why: a reader who is slow, distracted or on a screen reader misses a message that leaves on
     its own, and a status toast is not a real-time event that has to expire.
   - Source: WCAG 2.2, Success Criterion 2.2.1 Timing Adjustable https://www.w3.org/TR/WCAG22/#timing-adjustable
@@ -417,8 +419,8 @@ rule that enforces a rule, where one exists.
   `<a href target="_blank" rel="noopener noreferrer">`, never a `next/link`. The
   `@next/next/no-html-link-for-pages` lint rule does not see a path served by a rewrite in
   `next.config`, so check such links by hand. **SHOULD.**
-  - Why: `next/link` prefetches and navigates on the client inside the app, while for an
-    external URL it adds nothing and hides the new-tab attributes UI-046 asks for.
+  - Why: `next/link` prefetches and navigates on the client inside the app, and for an
+    external URL neither applies, so a plain `<a>` with the attributes of UI-046 is enough.
   - Source: Next.js, Link Component https://nextjs.org/docs/app/api-reference/components/link
   - From: U27
 
@@ -441,7 +443,7 @@ rule that enforces a rule, where one exists.
 
 - **UI-050. A field that asks for a WCAG 1.3.5 input purpose sets `autoComplete`.** That covers
   email, new and current password, given and family name, telephone and address. A field for
-  someone else's details, such as an invite form, sets `autoComplete="off"`. **SHOULD.**
+  someone else's address, such as an invite form, sets `autoComplete="off"`. **SHOULD.**
   - Why: the token tells the browser what to fill, which saves typing and errors, most of all
     for readers with motor or memory impairments.
   - From: U50
@@ -457,8 +459,8 @@ rule that enforces a rule, where one exists.
 
 - **UI-052. `<Image fill>` always sets `sizes`; content images use the shared
   `contentImageSizes` helper.** **SHOULD.**
-  - Why: without `sizes`, a `fill` image downloads the largest width in its `srcset`, whatever
-    size it renders at.
+  - Why: without `sizes`, the browser assumes a `fill` image is as wide as the viewport
+    (`100vw`), so it downloads a larger file than the image needs when it renders narrower.
   - Source: Next.js, Image Component https://nextjs.org/docs/app/api-reference/components/image
   - From: U45
 
@@ -477,8 +479,8 @@ rule that enforces a rule, where one exists.
   `next.config` names each host exactly, such as `assets.example.com`, with no wildcard. A host
   used only in development, such as a local API host, is added only when the build is not
   production. **SHOULD.**
-  - Why: a wildcard lets images from any matching host through the image optimizer, so the
-    app pays to resize them.
+  - Why: an exact allowlist stops the image optimizer from accepting URLs the app did not
+    intend to optimize, and a wildcard lets through any host that matches it.
   - Source: Next.js, Image Component https://nextjs.org/docs/app/api-reference/components/image
   - From: U52
 
@@ -486,8 +488,8 @@ rule that enforces a rule, where one exists.
   name. A file that has to change under the same name goes in another `public/` folder, such
   as `public/images/` or `public/icons/`. Before deleting a file from `public/`, search the
   code and the content for its path. **MUST.**
-  - Why: the folder is served with a long immutable cache lifetime, so browsers and caches keep
-    the old bytes of a file replaced under the same name.
+  - Why: the folder may be served with a long immutable cache lifetime, set by the host
+    (CF-018), so browsers and caches keep the old bytes of a file replaced under the same name.
   - From: U47 (core part)
 
 ## Page metadata
@@ -523,13 +525,13 @@ rule that enforces a rule, where one exists.
   - From: U17
 
 - **UI-060. A build that is not the production site sets `robots` to noindex and `robots.txt`
-  to `Disallow: /`, driven by one production flag, with a test for both branches.** The flag is
-  read through the env module (DATA-042). Noindex on single pages is UI-059. **MUST.**
+  to `Disallow: /`, driven by one production flag, with a test for both branches.** Noindex on
+  single pages is UI-059. **MUST.**
   - Why: a staging or preview build then never competes with the production site in search
     results.
   - Check: a test that `robots.txt` built with the flag off is `User-agent: *` and
     `Disallow: /`; a test that the layout metadata `robots.index` follows the flag; no second
-    environment check outside the flag module.
+    environment check outside the env module.
   - Source: SEO in a Decoupled Architecture vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/41 - SEO in a Decoupled Architecture.md
   - From: NX-16
 
@@ -622,10 +624,10 @@ rule that enforces a rule, where one exists.
 
 ## What is NOT a violation
 
-- A hex literal in an SVG default prop or an email template.
+- A hex literal in an SVG default prop.
 - A corner radius outside the roles of UI-002 in an email template (UI-001).
 - The keyword colors `white`, `black`, `transparent` and `current`, and files a project adds to
-  the guard row's allowlist, such as email templates (UI-005).
+  the guard row's allowlist (UI-005).
 - `min-h-screen` on an inner block that must not follow the toolbar (UI-014).
 - Two copies of one element shown with `hidden` and `sm:hidden` (UI-017).
 - A control that resets its own label after a short delay, such as a copy button (UI-032).
@@ -637,6 +639,7 @@ rule that enforces a rule, where one exists.
   toggles a panel (UI-047).
 - `router.push` after a submit, a sign-in or another action (UI-048).
 - `<img>` in a test or story file (UI-051).
-- A hand-built `metadata` object on a noindex page (UI-057).
+- A hand-built `metadata` object on a noindex page that is not embargoed; an embargoed page
+  uses the teaser builder (UI-057, UI-066).
 - On an embargoed teaser page: a self-canonical URL, `og:type` `website` while published pages
   use `article`, no JSON-LD, and an image `alt` equal to the title (UI-066).

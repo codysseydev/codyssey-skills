@@ -141,7 +141,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 | UI-052 | U45 | SHOULD | SHOULD (frontend) | - | Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image (Q2) | - | - |
 | UI-053 | U63 | SHOULD | SHOULD (frontend; wording from the clash list) | - | web.dev, optimize LCP, https://web.dev/articles/optimize-lcp; Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image | - | DATA-020 |
 | UI-054 | U52 | SHOULD | SHOULD (frontend) | generalize | Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image (Q2) | - | - |
-| UI-055 | U47 (core part) | MUST | MUST (frontend; wording: decision 3) | - | - | - | - |
+| UI-055 | U47 (core part) | MUST | MUST (frontend; wording: decision 3) | - | - | - | CF-018 |
 
 #### Page metadata
 
@@ -151,7 +151,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 | UI-057 | U15 | SHOULD | SHOULD (frontend) | possible miss: site-name placeholder | lesson "SEO in a Decoupled Architecture" (vault, draft) | - | UI-066 |
 | UI-058 | U16 | MUST | MUST (frontend) | - | - | - | - |
 | UI-059 | U17 | SHOULD | SHOULD (frontend) | - | - | - | UI-066 |
-| UI-060 | NX-16 | new rule | MUST (Candidates NX-16) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea | UI-059, DATA-042 |
+| UI-060 | NX-16 | new rule | MUST (Candidates NX-16) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea | UI-059 |
 | UI-061 | U18 | MUST | MUST (frontend) | - | - | - | - |
 | UI-062 | U19 | SHOULD | SHOULD (frontend) | - | - | - | - |
 | UI-063 | U20 | SHOULD | SHOULD (frontend) | generalize | - | - | - |
@@ -188,14 +188,14 @@ Counts: 70 rows (58 whole rules, 10 core parts, 2 new rules), matching the id ma
 
 These follow from the issue and the inputs. The PR lists them so the owner can change any of them.
 
-- **Check lines.** The stub #88 merged says "A `Check:` line names the guard-test row or lint rule that enforces a rule, where one exists", and the entry format in `index.md` allows "the sheet's check idea". So besides the four guard-test rows (UI-005, UI-014, UI-015, UI-022), an entry gets a `Check:` line for a lint rule its source rule names (jsx-a11y on UI-020, UI-021, UI-024 and UI-027, `better-tailwindcss/no-unknown-classes` on UI-005, `react/button-has-type` on UI-031, `@next/next/no-img-element` on UI-051), named by rule and not by config file, since #95 has not settled the config file. NX-16 and NX-17 get the sheet's check idea.
+- **Check lines.** The stub #88 merged says "A `Check:` line names the guard-test row or lint rule that enforces a rule, where one exists", and the entry format in `index.md` allows "the sheet's check idea". So besides the four guard-test rows (UI-005, UI-014, UI-015, UI-022), an entry gets a `Check:` line for a lint rule its source rule names (jsx-a11y on UI-020, UI-021, UI-024 and UI-027, `better-tailwindcss/no-unknown-classes` on UI-005, `react/button-has-type` on UI-031, `@next/next/no-img-element` on UI-051), named by rule and not by config file, since #95 has not settled the config file. NX-16 and NX-17 get the sheet's check idea. The file's intro sentence about `Check:` lines matches the entry format in `index.md` (owner answer 10, 2026-11-26).
 - **Sections.** Each entry sits under the section of its source rule. The id map's numbering already follows that order.
 - **Public doc sources.** The notes policy keeps a Source line that cites a public doc. Twelve source rules cite one without a URL: U23, U30, U40, U49, U51, U58, U60, U62 and U63, plus U27, U45 and U52 (question 2). Each Source line gets the doc's URL, and each quote was checked word for word on the live page on 2026-11-25. U49's quote becomes the page's own wording ("Never `transition: all`."). U30 keeps only its Next.js font quote. The safety pass drops the rest of that Source line.
-- **Draft sources.** The lesson "SEO in a Decoupled Architecture" and the insight "The Injection Bugs Your Blade Templates Are Hiding" are drafts: the frontmatter of each vault file says draft, and the insight's own slug on https://codyssey.dev/insights/ answers 404. U15, U23, NX-16 and NX-17 cite them as `vault: Content/<path>.md`.
+- **Draft sources.** The lesson "SEO in a Decoupled Architecture" and the insight "The Injection Bugs Your Blade Templates Are Hiding" are drafts: the frontmatter of each vault file says draft, and the insight's own slug on https://codyssey.dev/insights/ answers 404. Rechecked on 2026-11-26: the insight URL, the course page and two lesson URL forms each answer 404 ("Page not found"), neither page is in the sitemap, and the vault files are still drafts, so the vault paths stay. U15, U23, NX-16 and NX-17 cite them as `vault: Content/<path>.md`.
 - **U17.** Its sentence on teasers points at UI-066 instead of the source helper name. The C5 lesson contradiction (a robots `Disallow` over pages that also carry noindex) stays a source-project fix, per decisions 17 and 21. UI-059 and UI-060 do not change because of it.
-- **NX-16.** The text is the sheet row as written, with the keyword moved to the end of the entry. The one production flag is read through the env module, so the entry cites DATA-042.
+- **NX-16.** The text is the sheet row as written, with the keyword moved to the end of the entry. The entry does not cite DATA-042 (owner answer 8, 2026-11-26); its sheet check idea names the env module.
 - **U63.** The text follows the clash list row. The keyword stays SHOULD, since the clash list sets the wording only.
-- **U47.** The core Why is host-neutral: the folder may be served with a long immutable cache lifetime. The lifetime itself is CF-018.
+- **U47.** The core Why is host-neutral: the folder may be served with a long immutable cache lifetime, set by the host. The lifetime itself is CF-018, which the Why cites by id.
 - **U72.** The "dark page" condition stays, because the decision words it that way ("no pure white on a dark page").
 - **Rule Recount and the id map.** The recount marks U15, U19 and U22 as split rows. The id map and the issue make them whole core rules with their clauses for the source project's overlay dropped, so their `From:` is the bare id.
 
@@ -288,3 +288,18 @@ The questions as asked, with the recommended option first:
    - **A. Cite DATA-053, so the entry follows whatever DATA-053 settles for apps without the Sentry add-on (recommended).**
    - B. Cite DATA-053, and SENTRY-001 for apps with the Sentry add-on.
    - C. Keep the decision's words and name no rule.
+
+Owner answers to the independent review (2026-11-26):
+
+1. The closing "What is NOT a violation" item about a hand-built `metadata` object on a noindex page excludes embargoed pages, which UI-066 covers.
+2. The closing section drops its email-template hex allowance, so it agrees with UI-001. The UI-005 item drops its "such as email templates" example for the same reason.
+3. UI-032 is scoped back to toasts. The error toast, which has no timer, keeps the Close button, wrap and no-truncate clauses.
+4. UI-028 says the dialog approach chosen in UI-041 must provide this focus handling.
+5. UI-041 keeps its shared confirm-dialog and no-hand-built-overlay clauses.
+6. In UI-027 the logo-link accessible name is an example of a fixed story, not a rule sentence.
+7. UI-050 says "someone else's address", as the source rule does.
+8. UI-060 is NX-16 as written. The sentence citing DATA-042 is removed.
+9. The `Check:` lines for the lint rules the source rules name stay (UI-005, UI-020, UI-021, UI-024, UI-027, UI-031, UI-051). The PR lists them for #95.
+10. Every rule file widens its intro sentence about `Check:` lines to match the entry format in `index.md`: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. This PR changes `ui-a11y-seo.md` only; each other rule file takes the change in its own issue.
+
+Factual fixes from the same review, where a Why contradicted its own cited source: UI-052 (a `fill` image without `sizes` is assumed to be `100vw` wide), UI-047 (`Link` forwards `target` and `rel`, so the Why no longer says it hides them), UI-055 (the folder may be served with a long immutable cache lifetime, set by the host), UI-054 (`remotePatterns` stops URLs you did not intend from being optimized), and the UI-060 `Check:` line ("env module", not "flag module").
