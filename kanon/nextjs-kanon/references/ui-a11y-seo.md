@@ -622,3 +622,22 @@ rule that enforces a rule, where one exists.
   - From: U24
 
 ## What is NOT a violation
+
+- A hex literal in an SVG default prop or an email template.
+- A corner radius outside the roles of UI-002 in an email template (UI-001).
+- The keyword colors `white`, `black`, `transparent` and `current`, and files on the guard
+  row's exempt list, such as email templates (UI-005).
+- `min-h-screen` on an inner block that must not follow the toolbar (UI-014).
+- Two copies of one element shown with `hidden` and `sm:hidden` (UI-017).
+- A control that resets its own label after a short delay, such as a copy button (UI-032).
+- A monospace font stack for code, a font set on a generated image, and the Storybook
+  stylesheet that redeclares the faces (UI-043).
+- `window.open` inside the `openExternal` helper itself (UI-046).
+- A plain `<a>` in `app/global-error.tsx`, which renders outside the root layout (UI-047).
+- A plain `<a>` kept on purpose with a comment that says why, such as one whose click handler
+  toggles a panel (UI-047).
+- `router.push` after a submit, a sign-in or another action (UI-048).
+- `<img>` in a test or story file (UI-051).
+- A hand-built `metadata` object on a noindex page (UI-057).
+- On an embargoed teaser page: a self-canonical URL, `og:type` `website` while published pages
+  use `article`, no JSON-LD, and an image `alt` equal to the title (UI-066).
