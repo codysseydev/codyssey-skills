@@ -86,6 +86,74 @@ rule that enforces a rule, where one exists.
 
 ## Test placement and shape
 
+- **TYPES-017. Outside `src/lib/` and `app/`, tests live in a `tests/` folder next to the code they cover**, named after the unit (`Name.test.tsx`, `name.test.ts`); stories live in `stories/`. A nested `tests/` under a sub-folder (`tests/hooks/`, `tests/utils/`) is fine. **SHOULD.**
+  - Why: one fixed place per folder lets a reader find a unit's test without a search, and keeps test files out of the source listing.
+  - From: T8
+- **TYPES-018. In `src/lib/` and `app/`, a test may sit beside its file or in `tests/`.** Both are accepted. Do not move an existing test just to change its place. **MAY.**
+  - Why: both layouts read well in folders of small single-file modules, and a move only adds churn to the diff.
+  - From: T9
+- **TYPES-019. A pure-logic test starts with `// @vitest-environment node` on line 1.** Pure logic means services, stores, utils and schemas that never render and never touch `window`, `document` or `localStorage`. If the test fails under `node` with a missing global, it has a hidden DOM dependency: remove the pragma. **SHOULD.**
+  - Why: logic that takes plain values needs no DOM, so running its test under `node` proves it has no hidden browser dependency.
+  - Source: Test Business Rules Without Booting Laravel vault: Content/Quick Tips/57 - Test Business Rules Without Booting Laravel.md
+  - From: T10
+- **TYPES-020. Component and hook tests use Testing Library and exercise user behaviour**, not implementation details. Query by role or visible text first (`getByRole`, `getByText`) and use `data-testid` only when no accessible handle exists. Do not assert Tailwind class names or use CSS-selector queries (`container.querySelector`, `.firstChild`, `.children`) when an accessible handle exists. Create a `userEvent.setup()` instance for interactions and use `waitFor` for async assertions; do not use `fireEvent`. **SHOULD.**
+  - Why: a test tied to markup, class names or internal calls breaks on a refactor that reaches the same behaviour another way.
+  - Source: Test Doubles - Mocks, Stubs, Fakes and Spies https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/test-doubles-mocks-stubs-fakes-and-spies
+  - From: T11
+- **TYPES-021. A test of a calculation or a decision asserts the exact expected value.** It asserts the exact value, the boundary case included. A type-only or presence-only assertion (`toBeDefined`, `toBeTruthy`, `typeof x` equals `'number'`) is never the only assertion of such a test. **SHOULD.**
+  - Why: an assertion that the result is a number passes whatever the math returns; a discount function whose only assertion is `typeof total === 'number'` stays green when the discount is applied twice.
+  - Check: the sheet's idea, unconfirmed until the template's Oxlint rules are checked: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`.
+  - Source: Your Tests Are Green and the Bug Shipped Anyway vault: Content/Insights/Your Tests Are Green and the Bug Shipped Anyway.md
+  - From: NX-14
+- **TYPES-023. Wrap components that use TanStack Query in a `QueryClientProvider` through the shared test helper** (TYPES-034), which returns a client with `retry: false`. **SHOULD.**
+  - Why: TanStack Query retries a failed query by default, so an error-state test without `retry: false` waits through the retries before it sees the error.
+  - From: T13
+- **TYPES-024. Use data factories for mock data.** Name a mock type after the data it stands in for. **SHOULD.**
+  - Why: an object with many fields built by hand in each test repeats the same literal, and every copy breaks when the type gains a field; a factory builds it in one place.
+  - Source: Test Doubles - Mocks, Stubs, Fakes and Spies https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/test-doubles-mocks-stubs-fakes-and-spies
+  - From: T14
+- **TYPES-025. Test loading, error and success states** of an async component or hook. **SHOULD.**
+  - Why: the loading and error branches run on every slow or failed request, and a test of the success state alone leaves them unchecked.
+  - From: T15
+- **TYPES-026. Business logic is testable without UI**: put logic in functions a test can import without rendering. Same intent as STRUCT-003. **SHOULD.**
+  - Why: logic in a plain function is tested by calling it with values, with nothing to render or stub, so the test breaks only when the rule changes.
+  - Source: Anemic Domain Model vs Rich Domain Model https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/anemic-models-vs-rich-models
+  - Source: Test Business Rules Without Booting Laravel vault: Content/Quick Tips/57 - Test Business Rules Without Booting Laravel.md
+  - From: T16
+- **TYPES-027. Guard tests change by allowlist entry with a reason.** To permit a new exception to a row of the guard test `src/lib/tests/architectureRules.test.ts`, add an allowlist entry with its reason beside the row, and update the matching rule in the rule folder `.ai/rules/`. Delete entries that stop matching. Never loosen a regex to make a file pass. An allowlist entry is a deliberate exception and needs a reason; a lint or guard baseline is adoption debt and only shrinks, never grows to make a failure pass. **MUST.**
+  - Why: a loosened regex or a grown baseline switches a check off for every later file in a diff that looks like a one-line test change; the fix for a failure belongs in the code.
+  - Check: `src/lib/tests/architectureRules.test.ts` fails on an allowlist entry that no longer matches a file.
+  - Source: Claude Code Found 14 Rule Breaks in Merged Laravel Code https://codyssey.dev/insights/claude-code-found-14-rule-breaks-in-merged-laravel-code
+  - From: T17
+- **TYPES-028. Stories.** A story file is `stories/<Component>.stories.tsx` in the feature that owns the component. `title` is `Features/<Feature>/<Component>` or `Global UI/<Component>`; the default export is `meta`; story names are PascalCase. A story file declares `const meta = { ... } satisfies Meta<typeof X>` and `type Story = StoryObj<typeof meta>`, and does not repeat an inline `fontFamily`: `.storybook/preview.tsx` imports `app/globals.css`. Stories stay optional (TYPES-040). Not a violation: a feature without stories, `.mdx` pages without `.stories.tsx`, stories that mock `next/*` through `.storybook/mocks`. **SHOULD.**
+  - Why: `satisfies Meta` checks the meta object and keeps its literal type, so `StoryObj<typeof meta>` knows which args the meta already sets.
+  - Source: Component Story Format (CSF) https://storybook.js.org/docs/api/csf
+  - From: T23
+- **TYPES-029. No per-assertion `timeout` on `waitFor`, `waitForElementToBeRemoved`, `findBy*`, `findAllBy*` or `expect.poll`.** Each assertion inherits the one deadline the test setup configures. A test that waits on a real debounce timer uses fake timers instead. **MUST.**
+  - Why: a tight per-assertion cap can beat the Vitest deadline on a slow run and make the suite flake.
+  - Check: guard-test row TYPES-029.
+  - From: T25
+- **TYPES-030. Tests reset the global state they change.** The Vitest config resets mocks, stubbed globals and stubbed env (`clearMocks`, `unstubGlobals`, `unstubEnvs`) before each test, so test files do not have to; a test that sets `process.env.TZ`, fake timers or global stubs restores them. Do not set `isolate: false`: the config runs test files in threads with isolation on, which keeps files from leaking into each other. **SHOULD.**
+  - Why: a test that switches a global on leaves it on for every test that runs after it, so results depend on run order.
+  - Source: Avoid the Singleton vault: Content/Quick Tips/11 - Avoid the Singleton.md
+  - Source: The Singleton Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-singleton-pattern
+  - Source: clearMocks (Vitest config) https://vitest.dev/config/clearmocks
+  - From: T29
+- **TYPES-031. Test names are present-tense behaviour statements without "should".** `renders the title`, not `should render the title`. **SHOULD.**
+  - Why: a test named after the behaviour it checks reads as a line of the spec, and "should" adds a word to every name without adding meaning.
+  - Source: Behavior-Driven Development https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/behavior-driven-development
+  - From: T30
+- **TYPES-032. A value copied from another file has a sync test.** A constant that mirrors another file reads that file in a test and compares. For example, the theme colors copied into `src/lib/brandTokens.ts` are compared with the `@theme` block in `app/globals.css`. **MUST.**
+  - Why: nothing ties a copy to its original, so the two drift on the next edit of either and no check fails.
+  - From: T31 (core part)
+- **TYPES-033. Every test a rule cites exists.** A rule names the check that enforces it in its `Check:` line, by the guard test file name or by a guard-test row's pack id. A check in the guard test `src/lib/tests/architectureRules.test.ts` reads `.ai/rules/*.md`, extracts those citations, and fails when a cited file or row does not exist. It also fails on a duplicate rule id, on a rule file whose entry count differs from the count table in the index, and on an id the index names that no rule file defines. Write a new rule heading as `- **<PREFIX>-<NNN>. <title>**` so the check counts it. **MUST.**
+  - Why: a renamed or deleted test leaves a rule that claims a check nobody runs.
+  - Check: `src/lib/tests/architectureRules.test.ts`, the rule-reference check.
+  - From: T32
+- **TYPES-034. One shared `QueryClient` helper for tests.** `src/lib/testing/createTestQueryClient.ts` returns a client with `retry: false` and the other defaults tests need; component and hook tests import it. **SHOULD.**
+  - Why: each hand-built `new QueryClient()` in a test picks its own defaults, so one file retries or caches where another does not.
+  - From: T33
+
 ## What a change ships with
 
 ## What is NOT a violation
