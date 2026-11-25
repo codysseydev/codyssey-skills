@@ -146,6 +146,7 @@
               "status": "draft"
             }
           ],
+          "duplicate_of": "INT-011",
           "status": "active"
         },
         {
@@ -194,6 +195,7 @@
           "scope": "laravel",
           "keyword": "MAY",
           "rule": "Facades and helpers **MAY** be used in providers.",
+          "duplicate_of": "ORCH-010",
           "status": "active"
         },
         {

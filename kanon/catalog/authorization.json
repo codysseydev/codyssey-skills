@@ -138,6 +138,7 @@
               "status": "draft"
             }
           ],
+          "duplicate_of": "ORCH-025",
           "status": "active"
         }
       ]

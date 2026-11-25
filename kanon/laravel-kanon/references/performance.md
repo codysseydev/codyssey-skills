@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/performance.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Query Performance
 
 Applies to: Eloquent and query-builder queries, list and report endpoints, eager loading, model `$with` declarations.

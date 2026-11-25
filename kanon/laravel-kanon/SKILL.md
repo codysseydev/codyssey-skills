@@ -58,7 +58,9 @@ Rules use RFC-2119 keywords, and they mean it:
 1. Identify what you are about to create or edit, and read the matching files in
    this skill's `references/` folder (next to this SKILL.md) BEFORE writing. Read `architecture.md` for any new feature regardless, and `php-core.md` for every production class regardless.
 2. Follow MUST/MUST NOT rules absolutely; note SHOULD deviations with justification.
-3. When you finish, list any canon rules you could not satisfy and why.
+3. When you finish, list by ID (for example `ORCH-008`) any canon rules you could not satisfy and why.
+
+Each rule in the reference files starts with its ID, a stable code such as `ORCH-008`.
 
 | You are writing | Read |
 |---|---|

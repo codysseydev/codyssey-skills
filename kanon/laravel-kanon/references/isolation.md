@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/isolation.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Module & Application Isolation
 
 Applies to: anything touching two modules, cross-module data, or two application surfaces (public app, admin panel, internal API). Isolation violations are the most expensive mistakes to unwind later; every MUST here is critical.

@@ -201,6 +201,7 @@
               "status": "draft"
             }
           ],
+          "duplicate_of": "ARCH-003",
           "status": "active"
         }
       ]

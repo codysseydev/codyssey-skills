@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/authorization.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Authorization & Resource Ownership
 
 Applies to: owned-resource handlers, capability-gated routes, guards, Form Request `authorize()`. Authorization failures are critical; every MUST here is a security rule.

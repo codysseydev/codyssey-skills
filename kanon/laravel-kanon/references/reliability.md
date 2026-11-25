@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/reliability.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Reliability
 
 Applies to: batch imports, bulk jobs and other code that processes many independent records in one run.
