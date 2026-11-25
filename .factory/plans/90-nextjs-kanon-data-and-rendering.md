@@ -274,3 +274,22 @@ Owner decisions for every rule issue:
 7. Cross-references use pack ids from the id map only.
 
 Storage keys use the placeholder prefix `<app>_`, shared with #94. Plan comment: https://github.com/codysseydev/codyssey-skills/issues/90#issuecomment-7157424603
+
+## Decisions after the independent review (owner, 2026-11-25 and 2026-11-26)
+
+The owner answered the independent review's questions over these two days. The answers are not split by day here.
+
+1. DATA-029: the Check line drops its review half (the sentence calling a `(field, value)` action a setter). The guard-test half stays.
+2. DATA-042: the core sentence stays as written: `next.config` reads the build variables before the app runs and stays outside the env module.
+3. DATA-028: no longer says names "follow DATA-029"; it states its own naming rule in place. Written as a past-tense clause marked **SHOULD** inline, so the entry's **MUST** does not raise the naming rule above DATA-029's keyword.
+4. DATA-027: the Check line leads with "the provider default retries queries only; a mutation opts in per hook", consistent with the NX-06 clause and DATA-026. The NX-06 unit-test and grep idea stays after it, since step 8 keeps the sheet's check idea on NX rows. The rule text no longer says the mutation default lives in the provider; it says each mutation hook opts in through `shouldRetryMutation`.
+5. DATA-062: one exception for DATA-012's read of the seed timestamp (`perViewerSeedUpdatedAt()` reads the stored auth flag in render; the value changes query timing, never markup).
+6. DATA-006: "the guard test's `DYNAMIC_PAGES` list" becomes "the page list the guard test reads (stage 2)". `DYNAMIC_PAGES` leaves the names list.
+7. DATA-012: "must also open for a signed-out visitor" is a requirement again.
+8. DATA-053: the Why drops the assumption that the build strips console calls.
+9. DATA-057: the Why says invalidation marks the query stale and the active query refetches (TanStack Query invalidation guide), so a later `fetchQuery` within the provider's `staleTime` resolves from the cache. No Source line is added (the source reading above).
+10. Every rule file's intro sentence about Check lines matches the entry format of `index.md`: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. This PR changes this file only; the other rule files take it in their own PRs.
+
+Source status, rechecked on 2026-11-26 before the PR: every source cited by vault path still has a "Coming <date>" page title or no public page, One Form Request per Write Action included, so every vault path stays.
+
+The `- Condition:` sub-line is not in the entry format of `index.md`. The PR lists it as a follow-up for `index.md` and #97.
