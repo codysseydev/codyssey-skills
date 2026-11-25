@@ -100,6 +100,38 @@ rule that enforces a rule, where one exists.
 
 ## File naming
 
+- **STRUCT-020. File names follow the suffix table.** **SHOULD.**
+
+  | Kind           | Name                              | Lives in                            |
+  | -------------- | --------------------------------- | ----------------------------------- |
+  | Component      | `PascalCase.tsx`                  | `components/` or feature root       |
+  | Hook           | `useCamelCase.ts`                 | `hooks/`                            |
+  | Store          | `camelCase.store.ts`              | `store/`                            |
+  | Types          | `camelCase.types.ts`              | `types/`                            |
+  | Enums          | `camelCase.enums.ts`              | `types/`                            |
+  | Service        | `camelCase.service.ts`            | `services/`, `src/lib/`             |
+  | Server fetcher | `camelCase.server.ts`             | `services/`, `src/lib/`             |
+  | Constants      | `camelCase.ts`, no suffix         | `constants/`, `src/constants/`      |
+  | Utils          | `camelCase.ts`, no suffix         | `utils/`                            |
+  | Test           | `Name.test.ts` or `Name.test.tsx` | `tests/` (see TYPES-017, TYPES-018) |
+  | Story          | `Name.stories.tsx`                | `stories/`                          |
+
+  - A server-only fetcher is named `<subject>.server.ts` (`shipments.server.ts` next to the client `shipments.service.ts`) and starts with `import 'server-only'` (STRUCT-013).
+  - The folder is `services/`, never `service/`.
+  - A shared type file in `src/types/` is named after the subject it types (`shipmentTracking.types.ts`, `inventoryFilters.enums.ts`).
+  - A module of render functions that is not one component is camelCase in `components/` (`shipments/components/shipmentSections.tsx` exports `renderShipmentSections`).
+  - Why: a reader finds a file by what it is, and a guard or lint rule can select files by suffix, as STRUCT-027 does for `*.enums.ts` and `*.types.ts`.
+  - From: S17
+- **STRUCT-021. Files in `constants/` and `utils/` have plain camelCase names**, with no `.constants.ts` or `.utils.ts` suffix (the two rows of the STRUCT-020 table). Examples: `constants/shipmentCarriers.ts`, `utils/styles.ts`. A file is never called `constants.ts`. **SHOULD.**
+  - Why: the folder already says what the file holds, so a suffix repeats it, and a file named `constants.ts` says nothing about its subject.
+  - From: S24
+- **STRUCT-022. A service object is named `<thing>Service`.** The exported object of a `*.service.ts` file is `shipmentService`, not `shipmentApi` or `shipmentAuth`. `*Auth` is for sign-in, sign-up, password and logout flows only. A file exports one object, not a class plus an object wrapper. A generic constant, type, service or store name takes the feature's subject (`shipmentStatusLabels`, not `statusLabels`). **SHOULD.**
+  - Why: one suffix makes every API object of the app findable by one pattern, and `*Auth` marks the few objects that change the session. This differs from the PHP lesson [The Service Pattern](https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-service-pattern), which drops `Service` as a default class suffix: the pack is TypeScript, and this rule names the exported object of a `*.service.ts` file, not a class.
+  - From: S29
+- **STRUCT-023. A props type is named `<Component>Props`**, not `Props`. **SHOULD.**
+  - Why: a named props type can be imported and searched for, and in a type error `ShipmentCardProps` says which component it belongs to, where `Props` does not.
+  - From: S32
+
 ## Where types and enums live
 
 ## Shared code and pages
