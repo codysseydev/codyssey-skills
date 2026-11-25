@@ -134,6 +134,20 @@ rule that enforces a rule, where one exists.
 
 ## Where types and enums live
 
+- **STRUCT-024. Types live in the feature's `types/` folder** in `*.types.ts` files, next to the feature that owns them. A component's own props type may stay in the component file. `src/types/` holds only types and enums shared by several features, such as form enums and ambient `.d.ts` files. **SHOULD.**
+  - Why: types next to their feature move and get deleted with it, and `src/types/` stays a short list of what several features share.
+  - From: S18
+- **STRUCT-025. Enums live in `types/*.enums.ts`**, never inside components, hooks or services. **SHOULD.**
+  - Why: with one home for enums, a reader and a guard find every enum in the same place, and a component file does not grow a second copy of one.
+  - From: S19
+- **STRUCT-026. Stores live in `store/*.store.ts`.** State-choice and store-shape rules are in `data-and-rendering.md`. **SHOULD.**
+  - Why: a store holds state that several components share, and a fixed folder and suffix make every store findable by one pattern.
+  - From: S20
+- **STRUCT-027. `*.enums.ts` and `*.types.ts` hold no runtime values.** `types/*.enums.ts` contains enums only, and `types/*.types.ts` contains types only, with no class, function or constant. A constant goes in `constants/` (STRUCT-007), and an error class or predicate in `utils/` or `src/lib`. A value several features must agree on, such as the page size, is defined once in `src/constants/`. **MUST.**
+  - Why: a type file that holds runtime code runs it on every import, and a value defined twice drifts, for example two page sizes that disagree on where page two starts.
+  - Check: guard-test row STRUCT-027 (`*.enums.ts` files export only enums, and `*.types.ts` files export only types).
+  - From: S31
+
 ## Shared code and pages
 
 ## What stays out of the tree
