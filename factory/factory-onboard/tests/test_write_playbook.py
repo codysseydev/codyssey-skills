@@ -115,6 +115,14 @@ class FreshTest(unittest.TestCase):
         for name in ("Review", "Scaffolding", "Local setup", "Cleanup", "Notes"):
             self.assertEqual(section(text, name), "None yet.")
 
+    def test_cs_script_is_a_gate_and_cs_fix_is_not(self):
+        repo = make_repo({"composer.json": json.dumps({"scripts": {"cs": "php-cs-fixer fix --dry-run --diff", "cs-fix": "php-cs-fixer fix"}})})
+        code, out, _ = run(repo)
+        self.assertEqual(code, 0)
+        checks = section(read(repo), "Checks")
+        self.assertIn("| cs | `composer cs` |", checks)
+        self.assertNotIn("cs-fix", checks)
+
     def test_npm_and_nothing_found(self):
         repo = make_repo({"package.json": json.dumps({"scripts": {"test": "jest"}}), "README.md": "x"})
         run(repo)
