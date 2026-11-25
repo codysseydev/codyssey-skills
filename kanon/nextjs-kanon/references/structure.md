@@ -80,6 +80,24 @@ rule that enforces a rule, where one exists.
 
 ## Server and client components
 
+- **STRUCT-015. `'use client'` only when required.** The directive is for event handlers, state or effect hooks, and browser APIs. Files under `app/**/page.tsx` never carry it. A small component that only passes fixed titles and labels to a shared component is allowed, because it holds the page's copy, and it carries no `'use client'` unless it needs one. **SHOULD.**
+  - Why: a `'use client'` file and everything it imports ship to the browser as JavaScript, so a needless directive grows the bundle, for example on a loading skeleton with no state or handlers.
+  - From: S13
+- **STRUCT-016. Server entries never touch browser APIs.** A page, layout or route handler, and the server-only modules it imports, must not use `window`, `document`, `localStorage` or `navigator`, nor `useState` or `useEffect`. Hooks and utils that only client files import are out of scope. **SHOULD.**
+  - Why: a server entry runs where `window`, `localStorage` and React state hooks do not exist, so using one throws at render or build time.
+  - From: S14
+- **STRUCT-017. `params` and `searchParams` are Promises in Next.js 16.** Type them as `Promise<...>` and `await` them. **MUST.**
+  - Why: Next.js 16 passes both as Promises, so code that reads a property without `await` gets `undefined` instead of the route value.
+  - From: S15
+- **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable (no functions, `Date`, `Map`, `Set` or class instances). **SHOULD.**
+  - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or class instance does not arrive as it left.
+  - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components
+  - From: S16
+- **STRUCT-019. No `export const runtime` in `app/`.** Routes and pages use the default Node.js runtime. **SHOULD.**
+  - Why: Next.js renders on the Node.js runtime by default and marks the edge runtime deprecated, so a `runtime` export only adds a choice that can break a route that imports a package needing a Node.js API.
+  - Source: Route Segment Config, runtime https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config/runtime
+  - From: S22
+
 ## File naming
 
 ## Where types and enums live
