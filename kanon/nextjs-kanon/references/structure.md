@@ -15,8 +15,8 @@ what stays out of the tree, and docs and rule files.
 
 Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolute.
 **SHOULD** and **SHOULD NOT** hold unless there is a concrete reason not to, and the
-reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
-rule that enforces a rule, where one exists.
+reason is stated. **MAY** is optional. A `Check:` line names the guard-test row, the lint
+rule, or the sheet's check idea for a rule, where one exists.
 
 ## Features
 
@@ -71,7 +71,7 @@ rule that enforces a rule, where one exists.
   - Check: guard-test row STRUCT-013 (every module on the server-only list starts with `import 'server-only'`).
   - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components#preventing-environment-poisoning
   - From: S11 (core part)
-- **STRUCT-014. Import boundaries are tested.** The guard test fails on a break of STRUCT-011 or STRUCT-012: an import of `src/features/**` from `src/lib`, `src/providers`, `src/constants` or `src/types`, and a feature-to-feature import outside the allowed-pairs list in the test. The list starts empty. Each pair added to it carries a reason, and a pair that no import uses is an error. Test files, stories and `tests/` folders are not scanned. **SHOULD.**
+- **STRUCT-014. Import boundaries are tested.** The guard test fails on a break of STRUCT-011 or STRUCT-012: an import of `src/features/**` from `src/lib`, `src/providers`, `src/constants` or `src/types`, and a feature-to-feature import outside the allowed-pairs list in the test. An import of `src/features/global-ui/` does not count as a feature-to-feature import. The list starts empty. Each pair added to it carries a reason, and a pair that no import uses is an error. Test files, stories and `tests/` folders are not scanned. **SHOULD.**
   - Why: review alone does not hold an import boundary, because reviewers tire, and a test fails on the first import that crosses it, for example a `shipments` hook that starts importing from `inventory/services/`.
   - Check: guard-test row STRUCT-014 (import boundaries).
   - Source: 7 PHP Code Quality Tools That Pay Off Years Later https://codyssey.dev/insights/7-php-tools-that-pay-off-three-years-from-now
@@ -89,8 +89,8 @@ rule that enforces a rule, where one exists.
 - **STRUCT-017. `params` and `searchParams` are Promises in Next.js 16.** Type them as `Promise<...>` and `await` them. **MUST.**
   - Why: Next.js 16 passes both as Promises, so code that reads a property without `await` gets `undefined` instead of the route value.
   - From: S15
-- **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable (no functions, `Date`, `Map`, `Set` or class instances). **SHOULD.**
-  - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or a class instance cannot cross.
+- **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable: no functions other than Server Functions, and no class instances. `Date`, `Map` and `Set` are serializable. **SHOULD.**
+  - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or a class instance cannot cross, while a `Date`, `Map` or `Set` can.
   - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components
   - From: S16
 - **STRUCT-019. No `export const runtime` in `app/`.** Routes and pages use the default Node.js runtime. **SHOULD.**
@@ -152,7 +152,7 @@ rule that enforces a rule, where one exists.
 
 - **STRUCT-028. One definition per helper, service method, component, page scaffold, constant and mutation hook.** Before writing one, search `src/lib` and the feature's `utils/`. A second definition of the same job is a finding, and a local copy with a different regex counts as a second definition, not a variant. Something two features need goes to `src/lib`, or to `global-ui` for a component. **SHOULD.** The cases that recur:
   - a. Pure helpers: title-case a slug (`capitalizeSlug`), truncate (`truncateText`), sort newest first (`newestFirst`), wait (`wait`), and format a date, a price or a count. All live in `src/lib`, with one definition each, such as `formatPublishDate` in `src/lib/formatDate.ts`, `normalizeExternalUrl` and `capitalizeFirst`. Dates and prices: DATA-059. URLs: ACCESS-003.
-  - b. A count followed by a noun goes through `formatCount(count, 'pallet')` in `src/lib/formatCount.ts`, with an irregular plural passed as the third argument. A new inline `count === 1 ? 'x' : 'xs'` is a finding. The noun alone, with no count, goes through `pluralize(count, singular, plural)` in the same file.
+  - b. In an app with one language, a count followed by a noun goes through `formatCount(count, 'pallet')` in `src/lib/formatCount.ts`, with an irregular plural passed as the third argument. A new inline `count === 1 ? 'x' : 'xs'` is a finding. The noun alone, with no count, goes through `pluralize(count, singular, plural)` in the same file.
   - c. Service methods: cookies are read with `getCookie` in `src/lib/getCookie.ts`, and the CSRF cookie request is `csrfService.initializeCsrf` in `src/lib/csrf.service.ts`. Sign-out and sign-in do not expire cookies from script (ACCESS-008).
   - d. Components: a feature component that does the job of a `global-ui` component wraps it, as its sibling components do, instead of copying its markup.
   - e. Constants: slug-to-title is `capitalizeSlug` in `src/lib/capitalizeSlug.ts`.
@@ -162,7 +162,8 @@ rule that enforces a rule, where one exists.
   - i. Mutation hooks: the same `useMutation`, error report and toast skeleton repeated across hooks is one `useFeatureMutation` wrapper (see DATA-032 for what it owns).
   - Why: two copies of one job drift, and a fix lands in one while the other keeps the bug, for example two date formatters that disagree on the time zone.
   - From: S28 (core part)
-- **STRUCT-029. Page protocol steps are shared, not pasted.** The fetch-or-404 step of a server page (`try { fetch } catch { isNotFoundError -> notFound(); throw }`) is one helper `loadOrNotFound(fetcher)`, and the out-of-range check of an archive page is one helper `assertInRange(page, items)`, both in `src/lib/pageData.ts`. The build step follows the fetch: the page data (the JSON-LD and the record the page shows) is built in a function that returns one object, not in several `let` variables assigned inside one `try`. `export const dynamic` and `revalidate` stay literal in each page, because Next.js reads them statically. A page whose only error handling goes through `loadOrNotFound` is correct, and the helper rethrows every error that is not a not-found. **SHOULD.**
+- **STRUCT-029. Page protocol steps are shared, not pasted.** The fetch-or-404 step of a server page (`try { fetch } catch { isNotFoundError -> notFound(); throw }`) is one helper `loadOrNotFound(fetcher)`, and the out-of-range check of an archive page is one helper `assertInRange(page, items)`, both in `src/lib/pageData.ts`. The build step follows the fetch: the page data (the JSON-LD and the record the page shows) is built in a function that returns one object, not in several `let` variables assigned inside one `try`. `export const dynamic` and `revalidate` stay literal in each page, because Next.js reads them statically. A page with a `catch` outside `generateMetadata` and no rethrow is a finding, even when it also calls `loadOrNotFound`. A page whose only error handling goes through `loadOrNotFound` is correct, and the helper rethrows every error that is not a not-found. **SHOULD.**
+  - Condition: Cache Components is off. The condition covers the `dynamic` and `revalidate` sentence only, since Next.js 16 removes both exports when Cache Components is on (https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config).
   - Why: a pasted `try` and `catch` drifts from page to page, and one page that swallows an error shows a 404 for an outage.
   - From: S30
 - **STRUCT-030. Internal page routes come from `src/constants/routes.ts`.** A path to one of the app's own pages (`/sign-in`, `/inventory?tab=archived`, `shipmentRoute(id)`) is an exported constant or a small builder, so a rename touches one file. A `?redirect=` value is built from it with `encodeURIComponent` (ACCESS-002). Literal paths stay in `app/` folder names, the `next.config` file, sitemap data and tests. The rule mirrors DATA-044 for API paths. **SHOULD.**

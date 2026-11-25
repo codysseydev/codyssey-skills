@@ -95,7 +95,7 @@ Sheet rows written (6, all approved on the Sources tab):
 | S12 | 7 PHP Code Quality Tools That Pay Off Years Later (insight) | live | https://codyssey.dev/insights/7-php-tools-that-pay-off-three-years-from-now |
 | S12 | Feature Modules (lesson) | draft | vault path |
 
-Status checks: the vault file's status tag and its `published` field, then the live page. The S1 insight's vault tag says published, but its `published` field is false, and the site shows a "Coming Nov 30, 2026" page. The source policy calls that not live, so it cites the vault path. The build re-checks it on the day the entries are written. Build check, 2026-11-25 08:40 UTC: the page title still reads "Coming Nov 30, 2026", so the entry cites the vault path. When one entry cites two sources, each gets its own `- Source:` line.
+Status checks: the vault file's status tag and its `published` field, then the live page. The S1 insight's vault tag says published, but its `published` field is false, and the site shows a "Coming Nov 30, 2026" page. The source policy calls that not live, so it cites the vault path. The build re-checks it on the day the entries are written. Build check, 2026-11-25 08:40 UTC: the page title still reads "Coming Nov 30, 2026", so the entry cites the vault path. Recheck before the PR, 2026-11-25 23:33 UTC: the S1 insight's title still reads "Coming Nov 30, 2026", and the S2 insight and the Feature Modules lesson (and its course page) return 404, with draft status in the vault. No Source line switches to a URL. When one entry cites two sources, each gets its own `- Source:` line.
 
 Sources the rules carry themselves, kept under the notes policy: S11's Next.js docs page, under its current heading. Q4 covers S16 and S22.
 
@@ -108,7 +108,7 @@ These follow from the inputs. The PR lists them so the owner can change any of t
 - S12. The allowed-pairs list starts empty. The open-owner sentence and the "no allowlist entries" state note are dropped.
 - S23 core part. Shared icon components live in `src/features/global-ui/icons/` with PascalCase file names. The custom-icon clause is HEROICONS-002, which #96 writes.
 - S27. The knip check stays in the rule text, and the entry has no `Check:` line, because the issue names Check lines only for S11, S12 and S31. The dated count is dropped.
-- S30. The helper names `loadOrNotFound` and `assertInRange` stay. The file is `src/lib/pageData.ts` (Q2). The constraint bullet that names a test is cut down to its behaviour: a page whose only error handling goes through the helper passes.
+- S30. The helper names `loadOrNotFound` and `assertInRange` stay. The file is `src/lib/pageData.ts` (Q2). The constraint bullet that names a test keeps its behaviour without the test name: a page with a `catch` outside `generateMetadata` and no rethrow is a finding, even when it also calls the helper, and a page whose only error handling goes through the helper passes (answer 4 below).
 - S31. Generalized per the safety pass: a value several features must agree on, such as the page size, is defined once in `src/constants/`.
 - Test names the frontend rules cite are dropped from the entries and listed in the PR for stage 2: `importBoundaries.test.ts` (S12, now the STRUCT-014 row), the "classifies every page" test and the rethrow test of the page helper (S30), and the page-size test (S31). `architectureRules.test.ts` is the template's guard test in the names table, so it is not on that list.
 - S28 case i names a rule that sits in the Sentry add-on. The core entry cites DATA-032 only.
@@ -176,3 +176,11 @@ Owner decisions for every rule issue, 2026-11-25:
 - Rules cite other rules by pack id from the id map only.
 
 Drafts of STRUCT-014, STRUCT-019, STRUCT-020, STRUCT-022 and STRUCT-028, written with the recommended options, tested the entry format, the acceptance greps and `check_from.py`. They are kept outside the repo.
+
+Owner answers to the independent review (diff only):
+
+1. STRUCT-018 (2026-11-25): props that cross to a client component cannot be functions or class instances, and `Date`, `Map` and `Set` are serializable, per the React docs the Next.js Source page links. The rule text and the Why say so. The text keeps the React docs' exception for Server Functions.
+2. STRUCT-028 (2026-11-25): the English pluralizer clause applies to an app with one language. Case b starts with that scope, because the pack states no language premise.
+3. STRUCT-014 (2026-11-25): imports of `src/features/global-ui/` do not count as feature-to-feature imports for the boundary test.
+4. STRUCT-029 (2026-11-25): S30's check is restored. A page with a `catch` outside `generateMetadata` and no rethrow is a finding. The `dynamic` and `revalidate` sentence gets a `Condition:` line for Cache Components off, which the pack assumes. index.md's entry format has no `Condition:` slot, so the PR lists it for the follow-up.
+5. All rule files (2026-11-26): the intro sentence about Check lines matches index.md's entry format: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. This PR edits the intro of `structure.md` only.
