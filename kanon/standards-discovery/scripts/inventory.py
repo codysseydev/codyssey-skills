@@ -259,7 +259,7 @@ def build(repo):
     head_proc = git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
     read_at = _text(head_proc).strip() or None
     if read_at is None:
-        if [name for name in os.listdir(repo) if name != ".git"]:
+        if any(name != ".git" for name in os.listdir(repo)):
             raise Stop("the branch has no commit, so there is nothing to read at a commit")
         found, ignored = EMPTY, set()
     else:
