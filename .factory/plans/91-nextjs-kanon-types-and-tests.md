@@ -202,3 +202,22 @@ The prototype entries for these are in a scratch file outside the repo.
   - (a) **Recommended.** Keep the sentence without the counts: both flags stay off.
   - (b) Drop the sentence, and leave the two flags unmentioned.
   - (c) Turn both flags on in the pack. This changes the rule.
+
+## Decisions (2026-11-25)
+
+The owner approved this plan in an interactive session on 2026-11-25. Answers:
+
+- **Q1.** (a) A bare gap. TYPES-021 is followed by TYPES-023, and TYPES-035 by TYPES-037, with no line between.
+- **Q2.** (a) Every entry gets a neutral one-line `Why:`. The PR lists every Why written fresh, that is, every Why with no reason in the source rule or its sheet row.
+- **Q3.** Neither option as written. A Source line is `- Source: <title> <URL>` or `- Source: <title> vault: Content/<path>.md`, with no quote. The point of the quote goes into the Why. A source that cites the retired `next-best-practices` skill is replaced by the matching nextjs.org docs page.
+- **Q4.** (a) Name what the tool does: "the typecheck script", "Oxlint runs with `--max-warnings 0`". #95 rewords them with T12 and T19.
+- **Q5.** No `index.md` edit, as in (a). Rules cite concrete generic file and helper names even when the names table lacks them, for example `src/lib/exhaustiveFallback.ts`, `src/lib/testing/at.ts` and `src/lib/testing/createTestQueryClient.ts`. The PR lists every name the file adds under "Names for the index.md follow-up".
+- **Q6.** (a) Check lines on T2, T5 and T27 for the Oxlint rules the source names, and on NX-14 for the sheet's check idea, marked unconfirmed until #95's Oxlint check runs.
+- **Q7.** (a) Both flags stay off. The counts are dropped.
+- **Reading 4.** T38 and T39 lose their new-code scope. The PR's keyword table lists the cell change from "SHOULD, new code" to "SHOULD". The same reading drops T11's "in new tests".
+- **Reading 6.** T23 and T29 keep their public-doc Source lines.
+- **T25.** The 10-second value is dropped.
+- **What is NOT a violation.** Three generic bullets.
+- **Source status.** A source is live only if its https://codyssey.dev/ page title is not "Coming <date>". A scheduled page answers 200 with that title, so it cites the vault path. Checked at write time.
+- **Codyssey names.** The issue's acceptance greps decide what counts. A `vault: Content/` path may carry the course name.
+- **Cross-references.** By pack id from the id map only.
