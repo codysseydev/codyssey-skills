@@ -1,0 +1,139 @@
+{
+  "family": "performance",
+  "title": "Query Performance",
+  "intro": [
+    "Applies to: Eloquent and query-builder queries, list and report endpoints, eager loading, model `$with` declarations.",
+    "Lane boundaries: starting queries from `Model::query()` (not `DB::`) and eager-loading what you iterate are owned by `models-domain.md`; this file adds query-shape rules on top of them. Profiling and hunting slow paths that no written rule names stays with `/code-review`."
+  ],
+  "sections": [
+    {
+      "heading": "Filter in the database",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERF-001",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Queries **MUST NOT** load a whole table and filter it in PHP (`all()->filter()`, `get()->where()`); the condition **MUST** go into the query. The database filters with indexes and returns only the rows needed; PHP filtering loads every row first.",
+          "why": "The database filters with indexes and returns only the rows needed; PHP filtering loads every row first",
+          "detect": {
+            "signals": [
+              "all()->filter()",
+              "get()->where()"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "PERF-002",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "Filtering on a relation **SHOULD** use `whereHas()`/`withCount()` so the database decides; eager-loading every related row to filter in PHP **SHOULD NOT** be used. This does not contradict \"eager-load what you iterate\" (`models-domain.md`): that rule is about rows you iterate, this one is about rows you only filter on.",
+          "detect": {
+            "signals": [
+              "whereHas()",
+              "withCount()"
+            ]
+          },
+          "lane_note": "starting queries from `Model::query()` (not `DB::`) and eager-loading what you iterate are owned by `models-domain.md`; this file adds query-shape rules on top of them. Profiling and hunting slow paths that no written rule names stays with `/code-review`.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Eager loading",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERF-003",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Models **MUST NOT** declare a `$with` property; relations **MUST** be eager-loaded per query. A `$with` default loads relations on every query, including the ones that never read them.",
+          "why": "A `$with` default loads relations on every query, including the ones that never read them",
+          "detect": {
+            "signals": [
+              "$with"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a $with property declared on an Eloquent Model subclass.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Column selection",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERF-004",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A trimmed `select()` **MUST** include the keys every eager-loaded relation needs (parent foreign key, related id in `relation:columns`). A missing key hides as a null relation, not as an error.",
+          "why": "A missing key hides as a null relation, not as an error",
+          "detect": {
+            "signals": [
+              "select()",
+              "relation:columns"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "PERF-005",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "List and report queries **SHOULD** select only the columns they use instead of `SELECT *`.",
+          "applies_to": [
+            "list queries",
+            "report queries"
+          ],
+          "detect": {
+            "signals": [
+              "SELECT *"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Reports",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERF-006",
+          "family": "performance",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "Aggregate reports **SHOULD** be one grouped query that starts from `Model::query()` and drops to the base builder with `toBase()`, never a PHP loop over models. This keeps the `models-domain.md` rule that queries start from `Model::query()`.",
+          "applies_to": [
+            "aggregate reports"
+          ],
+          "detect": {
+            "signals": [
+              "Model::query()",
+              "toBase()"
+            ]
+          },
+          "lane_note": "starting queries from `Model::query()` (not `DB::`) and eager-loading what you iterate are owned by `models-domain.md`; this file adds query-shape rules on top of them. Profiling and hunting slow paths that no written rule names stays with `/code-review`.",
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}
