@@ -1,0 +1,54 @@
+{
+  "family": "symfony",
+  "title": "Symfony",
+  "intro": [
+    "Applies to: Symfony controllers, services, Messenger message handlers, console commands."
+  ],
+  "sections": [
+    {
+      "heading": "Dependency injection",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-001",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Services **MUST NOT** be fetched with `$container->get()`; they **MUST** be autowired through the constructor. This is the Symfony form of the no-service-location rule in `php-core.md` (`laravel-kanon` skill).",
+          "detect": {
+            "signals": [
+              "$container->get()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags $container->get() calls in production classes.",
+              "status": "draft"
+            }
+          ],
+          "lane_note": "Symfony overlay of PHP-001 (`php-core.md`).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Writes",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-002",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Writes **MUST** go through a Symfony Messenger command dispatched to one handler, so every write shares one transaction and validation path. This is the Symfony counterpart of the Laravel command/handler slice (`architecture.md` in the `laravel-kanon` skill).",
+          "why": "every write shares one transaction and validation path",
+          "lane_note": "Laravel counterpart: ARCH-005 (command/handler write slice) and ARCH-009 (explicit handler wiring) in `architecture.md`.",
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}
