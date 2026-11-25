@@ -95,7 +95,7 @@ Sheet rows written (6, all approved on the Sources tab):
 | S12 | 7 PHP Code Quality Tools That Pay Off Years Later (insight) | live | https://codyssey.dev/insights/7-php-tools-that-pay-off-three-years-from-now |
 | S12 | Feature Modules (lesson) | draft | vault path |
 
-Status checks: the vault file's status tag and its `published` field, then the live page. The S1 insight's vault tag says published, but its `published` field is false, and the site shows a "Coming Nov 30, 2026" page. The source policy calls that not live, so it cites the vault path. The build re-checks it on the day the entries are written. When one entry cites two sources, each gets its own `- Source:` line.
+Status checks: the vault file's status tag and its `published` field, then the live page. The S1 insight's vault tag says published, but its `published` field is false, and the site shows a "Coming Nov 30, 2026" page. The source policy calls that not live, so it cites the vault path. The build re-checks it on the day the entries are written. Build check, 2026-11-25 08:40 UTC: the page title still reads "Coming Nov 30, 2026", so the entry cites the vault path. When one entry cites two sources, each gets its own `- Source:` line.
 
 Sources the rules carry themselves, kept under the notes policy: S11's Next.js docs page, under its current heading. Q4 covers S16 and S22.
 
@@ -108,7 +108,7 @@ These follow from the inputs. The PR lists them so the owner can change any of t
 - S12. The allowed-pairs list starts empty. The open-owner sentence and the "no allowlist entries" state note are dropped.
 - S23 core part. Shared icon components live in `src/features/global-ui/icons/` with PascalCase file names. The custom-icon clause is HEROICONS-002, which #96 writes.
 - S27. The knip check stays in the rule text, and the entry has no `Check:` line, because the issue names Check lines only for S11, S12 and S31. The dated count is dropped.
-- S30. The helper names `loadOrNotFound` and `assertInRange` stay. The file becomes "one module in `src/lib`" (see Q2). The constraint bullet that names a test is cut down to its behaviour: a page whose only error handling goes through the helper passes.
+- S30. The helper names `loadOrNotFound` and `assertInRange` stay. The file is `src/lib/pageData.ts` (Q2). The constraint bullet that names a test is cut down to its behaviour: a page whose only error handling goes through the helper passes.
 - S31. Generalized per the safety pass: a value several features must agree on, such as the page size, is defined once in `src/constants/`.
 - Test names the frontend rules cite are dropped from the entries and listed in the PR for stage 2: `importBoundaries.test.ts` (S12, now the STRUCT-014 row), the "classifies every page" test and the rethrow test of the page helper (S30), and the page-size test (S31). `architectureRules.test.ts` is the template's guard test in the names table, so it is not on that list.
 - S28 case i names a rule that sits in the Sentry add-on. The core entry cites DATA-032 only.
@@ -141,23 +141,38 @@ The PR body carries the 8-row safety-fix table (S1, S31 generalize; S13, S27, S3
 - The audit (#97), the template repository and its guard test (stage 2), and `bootstrap --frontend nextjs` (stage 3).
 - Any change to `codysseydev/codyssey-frontend`, including the chapter 08 code fixes for S9 and S28.
 
-## Open questions
+## Decisions
 
-Each option list puts the recommendation first.
+The owner approved the plan in an interactive session on 2026-11-25 and accepted the recommended option of every question. Each option list puts the recommendation first.
 
 - **Q1. S4, S10 and S12 name `src/api/` for API client setup, but the frontend tree at `abdfd9f2` has no `src/api/`, and the names table puts the client at `src/lib/apiClient.ts`. What do the entries say?**
   (a) Drop `src/api` from all three, and S4 names `src/lib/apiClient.ts` for the API client. (b) Keep `src/api/` as a leaf folder beside `src/lib`.
+  Answer (owner, 2026-11-25): (a).
 - **Q2. The entries need names that the "Names rules may cite" table lacks: `src/providers/`, `src/types/`, `src/constants/` and `src/lib/` as folders, `src/features/global-ui/icons/`, `knip.json`, and the page helper module of S30. #89 touches only `structure.md`. How are they handled?**
   (a) Use them in `structure.md` and list them in the PR for one follow-up edit of the names table after #89 to #96 land. (b) Add them to `index.md` in this PR, beside the parallel issues that may edit the same table. (c) Rewrite the entries around them, for example "one module in `src/lib`".
+  Answer (owner, 2026-11-25): (a). Entries cite concrete generic file and helper names; `index.md` is not edited, and the PR lists every name it introduced.
 - **Q3. Most frontend rules point to the source project's how-to guides (`docs/guides/...`, `docs/architecture/...`), which the template does not have. The notes policy does not name them. What happens to them?**
   (a) Drop each pointer and keep any rule sentence written inside one, such as "a component and its file carry the same name". (b) Keep them as generic "see the project's feature guide" lines.
+  Answer (owner, 2026-11-25): (a).
 - **Q4. The Source lines of S16 and S22 cite a local copy of a skill from the unlicensed upstream that decision 13 replaced, so they fail the source policy and the Source grep. What do those entries cite?**
   (a) The matching public Next.js page: the server and client components page for S16, and the route segment config page for S22, which also grounds decision 4's host-neutral reason. (b) No Source line.
+  Answer (owner, 2026-11-25): (a).
 - **Q5. Where does the S28 core part end? The recount sends case h's CMS document page to the untrusted-content add-on, case a's tag-strip and entity-decode helpers there only "if the pack keeps them", and case j to the source project's overlay. The id map has one clause entry, UNTRUSTED-007, which #96 writes.**
   (a) Core keeps cases a to i, minus the tag-strip and entity-decode helpers of a and the CMS document sentence of h, which both go to UNTRUSTED-007. Rendering CMS HTML is an add-on by the app premise. (b) Only the CMS sentence of h leaves, and case a stays whole in core. (c) Cases a and h leave whole. #96 needs the same answer.
+  Answer (owner, 2026-11-25): (a). The tag-strip and entity-decode helpers of case a and the CMS-rendered page of case h go to UNTRUSTED-007.
 - **Q6. Conflict C9 asks for one line on why S29 differs from the PHP lesson "The Service Pattern". The lesson is live at https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-service-pattern, and the Sources tab has no S29 row. How is the lesson cited?**
   (a) Link it inside that line in the Why, with no Source line. (b) Add a Source line for it. (c) Name it without a link.
+  Answer (owner, 2026-11-25): (a).
 - **Q7. The entry format shows a Why line on every entry. Only 3 of the 33 frontend rules have one (S8, S9, S13), and the Why of S9 and S13 only quotes the source project's own CLAUDE.md. What do entries without a usable Why get?**
   (a) A one-line neutral Why for every entry, taken from the rule's own reasoning or its approved source where there is one. (b) A Why only on S8, S9 and S13, with S9 and S13 reworded to a neutral reason. (c) A Why only on S8. S9 and S13 lose theirs.
+  Answer (owner, 2026-11-25): (a). The PR lists every Why written fresh, with no reason in the source rule or the sheet.
+
+Owner decisions for every rule issue, 2026-11-25:
+
+- Every entry gets a one-line neutral `Why:` (Q7).
+- Source lines are `- Source: <title> <URL>` or `- Source: <title> vault: Content/<path>.md`, with no quote. A lesson's point goes into the Why. A source that cites the retired upstream skill is replaced by the matching nextjs.org page.
+- A codyssey.dev source is live only when its page title is not "Coming <date>". Checked at write time.
+- The issue's acceptance greps decide what counts as a project name. `vault: Content/` paths may carry the course name.
+- Rules cite other rules by pack id from the id map only.
 
 Drafts of STRUCT-014, STRUCT-019, STRUCT-020, STRUCT-022 and STRUCT-028, written with the recommended options, tested the entry format, the acceptance greps and `check_from.py`. They are kept outside the repo.
