@@ -150,8 +150,42 @@ rule that enforces a rule, where one exists.
 
 ## Shared code and pages
 
+- **STRUCT-028. One definition per helper, service method, component, page scaffold, constant and mutation hook.** Before writing one, search `src/lib` and the feature's `utils/`. A second definition of the same job is a finding, and a local copy with a different regex counts as a second definition, not a variant. Something two features need goes to `src/lib`, or to `global-ui` for a component. **SHOULD.** The cases that recur:
+  - a. Pure helpers: title-case a slug (`capitalizeSlug`), truncate (`truncateText`), sort newest first (`newestFirst`), wait (`wait`), and format a date, a price or a count. All live in `src/lib`, with one definition each, such as `formatPublishDate` in `src/lib/formatDate.ts`, `normalizeExternalUrl` and `capitalizeFirst`. Dates and prices: DATA-059. URLs: ACCESS-003.
+  - b. A count followed by a noun goes through `formatCount(count, 'pallet')` in `src/lib/formatCount.ts`, with an irregular plural passed as the third argument. A new inline `count === 1 ? 'x' : 'xs'` is a finding. The noun alone, with no count, goes through `pluralize(count, singular, plural)` in the same file.
+  - c. Service methods: cookies are read with `getCookie` in `src/lib/getCookie.ts`, and the CSRF cookie request is `csrfService.initializeCsrf` in `src/lib/csrf.service.ts`. Sign-out and sign-in do not expire cookies from script (ACCESS-008).
+  - d. Components: a feature component that does the job of a `global-ui` component wraps it, as its sibling components do, instead of copying its markup.
+  - e. Constants: slug-to-title is `capitalizeSlug` in `src/lib/capitalizeSlug.ts`.
+  - f. A piece rebuilt "to match" another and announced by a comment (`Mirrors DEFAULT_VARIANT`, `Same markup as renderRow`) is a second definition. Import the original instead.
+  - g. A class string of six or more utilities written in three or more files becomes one shared constant.
+  - h. Page scaffolds: pages of one kind share one layout component, such as `StaticPageLayout` (breadcrumb, spacer, text column) for static text pages, not a copy of its grid.
+  - i. Mutation hooks: the same `useMutation`, error report and toast skeleton repeated across hooks is one `useFeatureMutation` wrapper (see DATA-032 for what it owns).
+  - Why: two copies of one job drift, and a fix lands in one while the other keeps the bug, for example two date formatters that disagree on the time zone.
+  - From: S28 (core part)
+- **STRUCT-029. Page protocol steps are shared, not pasted.** The fetch-or-404 step of a server page (`try { fetch } catch { isNotFoundError -> notFound(); throw }`) is one helper `loadOrNotFound(fetcher)`, and the out-of-range check of an archive page is one helper `assertInRange(page, items)`, both in `src/lib/pageData.ts`. The build step follows the fetch: the page data (the JSON-LD and the record the page shows) is built in a function that returns one object, not in several `let` variables assigned inside one `try`. `export const dynamic` and `revalidate` stay literal in each page, because Next.js reads them statically. A page whose only error handling goes through `loadOrNotFound` is correct, and the helper rethrows every error that is not a not-found. **SHOULD.**
+  - Why: a pasted `try` and `catch` drifts from page to page, and one page that swallows an error shows a 404 for an outage.
+  - From: S30
+- **STRUCT-030. Internal page routes come from `src/constants/routes.ts`.** A path to one of the app's own pages (`/sign-in`, `/inventory?tab=archived`, `shipmentRoute(id)`) is an exported constant or a small builder, so a rename touches one file. A `?redirect=` value is built from it with `encodeURIComponent` (ACCESS-002). Literal paths stay in `app/` folder names, the `next.config` file, sitemap data and tests. The rule mirrors DATA-044 for API paths. **SHOULD.**
+  - Why: a page rename touches one file instead of every link to the page, for example moving `/inventory` to `/stock`.
+  - From: S33
+- **STRUCT-031. A function that calls no hook is not named `use<Thing>`.** React and the rules-of-hooks lint rule treat every `use*` name as a hook, so a caller may not call it in a condition or outside a component. A function that calls no `useState`, `useMemo` or other hook is named with a verb and lives outside `hooks/`: `useShipmentTransform` in `shipments/hooks/` becomes `fromApiShipments` in `shipments/utils/`. **SHOULD.**
+  - Why: a `use*` name puts the rules of hooks on a plain function, so callers cannot call it in a condition or a loop even though nothing requires it.
+  - From: S34
+
 ## What stays out of the tree
+
+- **STRUCT-032. No dead code.** A change deletes what it makes unused. The tree keeps no module without an importer (outside its own tests and stories), no file that is only commented-out code, no block of commented-out code, and no state nobody reads: a store field, hook return value or component prop with no reader is removed. `knip` (`pnpm knip`, a blocking CI step, with entry points set once in `knip.json`) checks the first half and reports unused packages. The second half is review. **SHOULD.**
+  - Why: dead code still costs reading time, search hits and upgrade work, and a reader cannot tell it is dead, for example an unused export that every refactor keeps updating.
+  - From: S27
 
 ## Docs and rule files
 
+- **STRUCT-033. A doc names major versions only.** Version numbers live in `package.json`. A doc that must name a tool writes "Next.js 16", not "16.1.1". An MDX page or doc does not restate a value the code defines (sizes, class strings, prop tables). It links to the file. **SHOULD.**
+  - Why: a patch number in a doc goes stale with the next upgrade, and a restated value drifts from the code it copies.
+  - From: S25
+
 ## What is NOT a violation
+
+- Relative imports within one feature folder.
+- Hooks and components outside feature folders in `src/lib/` and `src/providers/` (`useAuth`, `useMediaQuery`): shared by design.
+- Tests beside their file in `src/lib/` and `app/`: see TYPES-018.
