@@ -43,7 +43,7 @@ python3 <skill dir>/scripts/check-policy.py --record <record> --repo <repo> --mo
 The script prints one JSON object and exits 0, 1 or 2.
 
 - Exit 1 (`stop`): report each entry of `blocking` with its field and reason. Read nothing else in the repo. Stop.
-- Exit 0 (`continue`): keep `warnings` for the standards report. Treat the patterns of each `ignore-file` warning as paths not to read in later steps. A `symlink` or `unreadable` warning names a policy file the check did not read.
+- Exit 0 (`continue`): keep `warnings` for the standards report. A `symlink` or `unreadable` warning names a policy file the check did not read. The ignore files themselves are applied by the inventory, from the commit it reads.
 - Exit 2: the command was wrong. Fix the arguments.
 
 On `continue` the script has opened only `.aiignore`, `.cursorignore`, the root `README`, and `CONTRIBUTING` at the root, in `.github/` and in `docs/`. A warning is not a stop. It is a line in the report for the owner to read.
@@ -54,10 +54,10 @@ On `continue` the script has opened only `.aiignore`, `.cursorignore`, the root 
 python3 <skill dir>/scripts/inventory.py --policy <work>/policy.json --repo <repo> > <work>/inventory.json
 ```
 
-The script reads the tracked files through git and prints the paths that may be read, by kind, plus `ignored`, sibling files, the last commit subjects, the branch names and `read_at`, the commit all later checks use.
+The script reads the tracked files through git and prints the paths that may be read, by kind, plus `ignored`, sibling files, the last commit subjects, the branch names and `read_at`, the commit all later checks use. It reads `.aiignore` and `.cursorignore` from `read_at`, matches each file's patterns with git's own matcher, and joins the results, so a `!` line in one file cannot bring back what the other hides. `--repo` is the top level of the checkout, not a folder inside it.
 
 - `no-code`: the tracked tree has no source file and no rule source. Tell the owner the repo stays canon-first until the client has rules of their own. Write no overlay. Stop.
-- Exit 1 (`stop`): the ignore patterns are unknown, or a listed file differs from `HEAD`. Report the reason. Ask the owner to fix the cause, then rerun.
+- Exit 1 (`stop`): an ignore file at `read_at` is a symlink, a folder or a gitlink, so its patterns are unknown; a working-tree `.aiignore` or `.cursorignore` differs from `read_at`; a listed file differs from `HEAD`; or `--repo` is not the top level. Report the reason. Ask the owner to fix the cause, then rerun.
 - Exit 0 (`inventory`): go on.
 
 ## Step 3: read

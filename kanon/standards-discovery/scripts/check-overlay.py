@@ -20,7 +20,6 @@ import importlib.util
 import json
 import os
 import re
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +41,9 @@ def _sibling(name):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+inventory = _sibling("inventory.py")
 
 
 def collapse(text):
@@ -404,9 +406,7 @@ def parse_report(text):
 # ---------- citations ----------
 
 def _git(repo, *args):
-    return subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, *args], capture_output=True,
-    )
+    return inventory.git(repo, *args)
 
 
 def _out(proc):
@@ -506,19 +506,21 @@ def check_work(work, repo, kanon_root):
     def add(where, problem):
         problems.append({"where": where, "problem": problem})
 
-    policy_mod, inventory = _sibling("check-policy.py"), _sibling("inventory.py")
+    policy_mod = _sibling("check-policy.py")
     kanon = load_kanon(kanon_root)
 
-    patterns = None
     try:
         policy = json.loads(_read(os.path.join(work, "policy.json")))
         if policy.get("result") != "continue":
             add("policy.json", "the policy check did not say continue")
-        patterns = inventory.ignore_patterns(policy)
     except (OSError, ValueError, AttributeError) as error:
         add("policy.json", f"missing or unreadable in the work folder: {error}")
+    try:
+        inventory.require_top_level(repo)
+        repo_ok = True
     except inventory.Stop as stop:
-        add("policy.json", str(stop))
+        add("--repo", str(stop))
+        repo_ok = False
     listing = None
     try:
         listing = json.loads(_read(os.path.join(work, "inventory.json")))
@@ -556,7 +558,7 @@ def check_work(work, repo, kanon_root):
         add("standards-report.md", "missing in the work folder")
     problems.extend(report_problems)
     sha = None
-    if report and report["read_at"]:
+    if repo_ok and report and report["read_at"]:
         sha = resolve_commit(repo, report["read_at"].lower())
         if sha is None:
             add("Read at", f"{report['read_at']} is not a commit in the repo")
@@ -564,11 +566,13 @@ def check_work(work, repo, kanon_root):
             add("Read at", f"{sha} differs from read_at in inventory.json ({inventory_read_at})")
             sha = None
     ignored = set()
-    if sha and patterns:
+    if sha:
         try:
-            ignored = inventory.ignored_by(repo, patterns, sha)
+            committed = inventory.ignore_files_at(repo, sha)
+            inventory.require_same_ignore_files(repo, committed)
+            ignored = inventory.ignored_paths(repo, sha, committed)
         except inventory.Stop as stop:
-            add("policy.json", str(stop))
+            add("ignore files", str(stop))
             sha = None
 
     # each overlay entry

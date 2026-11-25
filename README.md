@@ -35,7 +35,7 @@ Five folders, five different jobs:
 - `standards-discovery`: reads a client's codebase and writes its conventions as a standards
   report and a project overlay (project-first mode). Six steps: check the client's AI policy
   record (`check-policy.py`, stops when the record is missing, incomplete or forbids the step),
-  list what may be read (`inventory.py`, tracked files only, policy ignores applied), read, map
+  list what may be read (`inventory.py`, tracked files only, the committed AI ignore files applied), read, map
   each convention to a Kanon rule, check the drafts (`check-overlay.py`: schema, real rule names,
   every `file:line` citation resolved at the commit read) and place them (`place-overlay.py`).
   The overlay is `.ai/kanon.yml` plus prose rules in `.ai/rules/project/`. Where the files go

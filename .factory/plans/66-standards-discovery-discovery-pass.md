@@ -24,7 +24,9 @@ The skill stops after step 1 today.
 |---|---|
 | Policy check exits 1 | The skill stops as in #65. Nothing below runs. |
 | Policy check `continue`, the tracked tree has no source file and no rule source | `inventory.py` prints `no-code`. The skill says the repo stays canon-first and writes no overlay. |
-| `.aiignore` or `.cursorignore` came back as a `symlink` or `unreadable` warning | `inventory.py` stops. The ignore patterns are unknown, so no path is safe to read. |
+| `.aiignore` or `.cursorignore` at `Read at` is a symlink, a folder or a gitlink | `inventory.py` stops. The ignore patterns are unknown, so no path is safe to read. |
+| A working-tree `.aiignore` or `.cursorignore` differs from `Read at`, or exists on one side only | `inventory.py` and `check-overlay.py` stop and name the file. The patterns the owner sees must be the ones the scripts apply. |
+| `--repo` is a folder inside the checkout | All three scripts stop. Every path they print or check is relative to the top level. |
 | A tracked file the inventory would list differs from `HEAD` | `inventory.py` stops and names the files. The agent reads the working tree and the checker reads `Read at`, so the two must agree. |
 | Policy check `continue`, code or rule sources present | `inventory.py` prints the input list. The agent reads it and writes the report, `.ai/kanon.yml` and `.ai/rules/project/*.md` into the work folder in the client's brain. |
 | `check-overlay.py` finds a problem | Exit 1 with every problem. The agent fixes the drafts and reruns. `place-overlay.py` refuses until it passes. |
@@ -120,7 +122,9 @@ standards-report.md
 ```
 
 - The universe is `git ls-files` (tracked files only), never a folder walk. Vendor folders are usually untracked, and `vendor/` and `node_modules/` are dropped too.
-- `ignored` comes from git's own matcher: `git ls-files -z -c -i -x <pattern>...` with the patterns of every `ignore-file` warning in `policy.json`. An ignored path appears in no other list. A `symlink` or `unreadable` warning on `.aiignore` or `.cursorignore` stops the inventory, because the patterns are unknown.
+- `ignored` comes from git's own matcher. The root `.aiignore` and `.cursorignore` (names matched without regard to case) are read from `read_at` with `ls-tree --full-tree` and `cat-file` on a regular-file blob. A symlink, a folder or a gitlink stops the inventory, because the patterns are unknown. Each file's patterns run through their own `git ls-files -z -c -i --exclude=<pattern>...`, once on the index and once on a temporary index of `read_at`, and the results are joined. A `!` line in one file cannot bring back what the other hides. `policy.json` is not an input to the ignore set (2026-11-25). An ignored path appears in no other list.
+- A working-tree `.aiignore` or `.cursorignore` that differs from `read_at`, including one present on one side only, stops the inventory and the overlay check.
+- `--repo` must be the top level of the checkout (`require_top_level` from `check-policy.py`). Every git call runs with `core.hooksPath=/dev/null`, `core.fsmonitor=false` and `core.splitIndex=false`.
 - Tracked symlinks and submodules (`git ls-files -s` modes `120000` and `160000`) are dropped from every list. A symlink can point outside the repo.
 - A listed path that differs from `HEAD` (`git --no-optional-locks diff --name-only HEAD`) stops the inventory with the paths.
 - `sources` match the issue's list. Instructions: `CLAUDE.md` at any depth, `AGENTS.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`. Docs: root `README*`, `CONTRIBUTING*` at root, `.github/` and `docs/`, and `docs/**/*.md|rst|txt` (ADRs included). Linters: PHP CS Fixer, Pint, PHP_CodeSniffer, PHPStan, Deptrac, PHPArkitect, Rector, ESLint configs by their file names. CI: `.github/workflows/*.yml|yaml`, `.gitlab-ci.yml`, `bitbucket-pipelines.yml`, `Jenkinsfile`. Scripts: `composer.json`, `package.json`. PR templates: the GitHub locations.
@@ -185,7 +189,7 @@ paths:
 check-overlay.py --work <dir> --repo <client repo> [--kanon-root <dir>]
 ```
 
-One JSON object, `{"result": "ok" | "invalid", "problems": [{"where": "...", "problem": "..."}]}`. Exit 0 ok, 1 invalid, 2 usage. It reads `policy.json` from the work folder for the ignore patterns, so a citation into an ignored path fails. Pieces: `parse_kanon_yml(text)`, `validate(schema, value)` (a port of `walk` in `kanon/scripts/catalog.mjs:73-130`), `load_kanon(root)`, `resolve(entry, kanon)`, `parse_report(text)`, `check_citation(repo, sha, item, ignored)`, `main(argv)`. Only `main` reads files and runs git.
+One JSON object, `{"result": "ok" | "invalid", "problems": [{"where": "...", "problem": "..."}]}`. Exit 0 ok, 1 invalid, 2 usage. It reads the ignore files from `Read at` the same way `inventory.py` does, so a citation into an ignored path fails whatever `policy.json` says. The work folder is a record the model writes, never an input to a safety check. Pieces: `parse_kanon_yml(text)`, `validate(schema, value)` (a port of `walk` in `kanon/scripts/catalog.mjs:73-130`), `load_kanon(root)`, `resolve(entry, kanon)`, `parse_report(text)`, `check_citation(repo, sha, item, ignored)`, `main(argv)`. Only `main` reads files and runs git.
 
 ### `place-overlay.py`
 
@@ -273,7 +277,8 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `inventory of the fixture` (`test_inventory.py`) | The JSON above: sources by kind, siblings, `ignored`, `read_at` equals `HEAD`, subjects, branches | fails |
 | `inventory needs a continue` | A `stop` policy JSON: exit 1, and no git command runs in the repo | fails |
 | `ignore patterns use git's matcher` | `secrets` matches `a/secrets/k.php`, `**/secret*` matches `secrets/k.php`, a negated child of an ignored folder stays ignored | fails |
-| `ignore file not readable` | A policy JSON with a `symlink` warning on `.aiignore`: exit 1, nothing listed | fails |
+| `ignore files at read_at` | Two ignore files where `.cursorignore` holds `!*.php`: the path `.aiignore` hides stays ignored. A `policy.json` without ignore warnings still ignores, in the inventory and the overlay check. An uncommitted ignore line, an untracked `.cursorignore` and a deleted `.aiignore` stop. A committed symlink, folder or gitlink `.aiignore` stops with nothing listed | fails |
+| `client git config` | With `core.splitIndex=true`, the inventory and the check add no file under the repo and change no bytes (git still refreshes the shared index's mtime on any read of a split index). A folder inside the repo as `--repo` stops | fails |
 | `symlinks and dirty paths` | A tracked symlink and a submodule appear in no list. An edited `CLAUDE.md` stops with its path | fails |
 | `no code` | An unborn repo and a repo with `README.md` and `composer.json` give `no-code`. A repo with only `README.md` and `CLAUDE.md` gives `inventory` | fails |
 | `inventory writes nothing` | A snapshot of every file under the repo, `.git` included (bytes and mtime), is the same before and after | fails |
@@ -490,6 +495,7 @@ i. How much of discovery is a script.
    Decided 2026-11-24 by the owner: A.
    - **A. A script lists the inputs and the agent reads them (recommended).** Tracked files only, policy ignores through git's matcher, sources by kind, siblings, commit and branch lists, `read_at`, `no-code`. The ignore handling and the no-code rule get tests.
    - B. Prose in `SKILL.md` only. Nothing to build, and nothing proves an ignored path stays unread.
+   Revised 2026-11-25 by the owner: the scripts read `.aiignore` and `.cursorignore` from `Read at` through git, match each file in its own `ls-files` run against the index and the `Read at` tree, and join the results. A working-tree ignore file that differs from `Read at` stops `inventory.py` and `check-overlay.py`. `policy.json` is no longer an input to the ignore set.
    - C. A, plus extracting settings from configs (PHP CS Fixer rules, the PHPStan level). Deterministic for those, but one parser per tool, and a PHP CS Fixer config is PHP code.
 
 j. The report format.

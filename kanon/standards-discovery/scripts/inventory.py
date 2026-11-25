@@ -7,21 +7,29 @@
 Exit 0 for `inventory` and `no-code`, 1 for `stop`, 2 for bad usage.
 
 The universe is the tracked files (`git ls-files`), never a folder walk. Paths the client's ignore
-files cover, symlinks and submodules appear in no list. The script reads through git only and runs
-no command that writes: every call is `git --no-optional-locks`. Stdlib only.
+files cover, symlinks and submodules appear in no list. The ignore files are read from the `read_at`
+commit through git, never from policy.json, and a working-tree copy that differs stops the run. The
+script reads through git only and runs no command that writes in the repo: every call is
+`git --no-optional-locks`, with hooks, fsmonitor and the split index turned off. Stdlib only.
 """
 import argparse
 import collections
+import importlib.util
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 IGNORE_FILES = (".aiignore", ".cursorignore")
 DROPPED_FOLDERS = ("vendor", "node_modules")
 SYMLINK, GITLINK = "120000", "160000"
+REGULAR = ("100644", "100755")
+NOT_A_FILE = {SYMLINK: "symlink", GITLINK: "gitlink", "040000": "folder"}
+GIT_CONFIG = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.splitIndex=false")
 
 _DOCS_TEXT = r"(\.(md|markdown|rst|txt))?"
 SOURCE_KINDS = {
@@ -52,10 +60,19 @@ class Stop(Exception):
 
 
 def git(repo, *args, env=None):
-    """Run a read-only git command in repo. Returns the CompletedProcess."""
-    return subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo, *args], capture_output=True, env=env,
-    )
+    """Run a git command in repo that writes nothing there. Returns the CompletedProcess."""
+    return subprocess.run(["git", "--no-optional-locks", *GIT_CONFIG, "-C", repo, *args], capture_output=True, env=env)
+
+
+def require_top_level(repo):
+    """Raises Stop unless repo is the top level of a git work tree. Every path in the output is relative to it."""
+    spec = importlib.util.spec_from_file_location("check_policy", os.path.join(HERE, "check-policy.py"))
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    try:
+        policy.require_top_level(repo)
+    except RuntimeError as error:
+        raise Stop(str(error))
 
 
 def _text(proc):
@@ -66,15 +83,66 @@ def _names(proc):
     return [name for name in _text(proc).split("\0") if name]
 
 
-def ignore_patterns(policy):
-    """The patterns of every ignore-file warning. Raises Stop when an ignore file was not read."""
-    patterns = []
-    for warning in policy.get("warnings", []):
-        if warning.get("file") in IGNORE_FILES and warning.get("signal") in ("symlink", "unreadable"):
-            raise Stop(f"{warning['file']} was not read ({warning['signal']}), so the ignore patterns are unknown")
-        if warning.get("signal") == "ignore-file":
-            patterns.extend(warning.get("patterns", []))
-    return patterns
+def ignore_files_at(repo, sha):
+    """{name: bytes} of the root ignore files at sha, names matched without regard to case.
+
+    Raises Stop when one is a symlink, a folder or a gitlink, or cannot be read: its patterns are unknown.
+    """
+    listed = git(repo, "ls-tree", "-z", "--full-tree", sha)
+    if listed.returncode != 0:
+        raise Stop(f"cannot list the tree of {sha}")
+    found = {}
+    for entry in _names(listed):
+        meta, _, name = entry.partition("\t")
+        mode, _, oid = meta.split()
+        if name.casefold() not in IGNORE_FILES:
+            continue
+        if mode not in REGULAR:
+            kind = NOT_A_FILE.get(mode, f"mode {mode}")
+            raise Stop(f"{name} at {sha[:7]} is a {kind}, not a regular file, so the ignore patterns are unknown")
+        shown = git(repo, "cat-file", "blob", oid)
+        if shown.returncode != 0:
+            raise Stop(f"cannot read {name} at {sha[:7]}, so the ignore patterns are unknown")
+        found[name] = shown.stdout
+    return found
+
+
+def require_same_ignore_files(repo, committed):
+    """Raises Stop when a root ignore file in the working tree differs from the committed one, or exists on one side only."""
+    try:
+        names = [name for name in os.listdir(repo) if name.casefold() in IGNORE_FILES]
+        on_disk = {}
+        for name in names:
+            path = os.path.join(repo, name)
+            if stat.S_ISREG(os.lstat(path).st_mode):
+                with open(path, "rb") as handle:
+                    on_disk[name] = handle.read()
+            else:
+                on_disk[name] = None
+    except OSError as error:
+        raise Stop(f"cannot read the ignore files in the working tree: {error}")
+    differ = sorted(name for name in set(on_disk) | set(committed) if on_disk.get(name) is None or on_disk[name] != committed.get(name))
+    if differ:
+        raise Stop(", ".join(differ) + " in the working tree differs from read_at. Commit or restore it, then rerun")
+
+
+def ignore_patterns(blob):
+    """The pattern lines of an ignore file: no blank lines, no comments, whitespace trimmed."""
+    lines = blob.decode("utf-8", "replace").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def ignored_paths(repo, sha, committed):
+    """Every tracked path an ignore file at sha covers, in the index or in the tree of sha.
+
+    Each file is matched in its own git run and the results are joined, so a `!` line in one file
+    cannot bring back a path the other hides.
+    """
+    ignored = set()
+    for blob in committed.values():
+        patterns = ignore_patterns(blob)
+        ignored |= ignored_by(repo, patterns) | ignored_by(repo, patterns, sha)
+    return ignored
 
 
 def ignored_by(repo, patterns, sha=None):
@@ -84,9 +152,7 @@ def ignored_by(repo, patterns, sha=None):
     """
     if not patterns:
         return set()
-    args = ["ls-files", "-z", "-c", "-i"]
-    for pattern in patterns:
-        args += ["-x", pattern]
+    args = ["ls-files", "-z", "-c", "-i", *[f"--exclude={pattern}" for pattern in patterns]]
     if sha is None:
         proc = git(repo, *args)
     else:
@@ -149,15 +215,17 @@ def branches(repo):
     return sorted(names)
 
 
-def build(repo, policy):
-    """The inventory for repo. Raises Stop when the policy or the tree says not to read."""
-    patterns = ignore_patterns(policy)
-    if git(repo, "rev-parse", "--git-dir").returncode != 0:
-        raise Stop(f"{repo} is not a git repo")
+def build(repo):
+    """The inventory for repo. Raises Stop when the tree says not to read."""
+    require_top_level(repo)
     head_proc = git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}")
     read_at = _text(head_proc).strip() or None
     universe = tracked_files(repo)
-    ignored = ignored_by(repo, patterns)
+    ignored = set()
+    if read_at:
+        committed = ignore_files_at(repo, read_at)
+        require_same_ignore_files(repo, committed)
+        ignored = ignored_paths(repo, read_at, committed)
     files = [f for f in universe if f not in ignored]
     if read_at is None and files:
         raise Stop("the branch has no commit, so there is nothing to read at a commit")
@@ -201,7 +269,7 @@ def main(argv=None):
             raise Stop(f"cannot read the policy JSON: {error}")
         if not isinstance(policy, dict) or policy.get("result") != "continue":
             raise Stop("the policy check did not say continue")
-        result = build(args.repo, policy)
+        result = build(args.repo)
     except Stop as stop:
         print(json.dumps({"result": "stop", "reason": str(stop)}, indent=2))
         return 1

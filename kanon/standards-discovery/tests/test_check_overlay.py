@@ -432,6 +432,26 @@ class ReadAtAndIgnoredPaths(Golden):
         self.edit("standards-report.md", "branch:feature/ORD-12-cancel-refund", "branch:feature/later")
         self.assertProblem("inventory.json", "feature/later")
 
+    def test_a_policy_json_edited_to_drop_the_warnings_still_ignores(self):
+        policy = json.loads(read(self.work, "policy.json"))
+        policy["warnings"] = [w for w in policy["warnings"] if w.get("signal") != "ignore-file"]
+        put(self.work, "policy.json", json.dumps(policy))
+        self.edit(
+            "standards-report.md",
+            '`app/Orders/CreateOrderHandler.php:13` "DB::transaction"',
+            '`app/Legacy/OldBilling.php:3` "secret pricing"',
+        )
+        self.assertProblem("app/Legacy/OldBilling.php:3", "ignored")
+
+    def test_an_uncommitted_ignore_line_is_a_problem(self):
+        put(self.repo, ".aiignore", read(self.repo, ".aiignore") + "app/Orders/\n")
+        self.assertProblem(".aiignore", "differs")
+
+    def test_a_folder_inside_the_repo_is_a_problem(self):
+        code, result = run_json("check-overlay.py", "--work", self.work, "--repo", os.path.join(self.repo, "app"), "--kanon-root", REPO_ROOT)
+        self.assertEqual(code, 1)
+        self.assertIn("top level", json.dumps(result["problems"]))
+
     def test_ignored_by_can_match_the_tree_of_a_commit(self):
         git(self.repo, "rm", "-q", "--cached", "app/Legacy/OldBilling.php")
         inventory = load_script("inventory.py")

@@ -8,6 +8,7 @@ from unittest import mock
 
 import fixture_support as fs
 from fixture_support import RECORDS, TempDirs, git, load_script, put, run_json, run_script
+from fixture_support import read as read_text
 
 
 def inv():
@@ -156,24 +157,103 @@ class IgnorePatterns(Inventory):
         self.assertEqual(inv().ignored_by(self.repo, []), set())
 
 
-class IgnoreFileNotReadable(Inventory):
-    def test_a_symlink_warning_on_an_ignore_file_stops(self):
+class IgnoreFilesAtReadAt(Inventory):
+    """The ignore files are read from the read_at commit through git, never from policy.json."""
+
+    def listed(self, out):
+        return [p for paths in out["sources"].values() for p in paths] + [p for v in out["siblings"].values() for p in v]
+
+    def test_a_negation_in_one_file_cannot_unignore_what_the_other_hides(self):
+        repo = self.plain_repo({
+            ".aiignore": "config/secrets.php\n", ".cursorignore": "*.log\n!*.php\n",
+            "config/secrets.php": "<?php return ['key' => 'live'];\n", "app/AHandler.php": "<?php\n", "CLAUDE.md": "x\n",
+        })
+        code, out = self.run_inventory(repo, self.policy(repo))
+        self.assertEqual(code, 0, out)
+        self.assertIn("config/secrets.php", out["ignored"])
+        self.assertNotIn("config/secrets.php", self.listed(out))
+
+    def test_a_policy_json_without_ignore_warnings_still_ignores(self):
         repo, _ = self.client()
-        policy = self.fake_policy([{"file": ".aiignore", "signal": "symlink"}])
+        code, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["ignored"], ["app/Legacy/OldBilling.php"])
+        self.assertNotIn("Billing", out["siblings"])
+
+    def test_an_uncommitted_ignore_line_stops(self):
+        repo, _ = self.client()
+        policy = self.policy(repo)
+        put(repo, ".aiignore", read_text(repo, ".aiignore") + "app/Orders/\n")
         code, out = self.run_inventory(repo, policy)
         self.assertEqual((code, out["result"]), (1, "stop"))
+        self.assertIn(".aiignore", out["reason"])
         self.assertNotIn("sources", out)
-        self.assertIn(".aiignore", json.dumps(out))
 
-    def test_an_unreadable_warning_on_cursorignore_stops(self):
+    def test_an_untracked_cursorignore_stops(self):
         repo, _ = self.client()
-        policy = self.fake_policy([{"file": ".cursorignore", "signal": "unreadable"}])
+        policy = self.policy(repo)
+        put(repo, ".cursorignore", "app/Orders/\n")
+        code, out = self.run_inventory(repo, policy)
+        self.assertEqual(code, 1)
+        self.assertIn(".cursorignore", out["reason"])
+
+    def test_a_deleted_ignore_file_in_the_working_tree_stops(self):
+        repo, _ = self.client()
+        policy = self.policy(repo)
+        os.remove(os.path.join(repo, ".aiignore"))
         self.assertEqual(self.run_inventory(repo, policy)[0], 1)
+
+    def commit_ignore_entry(self, repo, kind):
+        os.remove(os.path.join(repo, ".aiignore"))
+        if kind == "symlink":
+            os.symlink("/etc/hosts", os.path.join(repo, ".aiignore"))
+        elif kind == "folder":
+            put(repo, ".aiignore/patterns", "app/Legacy/\n")
+        git(repo, "add", "-A")
+        if kind == "gitlink":
+            git(repo, "update-index", "--add", "--cacheinfo", f"160000,{git(repo, 'rev-parse', 'HEAD')},.aiignore")
+        git(repo, "commit", "-q", "-m", f"ignore file as a {kind}")
+
+    def test_an_ignore_file_that_is_a_symlink_folder_or_gitlink_at_read_at_stops(self):
+        for kind in ("symlink", "folder", "gitlink"):
+            with self.subTest(kind=kind):
+                repo, _ = self.client()
+                self.commit_ignore_entry(repo, kind)
+                code, out = self.run_inventory(repo, self.fake_policy())
+                self.assertEqual((code, out["result"]), (1, "stop"), out)
+                self.assertIn(".aiignore", out["reason"])
+                self.assertNotIn("sources", out)
 
     def test_a_symlink_warning_on_another_file_does_not_stop(self):
         repo, _ = self.client()
         policy = self.fake_policy([{"file": "docs", "signal": "symlink"}])
         self.assertEqual(self.run_inventory(repo, policy)[0], 0)
+
+
+class GitConfigOfTheClient(Inventory):
+    def test_a_split_index_repo_is_left_unchanged(self):
+        repo, info = self.client()
+        git(repo, "config", "core.splitIndex", "true")
+        git(repo, "update-index", "--split-index")
+        work = fs.make_work(info, os.path.join(self.tmp(), "work"), os.path.join(RECORDS, "allowing.md"), repo)
+        before = fs.snapshot(repo)
+        code, _ = self.run_inventory(repo, os.path.join(work, "policy.json"))
+        self.assertEqual(code, 0)
+        code, out = run_json("check-overlay.py", "--work", work, "--repo", repo, "--kanon-root", fs.REPO_ROOT)
+        self.assertEqual((code, out["result"]), (0, "ok"), out)
+        self.assertEqual(self.without_shared_index_mtime(fs.snapshot(repo)), self.without_shared_index_mtime(before))
+
+    @staticmethod
+    def without_shared_index_mtime(snap):
+        # git refreshes the mtime of .git/sharedindex.<sha> on every read of a split index (read-cache.c,
+        # freshen_shared_index). Bytes still count, and so does any new file, such as a second shared index.
+        return {path: (value[0] if path.startswith(".git/sharedindex.") else value) for path, value in snap.items()}
+
+    def test_a_folder_inside_the_repo_stops(self):
+        repo, _ = self.client()
+        code, out = self.run_inventory(os.path.join(repo, "app"), self.fake_policy())
+        self.assertEqual((code, out["result"]), (1, "stop"))
+        self.assertIn("top level", out["reason"])
 
 
 class SymlinksAndDirtyPaths(Inventory):
