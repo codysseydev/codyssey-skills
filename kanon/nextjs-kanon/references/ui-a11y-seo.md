@@ -358,11 +358,138 @@ rule that enforces a rule, where one exists.
 
 ## Components and primitives
 
+- **UI-040. Use the primitives in `src/features/global-ui/` before hand-building a control.**
+  `Button`, `Input`, `Select`, `Spinner`, `Skeleton`, `Badge`, `EmptyState` and `ErrorState`,
+  unless the control is a tab, toggle, accordion header or menu item, or no `Button` variant
+  fits. A raw `<button>` sets `type` (UI-031), and a call site does not restyle a primitive
+  (UI-007). **SHOULD.**
+  - Why: a hand-built control misses the focus, size and state handling the primitive already
+    has.
+  - From: U38
+
+- **UI-041. One dialog approach across the app.** Every modal uses the same dialog component,
+  and a confirmation uses one shared confirm dialog built on it. A second dialog library or a
+  hand-built overlay is not added. **SHOULD.**
+  - Why: one approach gives every modal the same focus, Escape and scroll-lock behavior, and
+    one place to fix it.
+  - From: U39 (core part)
+
+- **UI-042. A new component in `src/features/global-ui/` is added to the component catalog,
+  `docs/reference/global-ui-components.md`.** **SHOULD.**
+  - Why: the catalog is where a developer looks before building a control, so a component
+    missing from it gets built twice.
+  - From: U46
+
+- **UI-043. Fonts load only with `next/font` in the root layout and are used through the CSS
+  variables.** No font `<link>`, no `@font-face` in app code, and no font family name in
+  `className` or an inline style. Add a face or weight by editing the `next/font` call in
+  `app/layout.tsx`, then the copy in the Storybook stylesheet, since Storybook cannot use
+  `next/font`. The `ch` unit ban of UI-018 also applies to font-dependent widths. **SHOULD.**
+  - Why: `next/font` self-hosts the files and preloads the root layout font on every route, so
+    a font loaded another way arrives later and shifts the text.
+  - Source: Next.js, Font Module https://nextjs.org/docs/app/api-reference/components/font
+  - From: U30
+
+- **UI-044. Index keys only for static or skeleton lists.** A list built from data keys each
+  item by a stable id. Oxlint's `react/jsx-key` is on; `react/no-array-index-key` is not
+  enabled. **SHOULD.**
+  - Why: an index key reattaches state and focus to the wrong item when a data list is
+    reordered, filtered or grows at the front.
+  - From: U48
+
+- **UI-045. Scroll, touch and wheel listeners that never call `preventDefault` pass
+  `{ passive: true }`.** **SHOULD.**
+  - Why: a passive listener lets the browser scroll immediately.
+  - Source: Vercel React best practices, client-passive-event-listeners https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/client-passive-event-listeners.md
+  - From: U51
+
 ## Links and navigation
+
+- **UI-046. A new tab is opened safely, through one helper.** `openExternal(url)` in
+  `src/lib/openExternal.ts` calls `window.open(url, '_blank', 'noopener,noreferrer')`, and no
+  other file calls `window.open`. An anchor with `target="_blank"` carries
+  `rel="noopener noreferrer"`. No lint rule enforces this. **SHOULD.**
+  - Why: without `noopener`, the opened page can reach `window.opener`.
+  - From: U26
+
+- **UI-047. Internal links use `next/link`; an external URL is a plain `<a>`.** A plain
+  `<a href>` is for external URLs, hash anchors and `app/global-error.tsx`, which renders
+  outside the root layout. An external URL that opens in a new tab is
+  `<a href target="_blank" rel="noopener noreferrer">`, never a `next/link`. The
+  `@next/next/no-html-link-for-pages` lint rule does not see a path served by a rewrite in
+  `next.config`, so check such links by hand. **SHOULD.**
+  - Why: `next/link` prefetches and navigates on the client inside the app, while for an
+    external URL it adds nothing and hides the new-tab attributes UI-046 asks for.
+  - Source: Next.js, Link Component https://nextjs.org/docs/app/api-reference/components/link
+  - From: U27
+
+- **UI-048. A navigation is a `Link`, not a `Button` that calls `router.push`.** Card and
+  call-to-action navigations render `next/link` (with the hover-prefetch link of UI-049 inside
+  a list), so a crawler gets an `<a href>`. A redirect after a submit or an action stays
+  `router.push`. **SHOULD.**
+  - Why: a crawler follows an `<a href>` and not a click handler, so a page reached only
+    through `router.push` gets fewer internal links.
+  - From: U36
+
+- **UI-049. Every link inside a `.map` is a `HoverPrefetchLink`** from
+  `src/features/global-ui/links/HoverPrefetchLink`, which prefetches on hover instead of on
+  render. **SHOULD.**
+  - Why: `next/link` prefetches on render, so a long list of links can flood the API with
+    prefetch requests.
+  - From: U37
 
 ## Forms
 
+- **UI-050. A field that asks for a WCAG 1.3.5 input purpose sets `autoComplete`.** That covers
+  email, new and current password, given and family name, telephone and address. A field for
+  someone else's details, such as an invite form, sets `autoComplete="off"`. **SHOULD.**
+  - Why: the token tells the browser what to fill, which saves typing and errors, most of all
+    for readers with motor or memory impairments.
+  - From: U50
+
 ## Images and assets
+
+- **UI-051. Use `next/image`, never `<img>`.** Test files and story mocks are exempt. Preloading
+  content images is DATA-020. **MUST.**
+  - Why: `next/image` resizes, serves modern formats and reserves the image box, which a bare
+    `<img>` does not.
+  - Check: lint `@next/next/no-img-element`.
+  - From: U13
+
+- **UI-052. `<Image fill>` always sets `sizes`; content images use the shared
+  `contentImageSizes` helper.** **SHOULD.**
+  - Why: without `sizes`, a `fill` image downloads the largest width in its `srcset`, whatever
+    size it renders at.
+  - Source: Next.js, Image Component https://nextjs.org/docs/app/api-reference/components/image
+  - From: U45
+
+- **UI-053. An image that can be the largest element above the fold is not lazy.** Never pass
+  `priority` to `next/image`. Give a known LCP image `preload`. Give any other image that may
+  be above the fold `loading="eager"` with `fetchPriority="high"`. Never both on one image.
+  Carousel cards and images below the fold stay lazy. Preloading content images is DATA-020.
+  **SHOULD.**
+  - Why: a lazy LCP image starts loading late and delays the largest paint, and `priority` is
+    deprecated since Next.js 16.
+  - Source: web.dev, Optimize Largest Contentful Paint https://web.dev/articles/optimize-lcp
+  - Source: Next.js, Image Component https://nextjs.org/docs/app/api-reference/components/image
+  - From: U63
+
+- **UI-054. Remote image hosts are an exact allowlist.** `images.remotePatterns` in
+  `next.config` names each host exactly, such as `assets.example.com`, with no wildcard. A host
+  used only in development, such as a local API host, is added only when the build is not
+  production. **SHOULD.**
+  - Why: a wildcard lets images from any matching host through the image optimizer, so the
+    app pays to resize them.
+  - Source: Next.js, Image Component https://nextjs.org/docs/app/api-reference/components/image
+  - From: U52
+
+- **UI-055. Files in `public/assets/` are never replaced in place.** A changed file gets a new
+  name. A file that has to change under the same name goes in another `public/` folder, such
+  as `public/images/` or `public/icons/`. Before deleting a file from `public/`, search the
+  code and the content for its path. **MUST.**
+  - Why: the folder is served with a long immutable cache lifetime, so browsers and caches keep
+    the old bytes of a file replaced under the same name.
+  - From: U47 (core part)
 
 ## Page metadata
 
