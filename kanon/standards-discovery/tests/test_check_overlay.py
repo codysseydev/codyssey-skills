@@ -139,6 +139,22 @@ class ParseErrors(unittest.TestCase):
     def test_a_plain_value_that_looks_like_a_number_needs_quotes(self):
         self.fails("mode: project-first\noverlay:\n  - id: ORCH-011\n    evidence:\n      - 12:30\n", 5, "quote this value")
 
+    def test_line_break_characters_yaml_readers_disagree_on_are_refused(self):
+        entry = "mode: project-first\noverlay:\n  - id: ORCH-011\n    effect: adopt\n    evidence:\n      - 'CLAUDE.md:1'\n"
+        for char in ("\x85", "\u2028", "\u2029", "\r"):
+            with self.subTest(char=repr(char)):
+                self.fails(entry + f"# note{char}  - id: ORCH-008\n", 7, "line break")
+                self.fails(entry.replace("'CLAUDE.md:1'", f"'CLAUDE.md{char}:1'"), 6, "line break")
+
+    def test_crlf_line_endings_are_read(self):
+        parsed = co().parse_kanon_yml("mode: project-first\r\noverlay:\r\n  - id: ORCH-011\r\n")
+        self.assertEqual(parsed["overlay"], [{"id": "ORCH-011"}])
+
+    def test_a_double_quoted_escape_other_than_quote_and_backslash_is_refused(self):
+        for escape in ("\\/", "\\n", "\\t", "\\u0041", "\\b"):
+            with self.subTest(escape=escape):
+                self.fails(f'mode: "project{escape}first"\n', 1, "escape")
+
     def test_a_single_quoted_string_keeps_backslashes_and_doubles_its_quotes(self):
         parsed = co().parse_kanon_yml("mode: project-first\noverlay:\n  - note: 'the project''s `Tests\\TestCase`.'\n")
         self.assertEqual(parsed["overlay"][0]["note"], "the project's `Tests\\TestCase`.")

@@ -44,7 +44,8 @@ A convention the Kanon has no rule for is not an overlay entry. It gets a `proje
 The file is read by a strict subset parser, and by other YAML readers in the client's tools. The subset gives every reader the same values.
 
 - `mode:` and `overlay:` sit at column 0, `mode:` once. `overlay:` has at least one item: YAML readers take a bare `overlay:` as null, not as an empty list. Items are `  - key: value`, keys `    key: value`, list items `      - value`. Spaces only, no tabs. Full-line `#` comments are fine.
-- A value is a plain word with no spaces, no `: ` and no ` #`, or a single-quoted string (`''` for a quote, backslashes literal), or a JSON double-quoted string.
+- A value is a plain word with no spaces, no `: ` and no ` #`, or a single-quoted string (`''` for a quote, backslashes literal), or a double-quoted string whose only escapes are `\"` and `\\`. Other escapes differ between YAML versions, so use a single-quoted string.
+- Lines end with `\n` (or `\r\n`). U+0085, U+2028, U+2029 and a lone carriage return are refused anywhere, comments included: some YAML readers break lines on them and others do not.
 - Quote `off`, `on`, `yes`, `no`, `true`, `false`, `y`, `n`, `null` and `~`. Some YAML readers turn a plain `off` into a boolean. The parser stops on the plain form and names the line.
 - Quote anything with a space, a colon followed by a space, or a hash after a space.
 

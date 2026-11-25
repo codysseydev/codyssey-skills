@@ -53,12 +53,17 @@ def collapse(text):
 # ---------- .ai/kanon.yml: the strict subset ----------
 
 YAML_WORDS = {"off", "on", "yes", "no", "true", "false", "y", "n", "null", "~"}
+# YAML 1.1 readers break lines on these and YAML 1.2 readers do not, so the two can read different values.
+ODD_BREAKS = {"\x85": "U+0085", "\u2028": "U+2028", "\u2029": "U+2029", "\r": "a carriage return without a line feed"}
 PLAIN = re.compile(r"[A-Za-z_./][A-Za-z0-9_./+:-]*")
 
 
 def _scalar(text, number):
     text = text.strip()
     if text.startswith('"'):
+        escapes = re.findall(r"\\(.)", text[1:-1])
+        if any(escaped not in ('"', "\\") for escaped in escapes):
+            raise ValueError(f"line {number}: a double-quoted string may only escape \\\" and \\\\; use a single-quoted string")
         try:
             value = json.loads(text)
         except ValueError as error:
@@ -86,7 +91,11 @@ def parse_kanon_yml(text):
     """
     out = {}
     top = item = sub = None
-    for number, line in enumerate(text.splitlines(), start=1):
+    for number, line in enumerate(text.split("\n"), start=1):
+        line = line.removesuffix("\r")
+        for char, name in ODD_BREAKS.items():
+            if char in line:
+                raise ValueError(f"line {number}: {name} is a line break to some YAML readers and not to others")
         line = line.rstrip()
         if not line.strip() or line.lstrip().startswith("#"):
             continue

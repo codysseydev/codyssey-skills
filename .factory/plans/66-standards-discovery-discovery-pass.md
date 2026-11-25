@@ -69,7 +69,7 @@ overlay:
 
 The committed schema is `kanon/standards-discovery/references/kanon-yml.schema.json`. It uses the keyword subset `kanon/catalog/schema.json` uses (`type`, `required`, `properties`, `additionalProperties`, `enum`, `pattern`, `items`, `minItems`, `oneOf`, `$ref`, `$defs`). An entry is one by-ID shape with `additionalProperties: false`. The `change` needs `rule` check is code, because the subset has no `if`/`then`.
 
-Parsing. Stdlib only, as `check-policy.py` (the repo has no PyYAML: `python3 -c "import yaml"` fails). A strict subset parser accepts only this form: `mode:` at column 0, `overlay:` at column 0, `  - key: value` items, `    key: value` keys, `      - value` list items, and full-line `#` comments. A value is a plain word with no spaces, `: ` or ` #`, a single-quoted string (`''` for a quote, backslashes literal), or a JSON double-quoted string. Anything else stops with the line number and "quote this value". The subset is chosen so YAML 1.1 and 1.2 readers get the same values. Ruby's YAML, a 1.1 reader, read the sample to the same JSON once `off` was quoted (Prototype).
+Parsing. Stdlib only, as `check-policy.py` (the repo has no PyYAML: `python3 -c "import yaml"` fails). A strict subset parser accepts only this form: `mode:` at column 0, `overlay:` at column 0, `  - key: value` items, `    key: value` keys, `      - value` list items, and full-line `#` comments. A value is a plain word with no spaces, `: ` or ` #`, a single-quoted string (`''` for a quote, backslashes literal), or a double-quoted string whose only escapes are `\"` and `\\` (2026-11-25). Anything else stops with the line number and "quote this value". Lines split on `\n` only, and U+0085, U+2028, U+2029 or a lone `\r` anywhere stops with the line number (decision o). The subset is chosen so YAML 1.1 and 1.2 readers get the same values. Ruby's YAML, a 1.1 reader, read the sample to the same JSON once `off` was quoted (Prototype).
 
 Two rules come from the readers around it:
 
@@ -264,7 +264,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 |---|---|---|
 | `golden overlay and report pass` (`test_check_overlay.py`) | The fixture repo and `fixtures/expected/`: exit 0, `ok`, no problems. Acceptance criteria 1 and 2 | fails |
 | `schema mutations` | An unknown effect, empty `evidence`, an unknown key, `id` and `file` in one entry, a missing `mode`, `mode: canon-first`, a bare `overlay:` with no items: each named with its path | fails |
-| `parse errors name the line` | Plain `off`, a ` #` comment after a value, `: ` in a plain value, a tab, a duplicate key, a wrong indent, a second `mode` | fails |
+| `parse errors name the line` | Plain `off`, a ` #` comment after a value, `: ` in a plain value, a tab, a duplicate key, a wrong indent, a second `mode`, U+0085, U+2028, U+2029 or a lone `\r` in a comment or a value, a double-quoted escape other than `\"` and `\\` | fails |
 | `rule resolution` | A made-up ID, an ID of a family without a catalog file (names the family), a `file` and `sentence` entry (the schema refuses it), a report row naming a file and a sentence | fails |
 | `one entry per rule` | Two `ORCH-011` entries | fails |
 | `overlay evidence` | An evidence item on a blank line, past the end, or missing from its row's citations | fails |
@@ -530,3 +530,8 @@ n. A `--repo` that is a folder inside the checkout.
    Decided 2026-11-25 by the owner: A.
    - **A. All three scripts stop unless `--repo` is the top level (recommended).** It matches the registry form of `check-policy.py`, and every path stays relative to the top level. `load` from a subfolder now stops instead of writing `<folder>/.ai/`.
    - B. Revert to the earlier behaviour.
+
+o. Characters YAML readers disagree on in `.ai/kanon.yml`. A U+2028 inside a comment ends the line for this parser and not for YAML 1.2 readers, so an entry can hide in a comment.
+   Decided 2026-11-25 by the owner: A.
+   - **A. Reject `\x85`, U+2028, U+2029, a lone `\r`, and every double-quoted escape except `\"` and `\\`, naming the line (recommended).**
+   - B. Leave them.
