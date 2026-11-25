@@ -321,7 +321,7 @@ rule that enforces a rule, where one exists.
   `placeholderData: (previousData) => previousData` on a query whose key never changes).
   `staleTime: 0` stays a literal where a poll or `fetchQuery` must skip the cache.
   **SHOULD.**
-  - Why: a named timing says what kind of data it is for, and a repeated default hides which hooks really differ from it.
+  - Why: a named timing says what kind of data it is for, and a repeated default hides which hooks differ from it.
   - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
   - From: D74
 
