@@ -20,7 +20,7 @@ Fill `kanon/nextjs-kanon/references/ui-a11y-seo.md` with 70 entries in the entry
 
 - The frontmatter, title, scope paragraph, severity paragraph and section headings stay as #88 wrote them.
 - 70 entries go under the nine section headings, in the order of the table below. The section of each entry is the section its source rule sits in. NX-16 follows U17 and NX-17 follows U29, as the id map orders them.
-- The closing `What is NOT a violation` section gets the source file's own list, generalized, plus the per-rule items that question 4 moves there.
+- The closing `What is NOT a violation` section gets the source file's own list, generalized, plus the per-rule items that question 3 moves there.
 
 Every entry follows these rules:
 
@@ -61,7 +61,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 | UI-002 | U2 (core part) | SHOULD | SHOULD (frontend; wording: Layer calls U2) | - | - | - | - |
 | UI-003 | U3 (core part) | SHOULD | SHOULD (frontend; wording: Layer calls U3) | - | - | - | - |
 | UI-004 | U72 (core part) | SHOULD | SHOULD (frontend; wording: Layer calls U72) | generalize | - | - | - |
-| UI-005 | U31 | MUST | MUST (frontend) | drop flagged Source or note | - | guard-test row UI-005; lint `better-tailwindcss/no-unknown-classes` (Q3) | - |
+| UI-005 | U31 | MUST | MUST (frontend) | drop flagged Source or note | - | guard-test row UI-005; lint `better-tailwindcss/no-unknown-classes` | - |
 | UI-006 | U40 | SHOULD | SHOULD (frontend) | - | Tailwind CSS, styling with utility classes, https://tailwindcss.com/docs/styling-with-utility-classes | - | - |
 | UI-007 | U67 | SHOULD | SHOULD (frontend) | drop flagged Source or note | - | - | - |
 | UI-008 | U41 | SHOULD | SHOULD (frontend) | - | - | - | - |
@@ -86,18 +86,18 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 
 | Pack id | From | Keyword in the frontend | Keyword planned (set by) | Safety-pass fix | Sources planned | Check line planned | Cross-references |
 |---|---|---|---|---|---|---|---|
-| UI-020 | U6 | MUST | MUST (frontend) | generalize | - | lint: Oxlint `jsx-a11y` (Q3) | - |
-| UI-021 | U7 | MUST | MUST (frontend) | - | - | lint `jsx-a11y/label-has-associated-control` (Q3) | - |
+| UI-020 | U6 | MUST | MUST (frontend) | generalize | - | lint: Oxlint `jsx-a11y` | - |
+| UI-021 | U7 | MUST | MUST (frontend) | - | - | lint `jsx-a11y/label-has-associated-control` | - |
 | UI-022 | U8 | MUST | MUST (frontend) | - | - | guard-test row UI-022 | - |
 | UI-023 | U9 | SHOULD | SHOULD (frontend) | - | - | - | - |
-| UI-024 | U10 | MUST | MUST (frontend) | - | - | lint `jsx-a11y/alt-text` (Q3) | - |
+| UI-024 | U10 | MUST | MUST (frontend) | - | - | lint `jsx-a11y/alt-text` | - |
 | UI-025 | U11 | SHOULD | SHOULD (frontend) | - | - | - | - |
 | UI-026 | U12 | SHOULD | SHOULD (frontend) | - | - | - | DATA-049, DATA-050, DATA-051 |
-| UI-027 | U25 | MUST/SHOULD | MUST/SHOULD (frontend) | possible miss: neutral story names, site-name placeholder | - | lint: Oxlint `jsx-a11y` recommended set (Q3) | UI-020, UI-021, UI-024 |
+| UI-027 | U25 | MUST/SHOULD | MUST/SHOULD (frontend) | possible miss: neutral story names, site-name placeholder | - | lint: Oxlint `jsx-a11y` recommended set | UI-020, UI-021, UI-024 |
 | UI-028 | U53 (core part) | SHOULD | SHOULD (frontend) | - | - | - | UI-041 |
 | UI-029 | U54 | SHOULD | SHOULD (frontend) | - | - | - | UI-035 |
 | UI-030 | U55 | SHOULD | SHOULD (frontend) | - | - | - | DATA-017 |
-| UI-031 | U57 | MUST | MUST (frontend) | - | - | lint `react/button-has-type` (Q3) | - |
+| UI-031 | U57 | MUST | MUST (frontend) | - | - | lint `react/button-has-type` | - |
 | UI-032 | U58 (core part) | MUST | MUST (frontend) | - | WCAG 2.2 SC 2.2.1, https://www.w3.org/TR/WCAG22/#timing-adjustable | - | - |
 | UI-033 | U59 | MUST/SHOULD | MUST/SHOULD (frontend) | - | - | - | - |
 | UI-034 | U61 | SHOULD | SHOULD (frontend) | drop flagged Source or note | - | - | - |
@@ -137,7 +137,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 
 | Pack id | From | Keyword in the frontend | Keyword planned (set by) | Safety-pass fix | Sources planned | Check line planned | Cross-references |
 |---|---|---|---|---|---|---|---|
-| UI-051 | U13 | MUST | MUST (frontend) | - | - | lint `@next/next/no-img-element` (Q3) | DATA-020 |
+| UI-051 | U13 | MUST | MUST (frontend) | - | - | lint `@next/next/no-img-element` | DATA-020 |
 | UI-052 | U45 | SHOULD | SHOULD (frontend) | - | Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image (Q2) | - | - |
 | UI-053 | U63 | SHOULD | SHOULD (frontend; wording from the clash list) | - | web.dev, optimize LCP, https://web.dev/articles/optimize-lcp; Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image | - | DATA-020 |
 | UI-054 | U52 | SHOULD | SHOULD (frontend) | generalize | Next.js `Image`, https://nextjs.org/docs/app/api-reference/components/image (Q2) | - | - |
@@ -151,7 +151,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 | UI-057 | U15 | SHOULD | SHOULD (frontend) | possible miss: site-name placeholder | lesson "SEO in a Decoupled Architecture" (vault, draft) | - | UI-066 |
 | UI-058 | U16 | MUST | MUST (frontend) | - | - | - | - |
 | UI-059 | U17 | SHOULD | SHOULD (frontend) | - | - | - | UI-066 |
-| UI-060 | NX-16 | new rule | MUST (Candidates NX-16) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea (Q3) | UI-059, DATA-042 |
+| UI-060 | NX-16 | new rule | MUST (Candidates NX-16) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea | UI-059, DATA-042 |
 | UI-061 | U18 | MUST | MUST (frontend) | - | - | - | - |
 | UI-062 | U19 | SHOULD | SHOULD (frontend) | - | - | - | - |
 | UI-063 | U20 | SHOULD | SHOULD (frontend) | generalize | - | - | - |
@@ -159,7 +159,7 @@ One row per entry, in file order. "Set by" names the input that fixes the keywor
 | UI-065 | U22 | SHOULD | SHOULD (frontend) | - | - | - | - |
 | UI-066 | U28 (core part) | MUST | MUST (frontend; wording: Layer calls U28) | - | - | - | - |
 | UI-067 | U29 (core part) | MUST | MUST (frontend; wording: Layer calls U29) | - | - | - | - |
-| UI-068 | NX-17 | new rule | SHOULD (Candidates NX-17) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea (Q3) | DATA-002, DATA-071, DATA-053 (Q5) |
+| UI-068 | NX-17 | new rule | SHOULD (Candidates NX-17) | - | lesson "SEO in a Decoupled Architecture" (vault, draft) | sheet check idea | DATA-002, DATA-071, DATA-053 (Q4) |
 
 #### Structured data
 
@@ -188,9 +188,10 @@ Counts: 70 rows (58 whole rules, 10 core parts, 2 new rules), matching the id ma
 
 These follow from the issue and the inputs. The PR lists them so the owner can change any of them.
 
+- **Check lines.** The stub #88 merged says "A `Check:` line names the guard-test row or lint rule that enforces a rule, where one exists", and the entry format in `index.md` allows "the sheet's check idea". So besides the four guard-test rows (UI-005, UI-014, UI-015, UI-022), an entry gets a `Check:` line for a lint rule its source rule names (jsx-a11y on UI-020, UI-021, UI-024 and UI-027, `better-tailwindcss/no-unknown-classes` on UI-005, `react/button-has-type` on UI-031, `@next/next/no-img-element` on UI-051), named by rule and not by config file, since #95 has not settled the config file. NX-16 and NX-17 get the sheet's check idea.
 - **Sections.** Each entry sits under the section of its source rule. The id map's numbering already follows that order.
 - **Public doc sources.** The notes policy keeps a Source line that cites a public doc. Twelve source rules cite one without a URL: U23, U30, U40, U49, U51, U58, U60, U62 and U63, plus U27, U45 and U52 (question 2). Each Source line gets the doc's URL, and each quote was checked word for word on the live page on 2026-11-25. U49's quote becomes the page's own wording ("Never `transition: all`."). U30 keeps only its Next.js font quote. The safety pass drops the rest of that Source line.
-- **Draft sources.** The lesson "SEO in a Decoupled Architecture" and the insight "The Injection Bugs Your Blade Templates Are Hiding" are drafts in the vault and are not on https://codyssey.dev/ (both URLs answer 404). U15, U23, NX-16 and NX-17 cite them as `vault: Content/<path>.md`.
+- **Draft sources.** The lesson "SEO in a Decoupled Architecture" and the insight "The Injection Bugs Your Blade Templates Are Hiding" are drafts: the frontmatter of each vault file says draft, and the insight's own slug on https://codyssey.dev/insights/ answers 404. U15, U23, NX-16 and NX-17 cite them as `vault: Content/<path>.md`.
 - **U17.** Its sentence on teasers points at UI-066 instead of the source helper name. The C5 lesson contradiction (a robots `Disallow` over pages that also carry noindex) stays a source-project fix, per decisions 17 and 21. UI-059 and UI-060 do not change because of it.
 - **NX-16.** The text is the sheet row as written, with the keyword moved to the end of the entry. The one production flag is read through the env module, so the entry cites DATA-042.
 - **U63.** The text follows the clash list row. The keyword stays SHOULD, since the clash list sets the wording only.
@@ -202,7 +203,7 @@ These follow from the issue and the inputs. The PR lists them so the owner can c
 
 Run in a scratch folder outside the repo, not committed.
 
-- Eight draft entries in the entry format: UI-002, UI-004, UI-047, UI-053, UI-055, UI-066, UI-067 and UI-068. Each uses the recommended answer to the open questions. The issue's five greps print nothing on them. A negative control, an entry that cites `RADIX-001` and writes `#000`, was flagged by the add-on grep and the dropped-notes grep.
+- Eight draft entries in the entry format: UI-002, UI-004, UI-047, UI-053, UI-055, UI-066, UI-067 and UI-068. Each uses the recommended answer to the open questions and the readings above. The issue's five greps print nothing on them. A negative control, an entry that cites `RADIX-001` and writes `#000`, was flagged by the add-on grep and the dropped-notes grep.
 - The `From:` checker (below) against the committed stub: exit 1, "entry ids or order differ from the id map", because there are 0 entries. Against a 70-entry file generated from the id map: exit 0. With one `From:` changed and one entry given a second `From:` line: exit 1, naming both.
 - The id map's 70 UI rows equal the issue's scope table (58 core ids, 10 core parts, NX-16, NX-17). No count disagrees.
 - The quotes for U27, U30, U40, U45, U49, U51, U52, U58, U60, U62, U63 and U23 were found on the live pages. `next/image` says `priority` is deprecated "Starting with Next.js 16" and to "Use preload for a known Largest Contentful Paint (LCP) image", which supports the clash list wording of UI-053.
@@ -261,15 +262,11 @@ Each has the recommended option first. The entry table and the drafts use the re
    - **A. The Next.js docs page that says the same thing, with its own quote: the `Link` component for U27, and the `Image` component for U45 (`sizes` with `fill`) and U52 (`remotePatterns`) (recommended).** The pack already cites these pages for UI-053.
    - B. Drop the three Source lines. The rules stand on their Why.
    - C. Cite the retired skill at its last commit. The URL holds a commit hash, which the dropped-notes grep flags, so the PR would have to explain it.
-3. Which entries get a `Check:` line beyond the four guard-test rows (UI-005, UI-014, UI-015, UI-022)?
-   - **A. Also the lint rules the source rules name (jsx-a11y on UI-020, UI-021, UI-024 and UI-027, `better-tailwindcss/no-unknown-classes` on UI-005, `react/button-has-type` on UI-031, `@next/next/no-img-element` on UI-051), each named by rule and not by config file, since #95 has not settled the config file. Plus the sheet's check ideas for NX-16 and NX-17 (recommended).** The entry format allows all three kinds.
-   - B. Only the four guard-test rows. The lint rule names stay in the rule text.
-   - C. The four guard-test rows plus the two sheet check ideas.
-4. Five source rules carry their own "not a violation" notes (U27, U28, U30, U31, U58), and the entry format has no line for them. Where do they go?
+3. Five source rules carry their own "not a violation" notes (U27, U28, U30, U31, U58), and the entry format has no line for them. Where do they go?
    - **A. Into the file's closing `What is NOT a violation` section, generalized, each naming its pack id. Notes that only name source-project files are dropped (recommended).** The stub already has the section, and the Laravel Kanon files use it the same way.
    - B. Keep them as a sub-bullet under their entry, outside the entry format.
    - C. Drop them, and fill the closing section with the source file's own list only.
-5. NX-17's decision says each failed list "is reported". The core rule on reporting, D42 (DATA-053), sends an error the UI absorbs to D39, which is the Sentry add-on (SENTRY-001). What does UI-068 name as the reporting path?
+4. NX-17's decision says each failed list "is reported". The core rule on reporting, D42 (DATA-053), sends an error the UI absorbs to D39, which is the Sentry add-on (SENTRY-001). What does UI-068 name as the reporting path?
    - **A. Cite DATA-053, so the entry follows whatever DATA-053 settles for apps without the Sentry add-on (recommended).**
    - B. Cite DATA-053, and SENTRY-001 for apps with the Sentry add-on.
    - C. Keep the decision's words and name no rule.
