@@ -20,8 +20,8 @@ Typing, where tests live and what shape they take, and what a change ships with.
 
 Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolute.
 **SHOULD** and **SHOULD NOT** hold unless there is a concrete reason not to, and the
-reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
-rule that enforces a rule, where one exists.
+reason is stated. **MAY** is optional. A `Check:` line names the guard-test row, the lint
+rule, or the sheet's check idea for a rule, where one exists.
 
 ## Typing
 
@@ -30,10 +30,10 @@ rule that enforces a rule, where one exists.
   - From: T1
 - **TYPES-002. No `any`, no implicit `any`.** Use `unknown` and narrow, or a real type. **MUST.**
   - Why: `any` switches off checking for every value it touches, so one untyped response spreads unchecked fields into each component that reads it.
-  - Check: Oxlint `typescript/no-explicit-any`.
+  - Check: Oxlint `typescript/no-explicit-any`, unconfirmed until the template's Oxlint rules are checked.
   - From: T2
 - **TYPES-003. Type every service response.** Pass the response type to the call, `apiClient.get<OrderResponse>(...)`, and give the service function an explicit return type. Whenever the code reads the body, the call has a type argument. A call that ignores the body is exempt. **SHOULD.**
-  - Why: an untyped `response.data` is `any`, which TYPES-002 bans, and every field read from it escapes the type checker.
+  - Why: the core API client's response is untyped unless the call names its type, so every field read from it escapes the type checker, as an `any` does under TYPES-002.
   - From: T3
 - **TYPES-004. Type API boundaries once.** Response and request shapes are declared in the feature's `types/*.types.ts` and imported; do not re-declare the shape inline in a component or hook. **SHOULD.**
   - Why: the frontend already restates each backend response in TypeScript and nothing checks that the two agree; a second inline copy can drift from both.
@@ -41,7 +41,7 @@ rule that enforces a rule, where one exists.
   - From: T4
 - **TYPES-005. Use `type` for object shapes, including component props.** Extend with an intersection (`type A = B & { ... }`); there is no exception for `interface ... extends`. Augmenting a global (`Window`, `Navigator`) inside `declare global` stays `interface`, with `// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- declaration merging only`. **MUST.**
   - Why: one form for every object shape ends the choice in review, and two `interface` declarations with one name merge silently where two `type` declarations fail to compile.
-  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`.
+  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`, unconfirmed until the template's Oxlint rules are checked.
   - From: T5
 - **TYPES-006. Use an enum when the value set is meaningful and reused** (event names, states, categories the code switches on). Enums live in `types/*.enums.ts` (STRUCT-020). A string union is fine for a short local set. A set is declared once: not as a union in `*.types.ts` and an enum in `*.enums.ts`. **SHOULD.**
   - Why: a set declared twice drifts when one copy gains a member, and the code that switches on the other copy never sees it.
@@ -96,7 +96,7 @@ rule that enforces a rule, where one exists.
   - Why: logic that takes plain values needs no DOM, so running its test under `node` proves it has no hidden browser dependency.
   - Source: Test Business Rules Without Booting Laravel vault: Content/Quick Tips/57 - Test Business Rules Without Booting Laravel.md
   - From: T10
-- **TYPES-020. Component and hook tests use Testing Library and exercise user behaviour**, not implementation details. Query by role or visible text first (`getByRole`, `getByText`) and use `data-testid` only when no accessible handle exists. Do not assert Tailwind class names or use CSS-selector queries (`container.querySelector`, `.firstChild`, `.children`) when an accessible handle exists. Create a `userEvent.setup()` instance for interactions and use `waitFor` for async assertions; do not use `fireEvent`. **SHOULD.**
+- **TYPES-020. Component and hook tests use Testing Library and exercise user behaviour**, not implementation details. Query by role or visible text first (`getByRole`, `getByText`) and use `data-testid` only when no accessible handle exists. Do not assert Tailwind class names or use CSS-selector queries (`container.querySelector`, `.firstChild`, `.children`) when an accessible handle exists. Create a `userEvent.setup()` instance for interactions and use `waitFor` for async assertions; do not use `fireEvent` in new tests. **SHOULD.**
   - Why: a test tied to markup, class names or internal calls breaks on a refactor that reaches the same behaviour another way.
   - Source: Test Doubles - Mocks, Stubs, Fakes and Spies https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/test-doubles-mocks-stubs-fakes-and-spies
   - From: T11
@@ -165,12 +165,12 @@ rule that enforces a rule, where one exists.
   - Why: a committed `.env` keeps its secrets in the history for good, and `.env.example` tells the next developer which variables to set.
   - From: T20
 - **TYPES-038. A new page or route updates the rows it touches in the guard test `src/lib/tests/architectureRules.test.ts`.** **MUST.**
-  - Why: a route the guard test does not know about is a route its checks skip.
+  - Why: the guard-test rows scan every file, so a new route fails a row or needs an allowlist entry; nothing is skipped.
   - Check: `src/lib/tests/architectureRules.test.ts`.
   - From: T21 (core part)
 - **TYPES-039. Lint output stays clean, and every lint disable names one rule and a reason after `--`.** Oxlint runs with `--max-warnings 0` and reports an unused disable directive as an error. A directive is written `// oxlint-disable-next-line <rule> -- <reason>` (Oxlint also honours `eslint-disable`). A disable of a React Compiler rule (`react-hooks/refs`, `set-state-in-effect`, `purity`, `immutability`) is not allowed: the compiler then skips that component silently. A disable of `react-hooks/exhaustive-deps` is not allowed either: rewrite the code instead. **MUST.**
   - Why: the React Compiler is on by default in the fixed stack, so a disabled compiler rule turns optimization off for that component with no warning. A stated reason tells review why the rule does not apply; no plugin checks the reason text, so review does.
-  - Check: Oxlint with `--max-warnings 0`, and unused disable directives reported as errors.
+  - Check: Oxlint with `--max-warnings 0`, and unused disable directives reported as errors, unconfirmed until the template's Oxlint rules are checked.
   - Source: Claude Code Found 14 Rule Breaks in Merged Laravel Code https://codyssey.dev/insights/claude-code-found-14-rule-breaks-in-merged-laravel-code
   - From: T27
 - **TYPES-040. Stories are optional.** A shared component in `src/features/global-ui/` with visual variants may ship a story in `stories/`. **MAY.**

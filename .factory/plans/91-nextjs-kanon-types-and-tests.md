@@ -48,7 +48,7 @@ Column key:
 | TYPES-016 | T28 | MUST | MUST | none | none | none (tsc) | TOOLING-007 |
 | TYPES-017 | T8 | SHOULD | SHOULD | none | none | none | none |
 | TYPES-018 | T9 | MAY | MAY | none | none | none | none |
-| TYPES-019 | T10 | SHOULD | SHOULD | none | Test Business Rules Without Booting Laravel (scheduled 2026-12-09, vault path) | none | none |
+| TYPES-019 | T10 | SHOULD | SHOULD | none | Test Business Rules Without Booting Laravel (scheduled, vault path) | none | none |
 | TYPES-020 | T11 | SHOULD | SHOULD | none | Test Doubles - Mocks, Stubs, Fakes and Spies (live) | none | none |
 | TYPES-021 | NX-14 | new | SHOULD (Candidates NX-14: "SHOULD as written, no coverage clause") | none | Your Tests Are Green and the Bug Shipped Anyway (draft, vault path) | the sheet's check idea (Q6) | none |
 | TYPES-022 | T12 | | reserved for #95, not written | | | | |
@@ -59,7 +59,7 @@ Column key:
 | TYPES-027 | T17 | MUST | MUST; Layer calls T17 and conflict C10 | none | Claude Code Found 14 Rule Breaks in Merged Laravel Code (live, the edited row's cleaned quote) | the guard test file | none |
 | TYPES-028 | T23 | SHOULD | SHOULD | none | the Storybook CSF docs, which the frontend rule cites (reading 6) | none | TYPES-040 |
 | TYPES-029 | T25 | MUST | MUST | generalize | none | guard row TYPES-029 | none |
-| TYPES-030 | T29 | SHOULD | SHOULD | none | Avoid the Singleton (scheduled 2026-12-03, vault path); The Singleton Pattern (live); the Vitest config docs, which the frontend rule cites (reading 6) | none | none |
+| TYPES-030 | T29 | SHOULD | SHOULD | none | Avoid the Singleton (scheduled, vault path); The Singleton Pattern (live); the Vitest config docs, which the frontend rule cites (reading 6) | none | none |
 | TYPES-031 | T30 | SHOULD | SHOULD | none | Behavior-Driven Development (live) | none | none |
 | TYPES-032 | T31 (core part) | MUST | MUST | move to the source project's overlay (left out) | none | none | none |
 | TYPES-033 | T32 | MUST | MUST; Layer calls T32 | none | none | the guard test file | none |
@@ -214,10 +214,22 @@ The owner approved this plan in an interactive session on 2026-11-25. Answers:
 - **Q5.** No `index.md` edit, as in (a). Rules cite concrete generic file and helper names even when the names table lacks them, for example `src/lib/exhaustiveFallback.ts`, `src/lib/testing/at.ts` and `src/lib/testing/createTestQueryClient.ts`. The PR lists every name the file adds under "Names for the index.md follow-up".
 - **Q6.** (a) Check lines on T2, T5 and T27 for the Oxlint rules the source names, and on NX-14 for the sheet's check idea, marked unconfirmed until #95's Oxlint check runs.
 - **Q7.** (a) Both flags stay off. The counts are dropped.
-- **Reading 4.** T38 and T39 lose their new-code scope. The PR's keyword table lists the cell change from "SHOULD, new code" to "SHOULD". The same reading drops T11's "in new tests".
+- **Reading 4.** T38 and T39 lose their new-code scope. The PR's keyword table lists the cell change from "SHOULD, new code" to "SHOULD".
 - **Reading 6.** T23 and T29 keep their public-doc Source lines.
 - **T25.** The 10-second value is dropped.
 - **What is NOT a violation.** Three generic bullets.
 - **Source status.** A source is live only if its https://codyssey.dev/ page title is not "Coming <date>". A scheduled page answers 200 with that title, so it cites the vault path. Checked at write time.
 - **Codyssey names.** The issue's acceptance greps decide what counts. A `vault: Content/` path may carry the course name.
 - **Cross-references.** By pack id from the id map only.
+
+## Decisions (2026-11-26)
+
+The owner answered the independent review on 2026-11-26:
+
+1. **TYPES-020 (T11).** The fireEvent ban keeps its scope: "do not use `fireEvent` in new tests". This is the owner's answer and sets aside reading 4 for this clause.
+2. **TYPES-038.** The Why says the guard-test rows scan every file, so a new route fails a row or needs an allowlist entry; nothing is skipped.
+3. **TYPES-002, TYPES-005 and TYPES-039.** Their Oxlint `Check:` lines are marked unconfirmed until the template's Oxlint rules are checked, as TYPES-021's is.
+4. **TYPES-003.** The Why speaks of the core API client's untyped response, not a client library's response shape.
+5. **Check-line intro.** The intro sentence of every rule file reads: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. This matches the entry format in `index.md`. #91 changes `types-and-tests.md` only; each sibling issue applies the sentence to its own file.
+
+Source status was checked again on 2026-11-26. The two quick tips still show a "Coming" page, and the two draft insights and the draft lesson have no public page, so all five keep the vault path.
