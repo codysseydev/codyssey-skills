@@ -69,7 +69,7 @@ rule that enforces a rule, where one exists.
 - **STRUCT-013. Server-only modules import `server-only`.** Every `*.server.ts` module, and any other module that must never reach the browser, starts with `import 'server-only'`. **SHOULD.**
   - Why: the import makes the build fail when a client component imports the module, so server code and the secrets it reads never ship to the browser.
   - Check: guard-test row STRUCT-013 (every module on the server-only list starts with `import 'server-only'`).
-  - Source: Server and Client Components, "Preventing environment poisoning" https://nextjs.org/docs/app/getting-started/server-and-client-components#preventing-environment-poisoning
+  - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components#preventing-environment-poisoning
   - From: S11 (core part)
 - **STRUCT-014. Import boundaries are tested.** The guard test fails on a break of STRUCT-011 or STRUCT-012: an import of `src/features/**` from `src/lib`, `src/providers`, `src/constants` or `src/types`, and a feature-to-feature import outside the allowed-pairs list in the test. The list starts empty. Each pair added to it carries a reason, and a pair that no import uses is an error. Test files, stories and `tests/` folders are not scanned. **SHOULD.**
   - Why: review alone does not hold an import boundary, because reviewers tire, and a test fails on the first import that crosses it, for example a `shipments` hook that starts importing from `inventory/services/`.
@@ -95,7 +95,7 @@ rule that enforces a rule, where one exists.
   - From: S16
 - **STRUCT-019. No `export const runtime` in `app/`.** Routes and pages use the default Node.js runtime. **SHOULD.**
   - Why: Next.js renders on the Node.js runtime by default and marks the edge runtime deprecated, so a `runtime` export only adds a choice that can break a route that imports a package needing a Node.js API.
-  - Source: Route Segment Config, runtime https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config/runtime
+  - Source: Route Segment Config https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
   - From: S22
 
 ## File naming
