@@ -526,3 +526,7 @@ m. Reading a split index changes the mtime of `.git/sharedindex.<sha>`, so crite
    - **A. No script reads the repo's index (recommended).** The ignore patterns match the `Read at` tree only, and the dirty check compares working-tree bytes with the `Read at` blobs.
    - B. Accept an mtime-only change on split-index repos and document it.
 
+n. A `--repo` that is a folder inside the checkout.
+   Decided 2026-11-25 by the owner: A.
+   - **A. All three scripts stop unless `--repo` is the top level (recommended).** It matches the registry form of `check-policy.py`, and every path stays relative to the top level. `load` from a subfolder now stops instead of writing `<folder>/.ai/`.
+   - B. Revert to the earlier behaviour.
