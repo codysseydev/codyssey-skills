@@ -31,8 +31,9 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 
 ## Rows
 
-- Evidence items are `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that appears on the cited lines (whitespace collapsed). Separate items with `; `.
-- A quote holds no `"`, no `|` and no backtick. On a line full of them, quote a fragment without them.
+- The table starts with the header row and the `|---|---|---|---|---|` separator, in that order.
+- Evidence items are `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that appears on the cited lines (whitespace collapsed). A range spans at most 20 lines. Separate items with `; `.
+- A quote has at least 3 characters that are not spaces, one of them a letter or a digit. It holds no `"`, no `|` and no backtick. On a line full of them, quote a fragment without them.
 - Git history uses `` `commit:<sha>` "<text in the subject>" `` and `` `branch:<name>` ``. The commit must be `Read at` or reachable from it. The branch must be in `inventory.json`.
 - Every row has at least one evidence item. A path in `ignored` is never cited.
 - Source is `written down` (a rule file, README or doc), `configured` (a linter, CI or script config) or `pattern in code`.

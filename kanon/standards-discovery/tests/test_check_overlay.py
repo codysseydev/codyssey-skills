@@ -261,6 +261,43 @@ class ChangeAndRuleFiles(Golden):
         self.assertProblem(".ai/rules/project/testing.md", "paths")
 
 
+class CitationStrictness(Golden):
+    def test_a_quote_of_spaces_fails(self):
+        self.edit("standards-report.md", '`composer.json:7` "php-cs-fixer fix --dry-run --diff"', '`composer.json:2` " "')
+        self.assertProblem("composer lint")
+
+    def test_a_one_letter_quote_fails(self):
+        self.edit("standards-report.md", '`composer.json:7` "php-cs-fixer fix --dry-run --diff"', '`composer.json:3` "e"')
+        self.assertProblem("composer.json:3", "3 characters")
+
+    def test_a_quote_of_punctuation_only_fails(self):
+        self.edit("standards-report.md", '"DB::transaction"', '"::("')
+        self.assertProblem("app/Orders/CreateOrderHandler.php:13", "letter or digit")
+
+    def test_a_commit_quote_follows_the_same_rule(self):
+        self.edit("standards-report.md", '"feat(orders)"', '"f"')
+        self.assertProblem("commit:", "3 characters")
+
+    def test_a_range_over_20_lines_fails(self):
+        self.edit("standards-report.md", '`app/Orders/CreateOrderHandler.php:9` "final class"', '`app/Orders/CreateOrderHandler.php:1-21` "final class"')
+        self.assertProblem("app/Orders/CreateOrderHandler.php:1-21", "20 lines")
+
+    def test_an_overlay_range_over_20_lines_fails(self):
+        self.edit(".ai/kanon.yml", "CLAUDE.md:12", "CLAUDE.md:1-21")
+        self.assertProblem("CLAUDE.md:1-21", "20 lines")
+
+    def test_a_table_without_its_separator_row_fails_and_checks_row_1(self):
+        bad = '| Billing is legacy | `app/Legacy/OldBilling.php:2` "anything" | pattern in code | none | project-only |\n'
+        self.edit("standards-report.md", "|---|---|---|---|---|\n", bad)
+        text = self.problems()
+        self.assertIn("separator", text)
+        self.assertIn("ignored", text)
+
+    def test_a_separator_with_alignment_colons_passes(self):
+        self.edit("standards-report.md", "|---|---|---|---|---|\n", "| :--- | --- | :---: | --- | ---: |\n")
+        self.assertEqual(self.check()[0], 0)
+
+
 class Citations(TempDirs):
     def setUp(self):
         self.repo, self.info = self.client()
@@ -278,6 +315,10 @@ class Citations(TempDirs):
     def test_a_range_passes_and_a_reversed_range_fails(self):
         self.assertIsNone(self.cite(path="CLAUDE.md", start=7, end=8))
         self.assertIn("range", self.cite(path="CLAUDE.md", start=8, end=7))
+
+    def test_a_range_of_20_lines_is_allowed_and_21_is_not(self):
+        self.assertNotIn("20 lines", self.cite(path="CLAUDE.md", start=1, end=20))
+        self.assertIn("20 lines", self.cite(path="CLAUDE.md", start=1, end=21))
 
     def test_past_the_end_fails(self):
         self.assertIn("past the end", self.cite(path="CLAUDE.md", start=99))

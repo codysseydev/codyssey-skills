@@ -34,6 +34,7 @@ SYMFONY_FAMILIES = ("symfony", "php-core", "reliability")
 HEADER = ["Convention", "Evidence", "Source", "Kanon rule", "Effect"]
 OVERLAY = ".ai/kanon.yml"
 RULES_DIR = ".ai/rules/project"
+MAX_SPAN = 20
 
 
 def _sibling(name):
@@ -354,7 +355,10 @@ def parse_report(text):
     if table:
         if _cells(table[0][1]) != HEADER:
             add("Conventions", "the table header must be: " + " | ".join(HEADER))
-        for index, (number, line) in enumerate(table[2:], start=1):
+        separator = len(table) > 1 and all(re.fullmatch(r":?-{3,}:?", cell) for cell in _cells(table[1][1])) and len(_cells(table[1][1])) == len(HEADER)
+        if not separator:
+            add("Conventions", "the table's second line must be the |---|---|---|---|---| separator")
+        for index, (number, line) in enumerate(table[2 if separator else 1:], start=1):
             cells = _cells(line)
             where = f"report row {index} (line {number})"
             if len(cells) != 5:
@@ -430,8 +434,18 @@ def blob_lines(repo, sha, path):
     return None
 
 
+def quote_problem(quote):
+    """Why a quote is too weak to show anything, or None."""
+    if len(re.sub(r"\s", "", quote)) < 3:
+        return "the quote needs at least 3 characters that are not spaces"
+    if not re.search(r"[^\W_]", quote):
+        return "the quote needs a letter or digit"
+    return None
+
+
 def check_citation(repo, sha, item, ignored):
     """None when the citation holds at commit sha, else the problem as text."""
+    weak = quote_problem(item["quote"]) if item.get("quote") is not None else None
     if item["kind"] == "branch":
         refs = _out(_git(repo, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")).splitlines()
         known = {r.removeprefix("refs/heads/").removeprefix("refs/remotes/") for r in refs}
@@ -440,6 +454,8 @@ def check_citation(repo, sha, item, ignored):
         found = resolve_commit(repo, item["sha"])
         if found is None:
             return f"commit:{item['sha']}: not a commit in the repo"
+        if weak:
+            return f"commit:{item['sha']}: {weak}"
         if _git(repo, "merge-base", "--is-ancestor", found, sha).returncode != 0:
             return f"commit:{item['sha']}: not reachable from Read at"
         subject = _out(_git(repo, "log", "-1", "--format=%s", found)).strip()
@@ -453,11 +469,15 @@ def check_citation(repo, sha, item, ignored):
         return f"{name}: not a repo-relative path"
     if path in ignored:
         return f"{name}: the path is ignored by the AI policy"
+    if end < start:
+        return f"{name}: the range runs backwards"
+    if end - start + 1 > MAX_SPAN:
+        return f"{name}: a range spans at most {MAX_SPAN} lines"
+    if weak:
+        return f"{name}: {weak}"
     lines = blob_lines(repo, sha, path)
     if lines is None:
         return f"{name}: not in the repo as a regular file at {sha[:7]}"
-    if end < start:
-        return f"{name}: the range runs backwards"
     if end > len(lines):
         return f"{name}: past the end ({len(lines)} lines)"
     span = lines[start - 1:end]
