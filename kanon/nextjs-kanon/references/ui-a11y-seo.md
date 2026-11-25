@@ -174,6 +174,188 @@ rule that enforces a rule, where one exists.
 
 ## Accessibility
 
+- **UI-020. Use semantic elements.** Actions are `<button>`, navigation is `<a>` or `next/link`,
+  never a `div` or `span` with `onClick`. A separator is `<hr>`, not an empty
+  `<div className="border-b">` and not a divider built from two `div`s around text.
+  **MUST.**
+  - Why: native elements bring keyboard support, focus and the right role, and a clickable
+    `div` has none of them.
+  - Check: lint, Oxlint `jsx-a11y` rules (they do not check separators).
+  - From: U6
+
+- **UI-021. Every form control has a label, and the form works by keyboard alone.** In a
+  combobox every action, including a trailing "Show more", is an option the arrow keys reach.
+  **MUST.**
+  - Why: a control without a label has no name for a screen reader, and an action the keyboard
+    cannot reach is lost to keyboard users.
+  - Check: lint `jsx-a11y/label-has-associated-control`.
+  - From: U7
+
+- **UI-022. Keep one keyboard focus style.** `app/globals.css` styles `:focus-visible` once. A
+  component with a custom shape uses `FOCUS_RING_CLASSES` from
+  `src/features/global-ui/Button/focusRing.ts`. An element with a bare `outline-none` or
+  `outline-0` also has `focus:`, `focus-visible:`, `focus-within:` or a shared focus-ring class
+  in the same `className` attribute. A heading that receives programmatic focus is allowed.
+  **MUST.**
+  - Why: one focus style lets keyboard users find focus the same way on every control, and an
+    outline removed with nothing in its place hides it.
+  - Check: guard-test row UI-022.
+  - From: U8
+
+- **UI-023. Heading levels do not skip, and a page has one `h1`.** A card grid directly under
+  the page `h1` passes `headingLevel="h2"`. The HTML a Suspense fallback produces counts as the
+  page: a route whose server HTML is only the fallback has an `h1` in it (an `sr-only` one is
+  allowed). **SHOULD.**
+  - Why: screen reader users move through a page by its headings, and a skipped level or a
+    missing `h1` breaks that outline.
+  - From: U9
+
+- **UI-024. Every `next/image` has an `alt`.** **MUST.**
+  - Why: without `alt`, a screen reader has nothing to say about the image or reads its file
+    name.
+  - Check: lint `jsx-a11y/alt-text`.
+  - From: U10
+
+- **UI-025. Respect reduced motion with one global rule.** `app/globals.css` holds one
+  `@media (prefers-reduced-motion: reduce)` block on `*, ::before, ::after` that sets
+  `animation-duration: 0.01ms !important`, `animation-iteration-count: 1 !important`,
+  `transition-duration: 0.01ms !important` and `scroll-behavior: auto !important`. Motion
+  driven from JavaScript (`scrollTo({ behavior: 'smooth' })`, timers) checks
+  `usePrefersReducedMotion` from `src/lib/usePrefersReducedMotion.ts`. Do not add a
+  per-component `motion-reduce:` variant to cover a CSS animation. **SHOULD.**
+  - Why: one block covers every CSS animation, including ones added later, where
+    per-component variants miss some.
+  - From: U11
+
+- **UI-026. Loading and error feedback is visible and worded for the reader.** A load failure
+  uses the `ErrorState` primitive, which owns the default message; inside a card or tab it
+  takes `variant="inline"`. `ErrorState` carries `role="alert"` on its root, so do not add
+  another alert around it. State handling itself is DATA-049, DATA-050 and DATA-051.
+  **SHOULD.**
+  - Why: a reader who sees nothing while data loads, or a raw error, cannot tell whether to
+    wait, retry or leave.
+  - From: U12
+
+- **UI-027. Lint and test accessibility.** The lint config enables Oxlint's `jsx-a11y` rules
+  (the recommended set, with options for `alt-text` and `label-has-associated-control`), so
+  label, alt, role and click-handler problems fail the lint; that lint enforces UI-020, UI-021
+  and UI-024. `@storybook/addon-a11y` runs over the stories in the Storybook test project,
+  advisory first (`parameters.a11y.test: 'todo'`). A story whose violations are fixed, such as
+  a `Button` `Disabled` story, is set to `'error'`, and the rest stay `'todo'` until fixed. A
+  logo link has an accessible name such as "<Site name> home". **MUST** for the lint,
+  **SHOULD** for the Storybook addon.
+  - Why: the lint reads markup only and jsdom cannot compute contrast, so the addon covers
+    what the lint misses.
+  - Check: lint, the Oxlint `jsx-a11y` recommended set.
+  - From: U25
+
+- **UI-028. A modal moves focus in, keeps it inside, and returns it.** On open, focus goes to
+  the first control or the dialog; Tab and Shift+Tab stay inside; on close, focus returns to
+  the control that opened it. The one dialog approach of UI-041 does this. Each modal has a
+  test that focus stays inside the dialog and returns to the opener on close. **SHOULD.**
+  - Why: focus left behind the modal lets a keyboard user tab into a page they cannot see, and
+    focus lost on close drops them at the top of the page.
+  - From: U53 (core part)
+
+- **UI-029. A form reports a failed submit to the keyboard and the screen reader user.** Three
+  parts. (1) After a failed validation the form library moves focus to the first invalid
+  control; a server error shown in a form alert with `role="alert"` needs no move. (2) A field
+  error `<p role="alert">` may mount together with its text, as `Input` and `Select` do once a
+  field is touched and has an error; that is allowed for field errors. Every other live region
+  (status lines, toasts) exists before its message does (UI-035). (3) The invalid control has
+  `aria-invalid`, and the error paragraph is tied to it with `aria-describedby`. **SHOULD.**
+  - Why: without a focus move or an announcement, a keyboard or screen reader user does not
+    learn that the submit failed or which field to fix.
+  - From: U54
+
+- **UI-030. A view switch that does not go through the router announces itself.** When content
+  swaps without a Next navigation (history `pushState`, a filter, a result list), focus moves
+  to the new region's heading (`tabIndex={-1}`), or an `sr-only` `role="status"` line states
+  the change and the count. See DATA-017. **SHOULD.**
+  - Why: Next announces a route change, but content swapped in place is silent to a screen
+    reader user.
+  - From: U55
+
+- **UI-031. A raw `<button>` sets `type`.** Every `<button>` written by hand has `type="button"`
+  (or `type="submit"` in a form). The `Button` primitive already defaults it. **MUST.**
+  - Why: a `<button>` without a `type` is a submit button, so inside a form it submits on
+    click.
+  - Check: lint `react/button-has-type`.
+  - From: U57
+
+- **UI-032. A message that disappears on a timer can be read at the reader's pace.** An error
+  toast stays until dismissed. A success, info or warning toast stays 8000 ms. Every timed
+  message pauses its timer while hovered or focused, has a visible Close button, wraps its text
+  (at most three lines) and never truncates text that comes from the API. **MUST.**
+  - Why: a reader who is slow, distracted or on a screen reader misses a message that leaves on
+    its own, and a status toast is not a real-time event that has to expire.
+  - Source: WCAG 2.2, Success Criterion 2.2.1 Timing Adjustable https://www.w3.org/TR/WCAG22/#timing-adjustable
+  - From: U58 (core part)
+
+- **UI-033. Text color pairs meet 4.5:1 (3:1 for large text and UI borders).** A test computes
+  the ratio of each text token on the surface token in the same class string, from the
+  `@theme` values; a text color with an opacity modifier and no surface in its string is
+  checked against every page surface. No opacity modifier on a text color (`text-muted/50`);
+  use a token. **MUST** for the 4.5:1 pairs, **SHOULD** for the opacity ban.
+  - Why: low-contrast text is hard to read for many readers, and an opacity modifier makes the
+    real color depend on whatever sits behind it.
+  - From: U59
+
+- **UI-034. A pointer target is at least 24 by 24 CSS pixels, and a control a finger meets
+  reaches 40 by 40 with one shared class.** Controls a finger meets in running content (links,
+  tooltip triggers, icon buttons) are 40 px. Dense table-row and inline controls may be 32 px
+  (`Button size="sm"`) but never below 24 px (WCAG 2.5.8, level AA). A box smaller than 40 px
+  grows its hit area with `HIT_AREA_CLASSES` (all sides) or `HIT_AREA_Y_CLASSES` (inline text
+  links, up and down only) from `src/features/global-ui/Button/focusRing.ts`, not with a margin
+  or pseudo-element trick written in each file. **SHOULD.**
+  - Why: a small target is hard to hit with a finger or an unsteady hand, and one class keeps
+    the hit area the same everywhere.
+  - From: U61
+
+- **UI-035. A live region exists before its message does.** The exception is a field error
+  `<p role="alert">` in `Input` and `Select`, which mounts with its text (UI-029). A toast
+  renders its `role="status"` or `role="alert"` container at all times and fills it; it does
+  not mount the container together with the text. **SHOULD.**
+  - Why: screen readers announce a change inside a live region that already exists, and often
+    miss a region that mounts with its text already in it.
+  - Source: WCAG 2.2, Success Criterion 4.1.3 Status Messages https://www.w3.org/TR/WCAG22/#status-messages
+  - From: U62
+
+- **UI-036. A button group that selects one option exposes the selection.** Buttons that pick
+  one value or view carry `aria-pressed` (filters) or use `role="tablist"`, `tab` and
+  `aria-selected` (tabs). Color alone is not state. A group that changes the route is links
+  with `aria-current="page"` (UI-048). **SHOULD.**
+  - Why: a selection shown only by color is invisible to a screen reader and to readers who
+    cannot tell the colors apart.
+  - From: U64
+
+- **UI-037. A skeleton or spinner announces that content is loading.** A loading skeleton's
+  root element carries `role="status"` and an `aria-label` naming what is loading ("Loading
+  activity"); the `Skeleton` bone stays `aria-hidden`. Only the outermost skeleton announces: a
+  card or breadcrumb skeleton rendered by a page or grid skeleton takes `announce={false}`,
+  which drops its role and label and hides it, so one loading state is one status region. A
+  spinner-only state follows the same rule, including the Suspense fallback of a route, and
+  the shared `Spinner` primitive carries `role="status"` and a generic "Loading" label so call
+  sites inherit it. **SHOULD.**
+  - Why: without a status region a screen reader user hears nothing while content loads, and
+    nested skeletons that each announce repeat the message.
+  - From: U66
+
+- **UI-038. A disabled control states why in text.** When a control is disabled for a reason
+  the viewer must know (their own row, an option they already chose), the reason is visible
+  text or is linked with `aria-describedby`. `title` alone is not enough. A control that
+  cannot act may use `aria-disabled` and stay focusable. **SHOULD.**
+  - Why: `title` does not show on touch or with the keyboard, so the reason stays hidden from
+    those viewers.
+  - From: U68
+
+- **UI-039. A global overlay is rendered once, in the root layout.** The `Toast` component is
+  mounted once in `app/layout.tsx`; a feature calls `showToast` and does not render
+  `<Toast />`. The same holds for any component that reads a global store, such as an install
+  prompt or a cookie banner. **SHOULD.**
+  - Why: two mounted copies of an overlay that read one store show every message twice.
+  - From: U69
+
 ## Components and primitives
 
 ## Links and navigation
