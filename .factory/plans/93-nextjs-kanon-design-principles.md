@@ -124,7 +124,7 @@ Totals: 60 Source lines. 38 come from the 38 approved Sources-tab rows (27 live,
 These follow from the inputs. The PR lists them so the owner can change any of them.
 
 - Entry shape: the rule text ends with the keyword. Requirement bullets of the frontend rule stay as unlabeled sub-bullets before `Why:`, as the issue's "a bullet" for X7 implies. P2's layer table stays as a table indented inside the entry.
-- Example names: an example cites a path only when "Names rules may cite" has it. Other examples use neutral inline names. This issue cannot add rows to that table.
+- Example names (owner decision 1 of 2026-11-25): examples cite concrete generic file and helper names even when "Names rules may cite" lacks them. `index.md` is not edited; the PR lists every name the file introduces under "Names for the index.md follow-up".
 - How-to lines and links into the source project's `docs/guides/` are dropped. The template has no such guides.
 - "For new code" qualifiers in P2 and P15 belong to the frontend's Not migrated regime and are dropped.
 - The intro line naming the course keeps the course URL on the same physical line, so the acceptance grep prints nothing for it, which meets the criterion.
@@ -186,9 +186,23 @@ From the worktree root at the head commit, clean tree.
 - C9 (S29 against the Service Pattern lesson) lands in `structure.md` (#89). This file only drops the frontend intro's note that the lesson was unpublished.
 - Confirming which Oxlint rules exist for NX-10. The entry says it becomes MUST once one is confirmed and turned on.
 
-## Open questions
+## Decisions
 
-Each has a first answer in the prototype drafts. None reopens a decided point.
+The owner approved this plan in an interactive session on 2026-11-25 and accepted the recommended answer to every open question below: a A, b A, c A, d A, e A, f A, g A.
+
+Owner decisions of 2026-11-25 for every rule issue:
+
+1. Names: rules cite concrete generic file and helper names even when the `index.md` names table lacks them. `index.md` is not edited; the PR lists the names under "Names for the index.md follow-up".
+2. Every entry gets a neutral one-line `Why:`. The PR lists every Why written fresh (no reason in the source rule or the sheet).
+3. Source lines are `- Source: <title> <URL>` or `- Source: <title> vault: Content/<path>.md`, with no quote; a lesson's point goes into the Why. A source that cites the retired, unlicensed `next-best-practices` skill is replaced by the matching nextjs.org docs page.
+4. A source is live only if its codyssey.dev page title is not "Coming <date>". Not live means the vault path. Checked at write time.
+5. S28 cases a and h belong to the untrusted-content add-on (#96).
+6. The issue's acceptance greps decide what counts as a Codyssey name; `vault: Content/` paths may carry the course name.
+7. Rules cite other rules by pack id from the id map only.
+
+## Open questions (answered)
+
+Each had a first answer in the prototype drafts. None reopens a decided point. The recommended option of each is the decided one.
 
 a. Form of "Considered and not proposed". The issue asks for the section; the owner confirmed that `design-principles.md` has no `##` sections.
    - **A. A bold label line, `**Considered and not proposed.**`, followed by the bullets, with no heading (recommended).** It keeps the no-`##` decision literally and does not touch the entry count.
