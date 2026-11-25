@@ -90,7 +90,7 @@ rule that enforces a rule, where one exists.
   - Why: Next.js 16 passes both as Promises, so code that reads a property without `await` gets `undefined` instead of the route value.
   - From: S15
 - **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable (no functions, `Date`, `Map`, `Set` or class instances). **SHOULD.**
-  - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or class instance does not arrive as it left.
+  - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or a class instance cannot cross.
   - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components
   - From: S16
 - **STRUCT-019. No `export const runtime` in `app/`.** Routes and pages use the default Node.js runtime. **SHOULD.**
