@@ -250,3 +250,27 @@ Q6. D42 (DATA-053) says an error the UI absorbs follows D39, a rule of the error
 Q7. D42 (DATA-053) names the `no-console` lint rule, and D60 (DATA-058) names a Next.js lint rule on relative `location` assignment that is not in the rules table of the Next.js ESLint plugin docs (checked 2026-11-25). No guard-test row names either, and whether `tooling.md` (#95) ships them is not known here.
 - **A. No Check line; DATA-058 drops the lint rule name; the PR lists both for #95 and stage 2 (recommended).**
 - B. A Check line naming each lint rule as the source names it.
+
+## Decisions (owner, 2026-11-25)
+
+The owner approved this plan in an interactive session on 2026-11-25.
+
+- Q1: settled by owner decision 1 below. Rules cite concrete generic file and helper names, and the PR lists each one for a names-table follow-up. `index.md` is not edited.
+- Q2: A. DATA-039 and DATA-044 stay SHOULD with their Check lines.
+- Q3: A, without the `SKILL.md` edit. A "Cache Components is off" condition line goes on DATA-001, DATA-003, DATA-005 to DATA-007 and the `Suspense` half of DATA-065. The stack line comes in a later follow-up PR.
+- Q4: A. DATA-029 also cites "Name Your Events in the Past Tense", by vault path until it is live.
+- Q5: A. DATA-055 also cites "Authentication Across the Boundary", by vault path.
+- Q6: A. DATA-053 says "the project's error reporter" with no add-on id.
+- Q7: A. No Check line on DATA-053 or DATA-058; DATA-058 drops the lint rule name; both are listed in the PR for #95.
+
+Owner decisions for every rule issue:
+
+1. Rules cite concrete generic file and helper names even when the names table lacks them. The PR lists every name introduced under "Names for the index.md follow-up".
+2. Every entry has a one-line `Why:`. The PR lists each Why written fresh.
+3. Source lines are `- Source: <title> <URL>` or `- Source: <title> vault: Content/<path>.md`, with no quote. A lesson's point goes into the Why. A source citing the retired `next-best-practices` skill is replaced by the matching nextjs.org page.
+4. A source is live only if its codyssey.dev page title is not "Coming <date>". Otherwise it cites the vault path.
+5. Cases a and h of S28 belong to the untrusted-content add-on (#96).
+6. The issue's acceptance greps decide what counts as a Codyssey name; `vault: Content/` paths may carry the course name.
+7. Cross-references use pack ids from the id map only.
+
+Storage keys use the placeholder prefix `<app>_`, shared with #94. Plan comment: https://github.com/codysseydev/codyssey-skills/issues/90#issuecomment-7157424603
