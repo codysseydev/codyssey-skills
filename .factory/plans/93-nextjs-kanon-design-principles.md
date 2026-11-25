@@ -24,7 +24,7 @@ In file order. The pack id and `From:` value are the id map's. Keyword "SHOULD" 
 | 2 | DESIGN-002 | P2 | SHOULD, SHOULD (frontend) | generalize: drop the file and vendor names and the counts, keep the layer table; rewording table: the Store row and the store bullet say "client-only UI state in a small external store with selector subscriptions, XState Store as the named implementation"; the model store action becomes a neutral example with no feature path; drop "This applies to new code"; drop the non-public Source line | none | TYPES-019 (T10), DATA-032 (D69) |
 | 3 | DESIGN-003 | P3 (core part) | SHOULD, SHOULD (frontend) | move to the source project's overlay: the clause, its how-to and its notes are left out; neutral examples in the lead sentence, the pure-function example and the double-negation example; drop the PR reference | none | DESIGN-010 (P7), TYPES-019 (T10) |
 | 4 | DESIGN-004 | NX-10 | none, SHOULD (NX-10 decision note: MUST once a lint rule is confirmed and turned on, said in the entry) | new rule, merged scope: `utils/`, `src/lib/`, and data from a query, a store or props | the check idea (`readonly` makes `sort` and `push` a `tsc` error; candidate guard-test regex and lint rules marked unconfirmed); no claim that a lint rule exists | none |
-| 5 | DESIGN-005 | NX-12 | none, SHOULD (NX-12 decision note) | new rule: one `Record<Status, readonly Status[]>`, `canTransition(from, to)`, the store path for flows with effects (question d), UI gating is a hint | question g | ACCESS-007 (A4); DATA-021 (D19) if question d takes option A |
+| 5 | DESIGN-005 | NX-12 | none, SHOULD (NX-12 decision note) | new rule: one `Record<Status, readonly Status[]>`, `canTransition({ from, to })` (owner answer 1 of 2026-11-26), the store path for flows with effects (question d), UI gating is a hint | question g | ACCESS-007 (A4); DATA-021 (D19) if question d takes option A |
 | 6 | DESIGN-006 | P4 | SHOULD, SHOULD (frontend) | notes; drop the how-to and doc links; keep the input-limit bullet without its link | none | TYPES-003 (T3), DESIGN-009 (P6) |
 | 7 | DESIGN-007 | NX-11 | none, SHOULD (NX-11 decision note: N = 2, review only) | new rule: two property levels, deeper values from a mapper, a query `select` or a selector; exemptions per question e | review only, lint check only after its noise is measured (question g) | DESIGN-006 (P4) |
 | 8 | DESIGN-008 | P5 | SHOULD, SHOULD (frontend) | notes; the "none today" sentence on value objects becomes general advice; branded ids stay in "Considered and not proposed" | none | DESIGN-003 (P3) |
@@ -199,6 +199,13 @@ Owner decisions of 2026-11-25 for every rule issue:
 5. S28 cases a and h belong to the untrusted-content add-on (#96).
 6. The issue's acceptance greps decide what counts as a Codyssey name; `vault: Content/` paths may carry the course name.
 7. Rules cite other rules by pack id from the id map only.
+
+Owner answers of 2026-11-26, after the independent review:
+
+1. DESIGN-005 asks `canTransition({ from, to })` instead of `canTransition(from, to)`, so the rule's own example obeys DESIGN-019 (two positional parameters of the same type take an options object).
+2. DESIGN-016 points at STRUCT-011 and STRUCT-012 without restating what they say.
+3. The phrase "which the vendored React skills suggest" is dropped. The owner placed it in DESIGN-020; it stood in the Suspense bullet of "Considered and not proposed", right after DESIGN-020, and is dropped there.
+4. The intro sentence about `Check:` lines matches the entry format of `index.md`: a `Check:` line names the guard-test row, the lint rule, or the sheet's check idea for a rule, where one exists. The answer covers every rule file in the batch; this branch applies it to `design-principles.md` only, and each sibling issue applies it to its own file.
 
 ## Open questions (answered)
 
