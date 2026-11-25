@@ -1,10 +1,14 @@
+import contextlib
 import datetime
+import io
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 import fixture_support as fs
 from fixture_support import (
@@ -15,6 +19,11 @@ ALLOWING = os.path.join(RECORDS, "allowing.md")
 ALLOWING_COMMIT = os.path.join(RECORDS_DISCOVERY, "allowing-commit.md")
 FORBIDDING = os.path.join(RECORDS, "forbidding.md")
 OVERLAY_FILES = [".ai/kanon.yml", ".ai/rules/project/testing.md", ".ai/standards-report.md"]
+
+
+def read_bytes(path):
+    with open(path, "rb") as handle:
+        return handle.read()
 
 
 class Placement(TempDirs):
@@ -125,7 +134,7 @@ class AllowingRecordMakesABranch(Placement):
         self.assertIn("branch", err)
         self.assertEqual(snapshot(self.repo), before)
 
-    def test_a_failure_after_the_branch_is_made_leaves_no_branch_or_worktree(self):
+    def test_a_failing_commit_leaves_no_branch_or_worktree(self):
         git(self.repo, "config", "user.useConfigOnly", "true")
         env = {k: v for k, v in fs.GIT_ENV.items() if not k.startswith(("GIT_AUTHOR", "GIT_COMMITTER"))}
         done = subprocess.run(
@@ -136,6 +145,115 @@ class AllowingRecordMakesABranch(Placement):
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertEqual(git(self.repo, "branch", "--list", "standards-discovery/*"), "")
         self.assertEqual(len(git(self.repo, "worktree", "list").splitlines()), 1)
+
+
+class PlaceUsesPlumbing(Placement):
+    """place with a `yes` record: the branch is built from read_at with plumbing on a temporary index."""
+
+    def rebuild_work(self):
+        # The hazard must be in the commit that was read: rebuild the work folder at the new HEAD.
+        self.info = {**self.info, "read_at": git(self.repo, "rev-parse", "HEAD")}
+        shutil.rmtree(self.work)
+        self.work = fs.make_work(self.info, self.work, ALLOWING_COMMIT, self.repo)
+
+    def commit_hazard(self, kind):
+        target = {
+            "ai-file": ".ai", "ai-symlink": ".ai", "rules-file": ".ai/rules/project",
+            "overlay-symlink": ".ai/kanon.yml", "report-symlink": ".ai/standards-report.md", "overlay-gitlink": ".ai/kanon.yml",
+        }[kind]
+        path = os.path.join(self.repo, target)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if kind.endswith("symlink"):
+            os.symlink(os.path.join(self.tmp(), "victim"), path)
+            git(self.repo, "add", "-A")
+        elif kind.endswith("gitlink"):
+            git(self.repo, "update-index", "--add", "--cacheinfo", f"160000,{self.info['read_at']},{target}")
+        else:
+            put(self.repo, target, "a tracked file\n")
+            git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", f"chore: {kind}")
+        self.rebuild_work()
+        return target
+
+    def place_yes(self, *extra, env=None):
+        done = subprocess.run(
+            [sys.executable, os.path.join(fs.SCRIPTS, "place-overlay.py"), "place", "--record", ALLOWING_COMMIT, "--model", MODEL,
+             "--work", self.work, "--repo", self.repo, "--branch", "sd/probe", *extra],
+            env=env or fs.GIT_ENV, capture_output=True, text=True,
+        )
+        return done.returncode, json.loads(done.stdout), done.stderr
+
+    def hooks(self):
+        folder = os.path.join(self.tmp(), "hooks")
+        marker = os.path.join(self.tmp(), "hook-ran")
+        for name in ("post-checkout", "reference-transaction", "pre-commit", "post-commit", "post-index-change"):
+            put(folder, name, f"#!/bin/sh\necho {name} >> '{marker}'\n")
+            os.chmod(os.path.join(folder, name), 0o755)
+        git(self.repo, "config", "core.hooksPath", folder)
+        return marker
+
+    def test_the_branch_starts_at_read_at_when_head_has_moved(self):
+        read_at = self.info["read_at"]
+        put(self.repo, "CLAUDE.md", "# rewritten\n")
+        git(self.repo, "commit", "-q", "-am", "chore: rewrite")
+        code, out, _ = self.place_yes()
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+        self.assertEqual(git(self.repo, "rev-parse", "sd/probe~1"), read_at)
+        self.assertIn("Use Laravel facades", git(self.repo, "show", "sd/probe:CLAUDE.md"))
+
+    def test_no_hook_runs_and_the_checkout_is_untouched(self):
+        marker = self.hooks()
+        put(self.repo, "CLAUDE.md", "an uncommitted edit\n")
+        index = os.path.join(self.repo, ".git", "index")
+        before = (read_bytes(index), os.stat(index).st_mtime_ns, git(self.repo, "rev-parse", "HEAD"), git(self.repo, "symbolic-ref", "HEAD"))
+        code, out, _ = self.place_yes()
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+        self.assertFalse(os.path.exists(marker), read_bytes(marker) if os.path.exists(marker) else "")
+        after = (read_bytes(index), os.stat(index).st_mtime_ns, git(self.repo, "rev-parse", "HEAD"), git(self.repo, "symbolic-ref", "HEAD"))
+        self.assertEqual(after, before)
+        self.assertEqual(read(self.repo, "CLAUDE.md"), "an uncommitted edit\n")
+        self.assertFalse(os.path.exists(os.path.join(self.repo, ".git", "worktrees")))
+
+    def test_no_temporary_file_is_left_behind(self):
+        scratch = self.tmp()
+        code, out, _ = self.place_yes(env={**fs.GIT_ENV, "TMPDIR": scratch})
+        self.assertEqual(code, 0, out)
+        self.assertEqual(os.listdir(scratch), [])
+
+    def test_a_symlink_file_or_gitlink_in_the_way_at_read_at_stops(self):
+        for kind in ("ai-file", "ai-symlink", "rules-file", "overlay-symlink", "report-symlink", "overlay-gitlink"):
+            with self.subTest(kind=kind):
+                self.setUp()
+                target = self.commit_hazard(kind)
+                refs = git(self.repo, "for-each-ref")
+                code, out, err = self.place_yes()
+                self.assertEqual((code, out["result"]), (1, "stop"), out)
+                self.assertIn(target, out["reason"])
+                self.assertNotIn("Traceback", err)
+                self.assertEqual(git(self.repo, "for-each-ref"), refs)
+                self.assertEqual(len(git(self.repo, "worktree", "list").splitlines()), 1)
+
+    def test_a_committed_regular_overlay_at_read_at_is_replaced(self):
+        put(self.repo, ".ai/kanon.yml", "mode: canon-first\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "chore: overlay")
+        self.rebuild_work()
+        code, out, _ = self.place_yes()
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+        self.assertEqual(git(self.repo, "show", "sd/probe:.ai/kanon.yml"), read(self.work, ".ai/kanon.yml").strip())
+
+    def test_an_os_error_prints_one_json_object_and_leaves_no_branch(self):
+        module = fs.load_script("place-overlay.py")
+        out = io.StringIO()
+        with mock.patch.object(module, "read_bytes", side_effect=PermissionError("denied")), \
+                mock.patch.dict(os.environ, fs.GIT_ENV), contextlib.redirect_stdout(out):
+            code = module.main([
+                "place", "--record", ALLOWING_COMMIT, "--model", MODEL, "--work", self.work, "--repo", self.repo, "--branch", "sd/probe",
+            ])
+        self.assertEqual(code, 1)
+        result = json.loads(out.getvalue())
+        self.assertIn("denied", result["reason"])
+        self.assertEqual(git(self.repo, "branch", "--list", "sd/probe"), "")
 
 
 class PlaceRefuses(Placement):

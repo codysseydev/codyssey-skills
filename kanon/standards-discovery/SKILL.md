@@ -90,7 +90,7 @@ python3 <skill dir>/scripts/place-overlay.py place --record <record> --model <mo
 
 The script reruns the policy check and the overlay check, then reads `commit_ai_files` from the record.
 
-- `yes`: it makes the branch in a temporary worktree, with one commit holding `.ai/kanon.yml`, `.ai/rules/project/` and `.ai/standards-report.md`. The owner's checkout keeps its branch, `HEAD` and uncommitted files. Ask the owner before the push and the PR, because both reach the client.
+- `yes`: it makes the branch with one commit holding `.ai/kanon.yml`, `.ai/rules/project/` and `.ai/standards-report.md`, on top of the report's `Read at` commit. It builds the commit with git plumbing on a temporary index, so the owner's checkout keeps its index, branch, `HEAD` and uncommitted files, and no hook runs. It stops when `.ai`, one of its folders or a target path is a symlink, a file or a gitlink at `Read at`. Ask the owner before the push and the PR, because both reach the client.
 - `no`: it writes nothing under the repo. The files stay in the work folder. Tell the owner that `place-overlay.py load` with the same `--record`, `--model`, `--work` and `--repo` copies the overlay into the working tree and adds two lines to `.git/info/exclude`, so `git status` stays empty. `load` stops when a target path is tracked, already exists with other content, or sits behind a symlink or a file, and when the record says `yes`.
 - Exit 1: the record, the overlay check or a branch of that name blocks. Report it.
 

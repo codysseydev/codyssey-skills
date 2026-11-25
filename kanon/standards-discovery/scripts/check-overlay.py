@@ -505,7 +505,8 @@ def _read(path):
 
 
 def check_work(work, repo, kanon_root):
-    """Every problem in the work folder, as [{"where", "problem"}]."""
+    """(problems, read_at): every problem in the work folder as [{"where", "problem"}], and the full sha
+    of the report's `Read at` when it resolved and matched inventory.json, else None."""
     problems = []
 
     def add(where, problem):
@@ -630,7 +631,7 @@ def check_work(work, repo, kanon_root):
             add(f"{RULES_DIR}/{name}", f"needs a frontmatter paths: list with at least one glob ({why})")
 
     if report is None:
-        return problems
+        return problems, sha
 
     # the rows, and the rows against the entries
     row_keys = {}
@@ -681,7 +682,7 @@ def check_work(work, repo, kanon_root):
             add("Silent on", "missing: " + ", ".join(sorted(want - have)))
         if have - want:
             add("Silent on", f"must not list (it has an overlay entry, or is not a {report['framework']} family): " + ", ".join(sorted(have - want)))
-    return problems
+    return problems, sha
 
 
 def main(argv=None):
@@ -697,7 +698,7 @@ def main(argv=None):
     if root is None or not os.path.isfile(os.path.join(root, FAMILIES)):
         print(f"no {FAMILIES} under {root or 'the skill folder or the repo root'}: pass --kanon-root", file=sys.stderr)
         return 2
-    problems = check_work(args.work, args.repo, root)
+    problems, _ = check_work(args.work, args.repo, root)
     print(json.dumps({"result": "invalid" if problems else "ok", "problems": problems}, indent=2))
     return 1 if problems else 0
 

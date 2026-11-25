@@ -8,14 +8,16 @@
 Both re-run the `read-code` policy check on the record and the overlay check on the work folder,
 and stop on any blocking field or problem without writing anything.
 
-place, commit_ai_files yes: one commit on a new branch of the client repo, made in a temporary
-  worktree, so the owner's checkout keeps its branch, HEAD and uncommitted files. The commit holds
-  .ai/kanon.yml, .ai/rules/project/*.md and .ai/standards-report.md.
+place, commit_ai_files yes: one commit on a new branch of the client repo. Its parent is the `Read at`
+  commit of the checked report, and it is built with git plumbing on a temporary index, so the owner's
+  checkout keeps its index, branch, HEAD and uncommitted files, and no hook runs. The commit holds
+  .ai/kanon.yml, .ai/rules/project/*.md and .ai/standards-report.md. A symlink, file or gitlink where
+  .ai, its folders or a target sits at `Read at` stops the run.
 place, commit_ai_files no: writes nothing under the repo, .git included. The files stay in the work folder.
 load, commit_ai_files no: copies .ai/kanon.yml and .ai/rules/project/ into the working tree and adds
   two lines to info/exclude, so git status stays empty. Stops when a target path is tracked.
 
-One JSON object on stdout. Exit 0 on success, 1 on `stop` or a failed git command, 2 for bad usage.
+One JSON object on stdout. Exit 0 on success, 1 on `stop`, a failed git command or a file error, 2 for bad usage.
 Stdlib only.
 """
 import argparse
@@ -49,10 +51,14 @@ def _sibling(name):
     return module
 
 
-def git(cwd, *args, check=True):
-    """Run git in cwd. Raises GitError on a failed command unless check is False."""
+inventory = _sibling("inventory.py")
+GIT_CONFIG = inventory.GIT_CONFIG
+
+
+def git(cwd, *args, check=True, env=None, input=None):
+    """Run git in cwd with hooks, fsmonitor and the split index off. Raises GitError on a failed command unless check is False."""
     done = subprocess.run(
-        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", cwd, *args], capture_output=True,
+        ["git", "--no-optional-locks", *GIT_CONFIG, "-C", cwd, *args], capture_output=True, env=env, input=input,
     )
     if check and done.returncode != 0:
         raise GitError(f"git {args[0]} failed: " + done.stderr.decode("utf-8", "replace").strip())
@@ -90,10 +96,42 @@ def read_bytes(path):
 
 # ---------- place ----------
 
-def place_on_branch(repo, work, branch, subject):
+FOLDERS = (".ai", ".ai/rules", RULES_DIR)
+
+
+def mode_at(repo, sha, path):
+    """The git mode of path in the tree of sha, or None when it is absent."""
+    listed = git(repo, "ls-tree", "-z", "--full-tree", sha, "--", path).stdout.decode("utf-8", "replace")
+    for entry in listed.split("\0"):
+        meta, _, name = entry.partition("\t")
+        if name == path:
+            return meta.split()[0]
+    return None
+
+
+def in_the_way_at(repo, sha, files):
+    """Why the files cannot be added to the tree of sha without --replace, or None.
+
+    The folders on the way must be absent or folders, and each file absent or a regular file.
+    """
+    kinds = {"120000": "symlink", "160000": "gitlink", "040000": "folder"}
+    for path in FOLDERS:
+        mode = mode_at(repo, sha, path)
+        if mode not in (None, "040000"):
+            return f"{path} is a {kinds.get(mode, 'file')} at {sha[:7]}, not a folder"
+    for rel, _ in files:
+        mode = mode_at(repo, sha, rel)
+        if mode not in (None, "100644", "100755"):
+            return f"{rel} is a {kinds.get(mode, 'file of mode ' + mode)} at {sha[:7]}, not a regular file"
+    return None
+
+
+def place_on_branch(repo, work, branch, subject, read_at):
+    """One commit on a new branch, parent read_at, made with plumbing on a temporary index.
+
+    Nothing touches the owner's index, working tree or HEAD, and no hook runs.
+    """
     files = files_to_place(work)
-    if git(repo, "rev-parse", "--verify", "-q", "HEAD^{commit}", check=False).returncode != 0:
-        return stop(reason="the repo has no commit to branch from")
     exists = git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}", check=False).returncode == 0
     if exists:
         same = all(
@@ -104,33 +142,21 @@ def place_on_branch(repo, work, branch, subject):
         if same:
             return emit({"result": "already-placed", "branch": branch}, 0)
         return stop(reason=f"branch {branch} exists with other content; pass --branch to use another name")
-    scratch = tempfile.mkdtemp(prefix="standards-discovery-")
-    tree = os.path.join(scratch, "tree")
-    made = False
-    try:
-        git(repo, "worktree", "add", "-q", "-b", branch, tree, "HEAD")
-        made = True
+    blocked = in_the_way_at(repo, read_at, files)
+    if blocked:
+        return stop(reason=blocked)
+    with tempfile.TemporaryDirectory(prefix="standards-discovery-") as scratch:
+        index = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
+        git(repo, "read-tree", read_at, env=index)
         for rel, src in files:
-            target = os.path.join(tree, rel)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copyfile(src, target)
-        git(tree, "add", "--", *[rel for rel, _ in files])
-        git(tree, "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", subject)
-        sha = text_of(git(tree, "rev-parse", "HEAD"))
-        git(repo, "worktree", "remove", "--force", tree)
-        made = False
-    except GitError:
-        if os.path.isdir(tree):
-            git(repo, "worktree", "remove", "--force", tree, check=False)
-        git(repo, "worktree", "prune", check=False)
-        if made:
-            git(repo, "branch", "-D", branch, check=False)
-        raise
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+            blob = text_of(git(repo, "hash-object", "-w", "--no-filters", "--stdin", input=read_bytes(src)))
+            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}", env=index)
+        tree = text_of(git(repo, "write-tree", env=index))
+    sha = text_of(git(repo, "commit-tree", "--no-gpg-sign", tree, "-p", read_at, "-m", subject))
+    git(repo, "update-ref", f"refs/heads/{branch}", sha, "")
     return emit(
         {
-            "result": "placed", "branch": branch, "commit": sha, "files": [rel for rel, _ in files],
+            "result": "placed", "branch": branch, "commit": sha, "parent": read_at, "files": [rel for rel, _ in files],
             "next": "ask the owner, then push the branch and open the pull request",
         },
         0,
@@ -206,6 +232,13 @@ def main(argv=None):
         if subprocess.run(["git", "check-ref-format", f"refs/heads/{branch}"], capture_output=True).returncode != 0:
             parser.error(f"--branch is not a valid branch name: {branch}")
 
+    try:
+        return run(args, branch)
+    except (GitError, OSError) as error:
+        return emit({"result": "error", "reason": str(error)}, 1)
+
+
+def run(args, branch):
     policy, overlay = _sibling("check-policy.py"), _sibling("check-overlay.py")
     try:
         with open(os.path.expanduser(args.record), encoding="utf-8") as handle:
@@ -223,31 +256,31 @@ def main(argv=None):
     if root is None or not os.path.isfile(os.path.join(root, overlay.FAMILIES)):
         print("no kanon/catalog/families.json found: pass --kanon-root", file=sys.stderr)
         return 2
-    problems = overlay.check_work(args.work, args.repo, root)
+    try:
+        inventory.require_top_level(args.repo)
+    except inventory.Stop as error:
+        return stop(reason=str(error))
+    problems, read_at = overlay.check_work(args.work, args.repo, root)
     if problems:
         return stop(problems=problems)
 
-    try:
-        if args.command == "place":
-            if commit_ai_files == "no":
-                cmd = shlex.join([
-                    "python3", os.path.join(HERE, "place-overlay.py"), "load", "--record", args.record,
-                    "--model", args.model, "--work", args.work, "--repo", args.repo,
-                ])
-                return emit(
-                    {
-                        "result": "kept-in-brain", "work": args.work,
-                        "next": f"nothing was written under the repo. To use the overlay locally, run: {cmd}",
-                    },
-                    0,
-                )
-            return place_on_branch(args.repo, args.work, branch, args.subject)
-        if commit_ai_files != "no":
-            return stop(reason="the record says commit_ai_files: yes, so the overlay goes to a branch with `place`, not into the working tree")
-        return load_into_tree(args.repo, args.work)
-    except GitError as error:
-        print(str(error), file=sys.stderr)
-        return emit({"result": "error", "reason": str(error)}, 1)
+    if args.command == "place":
+        if commit_ai_files == "no":
+            cmd = shlex.join([
+                "python3", os.path.join(HERE, "place-overlay.py"), "load", "--record", args.record,
+                "--model", args.model, "--work", args.work, "--repo", args.repo,
+            ])
+            return emit(
+                {
+                    "result": "kept-in-brain", "work": args.work,
+                    "next": f"nothing was written under the repo. To use the overlay locally, run: {cmd}",
+                },
+                0,
+            )
+        return place_on_branch(args.repo, args.work, branch, args.subject, read_at)
+    if commit_ai_files != "no":
+        return stop(reason="the record says commit_ai_files: yes, so the overlay goes to a branch with `place`, not into the working tree")
+    return load_into_tree(args.repo, args.work)
 
 
 if __name__ == "__main__":
