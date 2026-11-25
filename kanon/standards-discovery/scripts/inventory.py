@@ -214,15 +214,16 @@ def branches(repo):
 
 
 def listing(repo, sha, ignored):
-    """What may be read at commit sha: {"files", "sources", "code", "siblings"}, ignored paths left out.
+    """What may be read at commit sha: {"tracked", "sources", "code", "siblings"}, ignored paths left out of all but tracked.
 
     check-overlay.py calls this too, so the paths a citation may name never come from inventory.json.
     """
-    files = [f for f in tracked_files(repo, sha) if f not in ignored]
+    tracked = tracked_files(repo, sha)
+    files = [f for f in tracked if f not in ignored]
     sources = classify(files)
     code = [f for f in files if CODE_FILE.fullmatch(f) and not CONFIG_FILE.fullmatch(f.rsplit("/", 1)[-1]) and f not in sources["linters"]]
     php = [f for f in code if f.endswith(".php")]
-    return {"files": files, "sources": sources, "code": code, "siblings": siblings(repo, php, sha)}
+    return {"tracked": tracked, "sources": sources, "code": code, "siblings": siblings(repo, php, sha)}
 
 
 def listed_paths(found):
@@ -230,7 +231,7 @@ def listed_paths(found):
     return {p for paths in found["sources"].values() for p in paths} | {p for paths in found["siblings"].values() for p in paths}
 
 
-EMPTY = {"files": [], "sources": {kind: [] for kind in SOURCE_KINDS}, "code": [], "siblings": {}}
+EMPTY = {"tracked": [], "sources": {kind: [] for kind in SOURCE_KINDS}, "code": [], "siblings": {}}
 
 
 def build(repo):
@@ -258,7 +259,7 @@ def build(repo):
     return {
         "result": "inventory" if found["code"] or rule_sources else "no-code",
         "read_at": read_at,
-        "ignored": sorted(ignored & set(tracked_files(repo, read_at))) if read_at else [],
+        "ignored": sorted(ignored & set(found["tracked"])),
         "sources": sources,
         "code_files": len(found["code"]),
         "siblings": found["siblings"],
