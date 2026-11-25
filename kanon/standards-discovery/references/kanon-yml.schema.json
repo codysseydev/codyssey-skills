@@ -13,9 +13,7 @@
     "overlay": {
       "description": "One entry per Kanon rule the project adopts, changes or switches off.",
       "type": "array",
-      "items": {
-        "oneOf": [{ "$ref": "#/$defs/by_id" }, { "$ref": "#/$defs/by_sentence" }]
-      }
+      "items": { "$ref": "#/$defs/entry" }
     }
   },
   "$defs": {
@@ -34,26 +32,13 @@
       "minItems": 1,
       "items": { "type": "string", "pattern": "^[^:`]+:[1-9][0-9]*(-[1-9][0-9]*)?$" }
     },
-    "by_id": {
-      "description": "A rule of a family that has a catalog file, named by its ID.",
+    "entry": {
+      "description": "One Kanon rule, named by its catalog ID.",
       "type": "object",
       "required": ["id", "effect", "evidence"],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
-        "effect": { "$ref": "#/$defs/effect" },
-        "rule": { "$ref": "#/$defs/rule" },
-        "evidence": { "$ref": "#/$defs/evidence" }
-      }
-    },
-    "by_sentence": {
-      "description": "A rule of a family without a catalog file, named by its reference file and one whole sentence of it.",
-      "type": "object",
-      "required": ["file", "sentence", "effect", "evidence"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "pattern": "^kanon/[a-z-]+/references/[a-z-]+\\.md$" },
-        "sentence": { "type": "string", "pattern": "\\S" },
         "effect": { "$ref": "#/$defs/effect" },
         "rule": { "$ref": "#/$defs/rule" },
         "evidence": { "$ref": "#/$defs/evidence" }

@@ -14,8 +14,7 @@ overlay:
     effect: 'off'
     evidence:
       - CLAUDE.md:12
-  - file: kanon/laravel-kanon/references/testing.md
-    sentence: 'Every test that boots the application **MUST** extend the project''s `Tests\TestCase`.'
+  - id: TEST-003
     effect: change
     rule: .ai/rules/project/testing.md
     evidence:
@@ -24,20 +23,9 @@ overlay:
 
 ## Naming a Kanon rule
 
-One entry names one Kanon rule. Two entries for the same rule fail.
+One entry names one Kanon rule by its catalog ID, for example `ORCH-011` or `TEST-003`. The ID must exist in `kanon/catalog/<family>.json`. Two entries for the same ID fail.
 
-- By ID, when the rule's family has a file in `kanon/catalog/`. Today that is `orchestration-di` (`ORCH-001` to `ORCH-037`). The ID must exist in the catalog.
-- By `file` and `sentence`, when the family has no catalog file. `file` is a `reference` path listed in `kanon/catalog/families.json`. `sentence` is one whole rule sentence copied from that file.
-
-A family that has a catalog file takes IDs only. A sentence entry for it fails, and the message names the ID to use. Family catalogs grow over time, so an overlay written today can need a one-line edit later.
-
-Rules for `sentence`:
-
-- Join the lines the reference file wraps. The checker collapses whitespace, so one space between words is enough.
-- Keep the bold markers. The sentence holds a bold keyword (`**MUST**`, `**MUST NOT**`, `**SHOULD**`, `**SHOULD NOT**`, `**MAY**`).
-- It ends with `.`, `:` or `;`.
-- It starts at a sentence start: a list item, or after `. `, `; ` or `: `. A fragment from the middle of a sentence fails.
-- It matches exactly once in the file.
+A family without a catalog file has no IDs, so its rules cannot be named yet. The checker says which family it is.
 
 ## Effects
 
@@ -58,7 +46,7 @@ The file is read by a strict subset parser, and by other YAML readers in the cli
 - `mode:` and `overlay:` sit at column 0, `mode:` once. Items are `  - key: value`, keys `    key: value`, list items `      - value`. Spaces only, no tabs. Full-line `#` comments are fine.
 - A value is a plain word with no spaces, no `: ` and no ` #`, or a single-quoted string (`''` for a quote, backslashes literal), or a JSON double-quoted string.
 - Quote `off`, `on`, `yes`, `no`, `true`, `false`, `y`, `n`, `null` and `~`. Some YAML readers turn a plain `off` into a boolean. The parser stops on the plain form and names the line.
-- Quote anything with a space, a colon followed by a space, or a hash after a space. Sentences are always quoted.
+- Quote anything with a space, a colon followed by a space, or a hash after a space.
 
 ## Prose rule files
 
@@ -72,7 +60,7 @@ paths:
 
 # Testing (project rules)
 
-- Test method names **MUST** start with `test_` and use snake_case. Source: `CLAUDE.md:7`. Changes the Kanon's `it_` prefix rule in `testing.md`.
+- Test method names **MUST** start with `test_` and use snake_case. Source: `CLAUDE.md:7`. Changes TEST-003, the Kanon's `it_` prefix rule.
 ```
 
-State the rule, name the source line, and name the Kanon rule it changes when there is one.
+State the rule, name the source line, and name the Kanon rule ID it changes when there is one.

@@ -50,8 +50,7 @@ overlay:
     effect: 'off'
     evidence:
       - CLAUDE.md:12
-  - file: kanon/laravel-kanon/references/testing.md
-    sentence: 'Test method names **MUST** be descriptive with the `it_` prefix, stating the behavior (`it_signs_up_a_member_successfully`, `it_returns_404_when_course_not_found`), never generic (`test_course`).'
+  - id: TEST-003
     effect: change
     rule: .ai/rules/project/testing.md
     evidence:
@@ -59,12 +58,12 @@ overlay:
 ```
 
 - `mode`: `canon-first` or `project-first` (#44). The skill writes only `project-first`.
-- `overlay`: a list. Each entry names one Kanon rule, by `id` (a family with a catalog file) or by `file` and `sentence` (a family without one). Open decisions b and d.
+- `overlay`: a list. Each entry names one Kanon rule by its catalog `id`. Decisions b and d.
 - `effect`: `adopt`, `change` or `off`. `change` needs `rule`, a file under `.ai/rules/project/`. `adopt` and `off` have no `rule`.
 - `evidence`: one or more `path:line` or `path:line-line` in the client repo. Each item must resolve at `Read at` (an existing, non-blank line) and must also appear among the citations of the entry's row in the report, where it carries a quote. A path may hold spaces (quote the YAML value then) but not `:` or a backtick.
-- One entry per Kanon rule. Two entries with the same ID, or the same file and sentence, fail.
+- One entry per Kanon rule. Two entries with the same ID fail.
 
-The committed schema is `kanon/standards-discovery/references/kanon-yml.schema.json`. It uses the keyword subset `kanon/catalog/schema.json` uses (`type`, `required`, `properties`, `additionalProperties`, `enum`, `pattern`, `items`, `minItems`, `oneOf`, `$ref`, `$defs`). An entry is `oneOf` a by-ID shape and a by-sentence shape, each with `additionalProperties: false`. The `change` needs `rule` check is code, because the subset has no `if`/`then`.
+The committed schema is `kanon/standards-discovery/references/kanon-yml.schema.json`. It uses the keyword subset `kanon/catalog/schema.json` uses (`type`, `required`, `properties`, `additionalProperties`, `enum`, `pattern`, `items`, `minItems`, `oneOf`, `$ref`, `$defs`). An entry is one by-ID shape with `additionalProperties: false`. The `change` needs `rule` check is code, because the subset has no `if`/`then`.
 
 Parsing. Stdlib only, as `check-policy.py` (the repo has no PyYAML: `python3 -c "import yaml"` fails). A strict subset parser accepts only this form: `mode:` at column 0, `overlay:` at column 0, `  - key: value` items, `    key: value` keys, `      - value` list items, and full-line `#` comments. A value is a plain word with no spaces, `: ` or ` #`, a single-quoted string (`''` for a quote, backslashes literal), or a JSON double-quoted string. Anything else stops with the line number and "quote this value". The subset is chosen so YAML 1.1 and 1.2 readers get the same values. Ruby's YAML, a 1.1 reader, read the sample to the same JSON once `off` was quoted (Prototype).
 
@@ -75,8 +74,7 @@ Two rules come from the readers around it:
 
 ### Naming a Kanon rule
 
-- By ID: the ID is in `kanon/catalog/<family>.json`. In this plan an ID is required when the entry's family has a catalog file (open decision d). A sentence entry for such a family fails with the ID whose `rule` text matches it, so the fix is one line.
-- By sentence: `file` is a `reference` row in `kanon/catalog/families.json`. `sentence` is a whole rule sentence copied from that file with wrapped lines joined, bold markers kept. It must hold a bold RFC keyword (`**MUST**` and the rest, the same set as `BOLD_KEYWORD` in `kanon/scripts/catalog.mjs:15`), end with `.`, `:` or `;`, and match exactly once at a sentence start (a list item, or after `. `, `; ` or `: `) in the file with whitespace collapsed. "**MUST**" alone and a mid-sentence fragment both fail (Prototype).
+Every entry names its rule by ID, and the ID must be in `kanon/catalog/<family>.json` (decision d, 2026-11-25). A family without a catalog file has no IDs, so its rules cannot be named. The checker maps the ID's prefix to its family through `families.json` and says the family has no catalog file. #66 merges after #42 converts `symfony`, the last family without one.
 
 ### The Kanon root
 
@@ -159,7 +157,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 - `Read at` is the commit every citation is checked against, through `git show <sha>:<path>`. A moved working tree does not break the check.
 - Evidence items: `` `path:line` `` or `` `path:line-line` ``, each followed by a short quote in double quotes that must appear on the cited lines (whitespace collapsed). A quote holds no `"`, `|` or backtick. On a line full of them (a JSON line in `composer.json`, a Markdown table row), the agent quotes a fragment without them, such as `php-cs-fixer fix --dry-run --diff`. No escape grammar to get wrong. Items are separated by `; `. Git history uses `` `commit:<sha>` "<text in the subject>" `` and `` `branch:<name>` ``. Every row needs at least one item. Open decision j.
 - Source: `written down`, `configured` or `pattern in code`.
-- Kanon rule: an ID, or `` `<reference path>` "<sentence>" `` with the same sentence as the overlay entry, or `none`.
+- Kanon rule: a catalog ID, the same one as the overlay entry, or `none`.
 - Effect: `adopt`, `change`, `off`, or `project-only` with Kanon rule `none` (open decision k).
 - Every overlay entry has a row with the same rule and effect, and every adopt, change or off row has an entry.
 - `Silent on` lists each Kanon family with no overlay entry, one bullet per family name. The set to compare is every family in `families.json` except `symfony` for `Framework: laravel`, and `symfony`, `php-core` and `reliability` for `Framework: symfony` (the files `symfony-kanon` reads, `README.md:26-29`).
@@ -259,8 +257,8 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `golden overlay and report pass` (`test_check_overlay.py`) | The fixture repo and `fixtures/expected/`: exit 0, `ok`, no problems. Acceptance criteria 1 and 2 | fails |
 | `schema mutations` | An unknown effect, empty `evidence`, an unknown key, `id` and `file` in one entry, a missing `mode`: each named with its path | fails |
 | `parse errors name the line` | Plain `off`, a ` #` comment after a value, `: ` in a plain value, a tab, a duplicate key, a wrong indent, a second `mode` | fails |
-| `rule resolution` | A made-up ID, a sentence with one word changed, a fragment without a bold keyword, a mid-sentence start, a file not in `families.json`, an `orchestration-di.md` sentence (fails and names the matching ID) | fails |
-| `one entry per rule` | Two `ORCH-011` entries, and two entries with the same sentence written with different wrapping | fails |
+| `rule resolution` | A made-up ID, an ID of a family without a catalog file (names the family), a `file` and `sentence` entry (the schema refuses it), a report row naming a file and a sentence | fails |
+| `one entry per rule` | Two `ORCH-011` entries | fails |
 | `overlay evidence` | An evidence item on a blank line, past the end, or missing from its row's citations | fails |
 | `quote and path forms` | A quote holding a double quote or a pipe fails. `docs/Coding Standards.md:3` with a quoted YAML value passes. A row citing `composer.json:7` passes | fails |
 | `change and rule files` | `change` without `rule`, `adopt` with `rule`, a `rule` path that does not exist, a rule file without `paths:` | fails |
@@ -431,7 +429,7 @@ sequenceDiagram
 - A quote cannot hold `"`, `|` or a backtick, and a path cannot hold `:`. A line made only of those characters cannot be quoted. The agent then cites a neighbouring line or another source.
 - Line citations go stale when the client's code moves. `Read at` pins the check to one commit, so the report stays checkable, and a rerun gives fresh lines.
 - Quoting `'off'` is a rule the agent can forget. The parser stops on the plain form and names the line, so a forgotten quote costs one rerun.
-- Family names drift as #33 to #42 add catalogs. A sentence entry for a family that gains IDs then fails, with the ID named, so client overlays need a one-line edit per entry (decision d).
+- Only families with a catalog file can be named. #66 merges after #42, so every family has one by then (decision d).
 - The install never deletes. A reference file removed from the repo stays in the snapshot. The checker accepts only files `families.json` lists, so a stale file is never matched. Catalog IDs are never deleted (`kanon/scripts/catalog.mjs:388-394`).
 - `info/exclude` is shared by every worktree of the client checkout. A loaded overlay is hidden in all of them, which is the intent.
 - The no-code rule counts a fresh framework skeleton as code. A client repo that is only `laravel new` output gets an overlay built from framework defaults (decision h, option C).
@@ -459,6 +457,7 @@ d. Naming a rule from a family that has IDs.
    Decided 2026-11-24 by the owner: A.
    - **A. ID required once the family has a catalog file (recommended).** Matches the issue's "after that, by ID". One name per rule makes the duplicate check exact. Cost: a client overlay's sentence entries fail when their family gains IDs, and the message names the ID to use.
    - B. Both forms accepted always. No migration, but one rule can then appear twice under two names.
+   Revised 2026-11-25 by the owner: drop the file-and-sentence form. Every entry names a rule by catalog ID. A family without a catalog file (only `symfony` today) cannot be named, and the checker says so. #66 merges after #42 converts `symfony`. The sentence parser, the `file` and `sentence` schema branch and their tests are removed.
 
 e. How the installed skill finds the Kanon. Today it cannot: the install copies no catalog and no references, and the hand copy of `laravel-kanon` is stale.
    Decided 2026-11-24 by the owner: A.

@@ -131,12 +131,12 @@ class ParseErrors(unittest.TestCase):
         self.fails("mode: project-first\noverlay:\n  - id: ORCH-011\n    evidence:\n      - 12:30\n", 5, "quote this value")
 
     def test_a_single_quoted_string_keeps_backslashes_and_doubles_its_quotes(self):
-        parsed = co().parse_kanon_yml("mode: project-first\noverlay:\n  - sentence: 'the project''s `Tests\\TestCase`.'\n")
-        self.assertEqual(parsed["overlay"][0]["sentence"], "the project's `Tests\\TestCase`.")
+        parsed = co().parse_kanon_yml("mode: project-first\noverlay:\n  - note: 'the project''s `Tests\\TestCase`.'\n")
+        self.assertEqual(parsed["overlay"][0]["note"], "the project's `Tests\\TestCase`.")
 
     def test_a_json_double_quoted_string_is_read(self):
-        parsed = co().parse_kanon_yml('mode: project-first\noverlay:\n  - sentence: "a \\"b\\" c"\n')
-        self.assertEqual(parsed["overlay"][0]["sentence"], 'a "b" c')
+        parsed = co().parse_kanon_yml('mode: project-first\noverlay:\n  - note: "a \\"b\\" c"\n')
+        self.assertEqual(parsed["overlay"][0]["note"], 'a "b" c')
 
     def test_the_golden_file_parses_to_the_shape_check_policy_reads(self):
         parsed = co().parse_kanon_yml(read(fs.EXPECTED, ".ai/kanon.yml"))
@@ -164,60 +164,38 @@ class RuleResolution(unittest.TestCase):
         family, key, problem = self.resolve(id="ORCH-011")
         self.assertEqual((family, problem), ("orchestration-di", None))
         self.assertEqual(key, ("id", "ORCH-011"))
+        self.assertEqual(self.resolve(id="TEST-003")[0], "testing")
 
     def test_a_made_up_id_fails(self):
         self.assertIn("no such", self.resolve(id="ORCH-099")[2])
-        self.assertIn("no such", self.resolve(id="TEST-001")[2])
+        self.assertIn("no such", self.resolve(id="TEST-099")[2])
+        self.assertIn("no such", self.resolve(id="NOPE-001")[2])
 
-    def test_a_whole_sentence_of_a_family_without_ids_resolves(self):
-        family, key, problem = self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence=TEST_CASE_SENTENCE)
-        self.assertEqual((family, problem), ("testing", None))
-
-    def test_a_sentence_that_wraps_in_the_file_resolves(self):
-        sentence = (
-            "Test method names **MUST** be descriptive with the `it_` prefix, stating the behavior "
-            "(`it_signs_up_a_member_successfully`, `it_returns_404_when_course_not_found`), never generic (`test_course`)."
-        )
-        self.assertIsNone(self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence=sentence)[2])
-
-    def test_a_sentence_with_one_word_changed_fails(self):
-        changed = TEST_CASE_SENTENCE.replace("boots", "starts")
-        self.assertIn("not found", self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence=changed)[2])
-
-    def test_a_fragment_without_a_bold_keyword_fails(self):
-        problem = self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence="Tests use PHPUnit.")[2]
-        self.assertIn("bold", problem)
-        self.assertIn("bold", self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence="MUST")[2])
-
-    def test_a_keyword_alone_fails(self):
-        self.assertIn("end", self.resolve(file="kanon/laravel-kanon/references/testing.md", sentence="**MUST**")[2])
-
-    def test_a_mid_sentence_start_fails(self):
-        problem = self.resolve(
-            file="kanon/laravel-kanon/references/testing.md",
-            sentence="**MUST** extend the project's `Tests\\TestCase`.",
-        )[2]
-        self.assertIn("start of a sentence", problem)
-
-    def test_a_sentence_that_matches_twice_fails(self):
+    def test_an_id_of_a_family_without_a_catalog_file_names_the_family(self):
         root = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, root, True)
-        put(root, "kanon/catalog/families.json", json.dumps([{"family": "x", "prefix": "X", "reference": "kanon/x/references/x.md"}]))
-        put(root, "kanon/x/references/x.md", "- Code **MUST** be tidy.\n- Code **MUST** be tidy.\n")
+        families = [
+            {"family": "x", "prefix": "X", "reference": "kanon/x/references/x.md"},
+            {"family": "y", "prefix": "Y", "reference": "kanon/y/references/y.md"},
+        ]
+        put(root, "kanon/catalog/families.json", json.dumps(families))
+        put(root, "kanon/catalog/x.json", json.dumps({"sections": [{"entries": [{"id": "X-001", "rule": "Code **MUST** be tidy."}]}]}))
         kanon = co().load_kanon(root)
-        problem = co().resolve({"file": "kanon/x/references/x.md", "sentence": "Code **MUST** be tidy."}, kanon)[2]
-        self.assertIn("2 times", problem)
+        family, _, problem = co().resolve({"id": "X-001"}, kanon)
+        self.assertEqual((family, problem), ("x", None))
+        problem = co().resolve({"id": "Y-001"}, kanon)[2]
+        self.assertIn("y", problem)
+        self.assertIn("no catalog file", problem)
 
-    def test_a_file_that_is_not_in_families_json_fails(self):
-        problem = self.resolve(file="kanon/laravel-kanon/references/nope.md", sentence="A **MUST** rule.")[2]
-        self.assertIn("families.json", problem)
+    def test_an_entry_by_file_and_sentence_is_refused_by_the_schema(self):
+        schema = json.loads(read(os.path.join(fs.SKILL, "references"), "kanon-yml.schema.json"))
+        entry = {"file": "kanon/laravel-kanon/references/testing.md", "sentence": TEST_CASE_SENTENCE, "effect": "adopt", "evidence": ["CLAUDE.md:7"]}
+        errors = co().validate(schema, {"mode": "project-first", "overlay": [entry]})
+        self.assertIn('unknown property "file"', [error["message"] for error in errors])
 
-    def test_a_sentence_from_a_family_with_ids_names_the_id(self):
-        problem = self.resolve(
-            file="kanon/laravel-kanon/references/orchestration-di.md",
-            sentence="`declare(strict_types=1);` **MUST** open every PHP file.",
-        )[2]
-        self.assertIn("ORCH-011", problem)
+    def test_a_report_row_naming_a_file_and_sentence_is_refused(self):
+        rule, problem = co().parse_rule_cell('`kanon/laravel-kanon/references/testing.md` "' + TEST_CASE_SENTENCE + '"')
+        self.assertIsNone(rule)
         self.assertIn("ID", problem)
 
 
@@ -225,15 +203,6 @@ class OneEntryPerRule(Golden):
     def test_two_entries_with_the_same_id_fail(self):
         self.edit(".ai/kanon.yml", "overlay:\n", "overlay:\n" + ORCH_011)
         self.assertProblem("ORCH-011", "twice")
-
-    def test_the_same_sentence_wrapped_differently_is_one_rule(self):
-        spaced = TEST_CASE_SENTENCE.replace("boots the", "boots  the").replace("'", "''")
-        extra = (
-            "  - file: kanon/laravel-kanon/references/testing.md\n"
-            f"    sentence: '{spaced}'\n    effect: adopt\n    evidence:\n      - tests/Orders/CreateOrderHandlerTest.php:9\n"
-        )
-        self.edit(".ai/kanon.yml", "overlay:\n", "overlay:\n" + extra)
-        self.assertProblem("twice")
 
 
 class OverlayEvidence(Golden):

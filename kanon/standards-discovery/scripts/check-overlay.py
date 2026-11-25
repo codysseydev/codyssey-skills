@@ -7,7 +7,7 @@ The work folder holds policy.json, standards-report.md, .ai/kanon.yml and .ai/ru
 The script proves that:
 
 - .ai/kanon.yml parses in the strict subset and matches references/kanon-yml.schema.json,
-- every overlay entry names one real Kanon rule, by ID or by a whole sentence of its reference file,
+- every overlay entry names one real Kanon rule by its catalog ID,
 - every citation in the report and every evidence item in the overlay resolves in the client repo at
   the commit named by `Read at`, outside the paths the AI policy ignores,
 - the report and the overlay agree, and `Silent on` lists the Kanon families with no entry.
@@ -27,7 +27,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 SCHEMA_PATH = os.path.join(SKILL, "references", "kanon-yml.schema.json")
 FAMILIES = os.path.join("kanon", "catalog", "families.json")
-BOLD_KEYWORD = re.compile(r"\*\*(MUST NOT|MUST|SHOULD NOT|SHOULD|MAY)\*\*")
 EFFECTS = ("adopt", "change", "off", "project-only")
 SOURCES = ("written down", "configured", "pattern in code")
 FRAMEWORKS = ("laravel", "symfony")
@@ -222,66 +221,35 @@ def default_kanon_root(skill_dir):
 def load_kanon(root):
     with open(os.path.join(root, FAMILIES), encoding="utf-8") as handle:
         families = json.load(handle)
-    by_reference, catalog_refs, ids = {}, set(), {}
+    by_prefix, ids = {}, {}
     for family in families:
-        by_reference[family["reference"]] = family["family"]
         path = os.path.join(root, "kanon", "catalog", family["family"] + ".json")
+        by_prefix[family["prefix"]] = (family["family"], os.path.isfile(path))
         if not os.path.isfile(path):
             continue
-        catalog_refs.add(family["reference"])
         with open(path, encoding="utf-8") as handle:
             catalog = json.load(handle)
         for section in catalog["sections"]:
             for entry in section["entries"]:
                 if "id" in entry:
                     ids[entry["id"]] = {"family": family["family"], "rule": entry["rule"]}
-    return {"root": root, "families": families, "by_reference": by_reference, "catalog_refs": catalog_refs, "ids": ids}
-
-
-def _sentence_matches(body, sentence):
-    """(whole-sentence matches, matches anywhere) of a collapsed sentence in a collapsed file."""
-    anywhere = [m.start() for m in re.finditer(re.escape(sentence), body)]
-    starts = [i for i in anywhere if i == 0 or re.search(r"(^|- |\d+\. |[.;:] )$", body[max(0, i - 4):i])]
-    return len(starts), len(anywhere)
+    return {"root": root, "families": families, "by_prefix": by_prefix, "ids": ids}
 
 
 def resolve(entry, kanon):
     """(family, key, problem) for an overlay entry. The key is the one name of the rule."""
-    if "id" in entry:
-        info = kanon["ids"].get(entry["id"])
-        if info is None:
-            return None, ("id", entry["id"]), f"{entry['id']}: no such ID in kanon/catalog"
-        return info["family"], ("id", entry["id"]), None
-    file, sentence = entry["file"], collapse(entry["sentence"])
-    key = ("sentence", file, sentence)
-    family = kanon["by_reference"].get(file)
-    if family is None:
-        return None, key, f"{file}: not a Kanon reference file in {FAMILIES}"
-    if file in kanon["catalog_refs"]:
-        named = sorted(i for i, info in kanon["ids"].items() if info["family"] == family and sentence in collapse(info["rule"]))
-        hint = f"name it {', '.join(named)}" if named else "name the rule by its ID"
-        return family, key, f"{file}: this family has IDs, {hint}"
-    if not BOLD_KEYWORD.search(sentence):
-        return family, key, "the sentence holds no bold RFC keyword (**MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **MAY**)"
-    if not sentence.endswith((".", ":", ";")):
-        return family, key, "the sentence must end with . : or ; (copy the whole sentence)"
-    try:
-        with open(os.path.join(kanon["root"], file), encoding="utf-8") as handle:
-            body = collapse(handle.read())
-    except OSError as error:
-        return family, key, f"{file}: cannot be read ({error})"
-    whole, anywhere = _sentence_matches(body, sentence)
-    if anywhere == 0:
-        return family, key, f"the sentence was not found in {file} (whitespace is collapsed, bold markers are kept)"
-    if whole == 0:
-        return family, key, f"the sentence starts in the middle of a sentence in {file}: copy it from the start of a sentence"
-    if whole > 1:
-        return family, key, f"the sentence matches {whole} times in {file}"
-    return family, key, None
+    key = ("id", entry["id"])
+    info = kanon["ids"].get(entry["id"])
+    if info is not None:
+        return info["family"], key, None
+    family, has_catalog = kanon["by_prefix"].get(entry["id"].split("-")[0], (None, True))
+    if not has_catalog:
+        return None, key, f"{entry['id']}: the {family} family has no catalog file in kanon/catalog, so its rules cannot be named yet"
+    return None, key, f"{entry['id']}: no such ID in kanon/catalog"
 
 
 def rule_label(key):
-    return key[1] if key[0] == "id" else f"{key[1]} \"{key[2][:60]}\""
+    return key[1]
 
 
 def silent_set(kanon, framework, touched):
@@ -339,18 +307,11 @@ def parse_rule_cell(cell):
         return {"kind": "none"}, None
     if re.fullmatch(r"[A-Z]+-[0-9]{3}", cell):
         return {"kind": "id", "id": cell}, None
-    found = re.fullmatch(r'`([^`]+)` "(.*)"', cell, re.S)
-    if found:
-        return {"kind": "sentence", "file": found.group(1), "sentence": found.group(2)}, None
-    return None, 'Kanon rule is none, an ID, or `<reference file>` "<sentence>"'
+    return None, "Kanon rule is none or a catalog ID such as ORCH-011"
 
 
 def rule_key(rule):
-    if rule["kind"] == "id":
-        return ("id", rule["id"])
-    if rule["kind"] == "sentence":
-        return ("sentence", rule["file"], collapse(rule["sentence"]))
-    return None
+    return ("id", rule["id"]) if rule["kind"] == "id" else None
 
 
 def _cells(line):

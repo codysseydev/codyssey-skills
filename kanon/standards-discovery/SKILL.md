@@ -66,7 +66,7 @@ Read every path in `sources` and `siblings`, and the commit and branch lists. Ne
 
 ## Step 4: map to the Kanon
 
-Read the Kanon from `<skill dir>/kanon/`: `catalog/families.json` lists the families and their reference files, and `catalog/` holds the rule IDs. For each convention pick one effect: `adopt`, `change`, `off`, or `project-only` when the Kanon has no rule for it. Write three outputs into the work folder:
+Read the Kanon from `<skill dir>/kanon/`: `catalog/families.json` lists the families and their reference files, and `catalog/` holds the rule IDs. Name each Kanon rule by its ID. For each convention pick one effect: `adopt`, `change`, `off`, or `project-only` when the Kanon has no rule for it. Write three outputs into the work folder:
 
 - `standards-report.md`, following `references/standards-report.md`.
 - `.ai/kanon.yml`, following `references/overlay.md`. Write `mode: project-first`. Quote `'off'`.

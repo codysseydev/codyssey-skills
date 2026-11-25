@@ -36,7 +36,7 @@ Policy warnings: `.aiignore` excludes `app/Legacy/` (1 file not read).
 - Git history uses `` `commit:<sha>` "<text in the subject>" `` and `` `branch:<name>` ``. The commit must be `Read at` or reachable from it. The branch must be in `inventory.json`.
 - Every row has at least one evidence item. A path in `ignored` is never cited.
 - Source is `written down` (a rule file, README or doc), `configured` (a linter, CI or script config) or `pattern in code`.
-- Kanon rule is an ID, or `` `<reference path>` "<sentence>" `` with the same sentence as the overlay entry, or `none`.
+- Kanon rule is a catalog ID, the same one as the overlay entry, or `none`.
 - Effect is `adopt`, `change`, `off` or `project-only`. `project-only` goes with `none`, and `none` goes with `project-only`.
 - Every `adopt`, `change` and `off` row has an overlay entry with the same rule and effect, and every overlay entry has a row.
 
