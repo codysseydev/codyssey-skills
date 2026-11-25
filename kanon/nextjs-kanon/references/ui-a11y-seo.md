@@ -241,7 +241,7 @@ rule that enforces a rule, where one exists.
   and UI-024. `@storybook/addon-a11y` runs over the stories in the Storybook test project,
   advisory first (`parameters.a11y.test: 'todo'`). A story whose violations are fixed, such as
   a `Button` `Disabled` story, is set to `'error'`, and the rest stay `'todo'` until fixed. A
-  logo link has an accessible name such as "<Site name> home". **MUST** for the lint,
+  logo link has an accessible name such as `<Site name> home`. **MUST** for the lint,
   **SHOULD** for the Storybook addon.
   - Why: the lint reads markup only and jsdom cannot compute contrast, so the addon covers
     what the lint misses.
@@ -603,7 +603,7 @@ rule that enforces a rule, where one exists.
 - **UI-069. Emit JSON-LD through `JsonLd` from `src/lib/JsonLd.tsx`,** never a hand-written
   `<script type="application/ld+json">`. `JsonLd` replaces `<` with its unicode escape so text
   from the API cannot close the script; that is enough, because `<` is the character that can
-  close the element (the helper in the Next.js guide also escapes `>`, `&`, U+2028 and
+  close the element (Next's own escape helper also escapes `>`, `&`, U+2028 and
   U+2029). Any other inline `<script>` goes through `InlineHeadScript` with a module-level
   constant string; request or API data is never put into script code. **SHOULD.**
   - Why: the HTML parser ends a script at the first `</script>` before any JavaScript escaping
@@ -624,8 +624,8 @@ rule that enforces a rule, where one exists.
 
 - A hex literal in an SVG default prop or an email template.
 - A corner radius outside the roles of UI-002 in an email template (UI-001).
-- The keyword colors `white`, `black`, `transparent` and `current`, and files on the guard
-  row's exempt list, such as email templates (UI-005).
+- The keyword colors `white`, `black`, `transparent` and `current`, and files a project adds to
+  the guard row's allowlist, such as email templates (UI-005).
 - `min-h-screen` on an inner block that must not follow the toolbar (UI-014).
 - Two copies of one element shown with `hidden` and `sm:hidden` (UI-017).
 - A control that resets its own label after a short delay, such as a copy button (UI-032).
