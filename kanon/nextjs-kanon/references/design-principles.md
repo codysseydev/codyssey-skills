@@ -95,7 +95,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - From: P4
 
 - **DESIGN-007. Read at most two property levels into an API object** A component, hook or util reads at most two property levels into an object that came from the API: `order.customer.name` is fine, `order.customer.address.country.code` is not. A deeper value comes from a named field that a mapper or a query `select` produces (DESIGN-006), or from a selector function beside the type (`shippingCountryCode(order)`). Fluent builders, array method chains and config objects are exempt. **SHOULD.**
-  - Why: each hop couples the caller to the shape of one more object on the path, so a change deep in the response breaks code that only wanted one value. Three hops or more is where the coupling starts to hurt.
+  - Why: each hop couples the caller to the shape of one more object on the path, so a change deep in the response breaks code that only wanted one value. Three hops or more is the smell the Law of Demeter names.
   - Check: review only. The review asks what sentence the chain is asking. A lint check comes only after its noise is measured on a real codebase.
   - Source: The Law of Demeter https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-law-of-demeter
   - Source: Stop Chaining Through Objects vault: Content/Quick Tips/18 - Stop Chaining Through Objects.md
@@ -119,7 +119,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Randomness: `Math.random()` and `crypto.randomUUID()` inside `utils/` logic are hidden dependencies, like the clock and environment reads. The function takes the random value, or a function that makes one, as an argument.
   - Environment: `process.env` is read in one module, `src/lib/env.ts` (DATA-042).
   - Storage and location: `localStorage`, `sessionStorage` and `window.location` are read inside a small wrapper module, such as `src/lib/authSession.ts`, or inside a hook, never in a rule function.
-  - Why: the same code runs on the server and in the browser, whose clocks and time zones differ, so a function that reads the clock or the environment itself gives different answers in each and cannot be tested without faking globals. An argument makes the input visible and keeps the test plain.
+  - Why: the same code runs on the server and in the browser, whose time zones differ, so a function that reads the clock or the environment itself gives different answers in each and cannot be tested without faking globals. An argument makes the input visible and keeps the test plain.
   - Source: Dependency Injection vs the Service Locator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location
   - Source: A Facade Is Service Location Too https://codyssey.dev/quick-tips/a-facade-is-service-location-too
   - Source: Service Location Is a Hidden Dependency https://codyssey.dev/quick-tips/service-location-is-a-hidden-dependency
@@ -158,7 +158,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
 
 - **DESIGN-015. A lookup table beats a branching chain** When the code picks behavior by a kind (a category, a status, a section type), use a typed lookup (`Record<Kind, handler>`, typed by the union or enum) instead of an `if`/`else if` or `switch` chain, so a new kind fails to compile until it is handled. This holds for a discriminated union as well: the handler for each kind takes that kind's narrowed payload. This is the Strategy idea in its smallest form. **SHOULD.**
   - A `switch` that remains ends in a `never` exhaustiveness check (TYPES-015).
-  - Why: the choice of behavior lives in one place, and the `Record` type makes a new kind a compile error until its handler exists, where an `if` chain falls through to its last branch without a word.
+  - Why: the choice of behavior lives in one place, and the `Record` type makes a new kind a compile error until its handler exists, where an `if` chain falls through to its last branch with no error.
   - Check: the TYPES-015 guard-test row: a `switch` over a union or enum ends in a `never` exhaustiveness check.
   - Source: The Factory Design Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-factory-pattern
   - Source: The State Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-state-pattern
@@ -182,7 +182,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
 
 - **DESIGN-019. A function takes an options object when it has a boolean parameter, two or more positional parameters of the same primitive type, or more than three positional parameters** `formatPrice(amount, showSymbol, showCents = false)` becomes `formatPrice(amount, { showSymbol, showCents })`; `assignReviewer(postId, reviewerId)`, with two string ids, becomes `assignReviewer({ postId, reviewerId })`; a factory that gains a fifth positional parameter takes an object. DESIGN-014 says the same for component props. **SHOULD.**
   - A `queryOptions` factory (`xQueryOptions(enabled = true)`) may take `enabled` as a positional boolean. It mirrors the signature of the hook that calls it (`useQuery(xQueryOptions(enabled))`), and `enabled` is the only boolean it takes. A factory that needs a second boolean takes an object.
-  - Why: at the call site `formatPrice(price, true, false)` says nothing about what each value means, and two arguments of the same primitive type can be swapped without a type error. Named options read at the call site and cannot be swapped.
+  - Why: at the call site `formatPrice(price, true, false)` says nothing about what each value means, and two arguments of the same primitive type can be swapped without a type error. Named options say what each value is at the call site, and their order does not matter.
   - Source: Primitive Obsession https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/primitive-obsession
   - Source: The Builder Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-builder-pattern
   - From: P15
