@@ -26,8 +26,8 @@ reporting, browser storage and navigation, hydration and caching, and React effe
 
 Severity: each entry ends with its keyword. **MUST** and **MUST NOT** are absolute.
 **SHOULD** and **SHOULD NOT** hold unless there is a concrete reason not to, and the
-reason is stated. **MAY** is optional. A `Check:` line names the guard-test row or lint
-rule that enforces a rule, where one exists.
+reason is stated. **MAY** is optional. A `Check:` line names the guard-test row, the lint
+rule, or the sheet's check idea for a rule, where one exists.
 
 ## Public pages are prerendered
 
@@ -70,8 +70,8 @@ rule that enforces a rule, where one exists.
   - Why: a page with nothing to fetch needs no revalidation, and any of these reads would turn it into a per-request render.
   - From: D5
 
-- **DATA-006. A per-request page is listed with a reason in the guard test's
-  `DYNAMIC_PAGES` list**, and carries a comment in its file saying why. **MUST** for the
+- **DATA-006. A per-request page is listed with a reason in the page list the guard test
+  reads (stage 2)**, and carries a comment in its file saying why. **MUST** for the
   list; the in-file comment is **SHOULD**.
   - Condition: Cache Components is off. The list holds the pages that export `dynamic = 'force-dynamic'`, an export Next.js 16 removes when Cache Components is on.
   - Why: a per-request page gives up the cache, so the reason has to be written where a reviewer sees it.
@@ -118,7 +118,7 @@ rule that enforces a rule, where one exists.
 - **DATA-012. Seed client queries only with the helpers in `src/lib/archiveSeed.ts`:**
   `seedUpdatedAt('fresh')` (same for every visitor), `perViewerSeedUpdatedAt()` (signed-out
   answer, member fields differ), `seedablePage(page, 'fresh')` (archive page). A gate waiting
-  on `isFetchedAfterMount` also opens for a signed-out visitor, for whom no fetch runs.
+  on `isFetchedAfterMount` must also open for a signed-out visitor, for whom no fetch runs.
   **MUST.**
   - Why: the seed's timestamp decides who refetches: a signed-in member gets one credentialed refetch on mount, and a signed-out visitor trusts the seed.
   - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
@@ -260,11 +260,11 @@ rule that enforces a rule, where one exists.
   - From: D24
 
 - **DATA-027. A mutation is retried at most once, and only after a network error or a 5xx.**
-  The default lives in the QueryClient provider, next to the query retry default of
-  DATA-026. A write that is not idempotent and carries no idempotency key is not retried (see
-  DATA-032). **SHOULD.**
+  Each mutation hook opts in through `shouldRetryMutation` (`src/lib/queryRetry.ts`, next to
+  the query policy of DATA-026). A write that is not idempotent and carries no idempotency key
+  is not retried (see DATA-032). **SHOULD.**
   - Why: a write that reached the server before the network failed runs twice when it is retried, so only a write that is safe to repeat gets the one retry.
-  - Check: a unit test of `shouldRetryMutation`: a 4xx gives no retry, the first 5xx retries, the second 5xx does not, and a request with no response retries once; a grep finds no `retry:` above 1 in a `useMutation`.
+  - Check: the provider default retries queries only; a mutation opts in per hook. A unit test of `shouldRetryMutation`: a 4xx gives no retry, the first 5xx retries, the second 5xx does not, and a request with no response retries once; a grep finds no `retry:` above 1 in a `useMutation`.
   - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
   - Source: The Decorator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-decorator-pattern
   - From: NX-06
@@ -273,7 +273,8 @@ rule that enforces a rule, where one exists.
   `types/*.enums.ts`. Components, hooks and services call the actions; only the store file
   sends events to the store (`store.send(...)` in XState Store). An event that sets one field
   takes the field name and a value of that field's type, never
-  `field: keyof State; value: string`. Event names follow DATA-029. **MUST.**
+  `field: keyof State; value: string`. **MUST.** An event is named in the past tense for what
+  happened, not for the field it writes (**SHOULD**).
   - Why: the actions object is the store's whole public surface, and a string-typed field and value let any field take any value past the type checker.
   - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
   - From: D25
@@ -282,7 +283,7 @@ rule that enforces a rule, where one exists.
   (`lessonCompletionToggled`, `cancelRequested`), not for the field they write (`SetStatus`,
   `UpdateFlag`). **SHOULD.**
   - Why: a name that says what happened keeps the decision inside the store, while a setter name hands the caller the store's internals.
-  - Check: a guard test fails when a member of an event enum in `types/*.enums.ts` that feeds a store `on:` block matches `^(Set|Update)[A-Z]`; in review, an action that takes `(field, value)` is a setter.
+  - Check: a guard test fails when a member of an event enum in `types/*.enums.ts` that feeds a store `on:` block matches `^(Set|Update)[A-Z]`.
   - Source: Tell, Don't Ask https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/tell-dont-ask
   - Source: Name Your Events in the Past Tense vault: Content/Quick Tips/20 - Name Your Events in the Past Tense.md
   - From: NX-09
@@ -513,7 +514,7 @@ implementation.
   `allow: ['warn', 'error']`; `console.log`, `console.info` and `console.debug` are not left
   in shipped source; a service does not log and rethrow (the caller decides); where the UI
   absorbs an error, report it through the project's error reporter. **MUST.**
-  - Why: stripping console calls from the production build hides them and does not stop them being written.
+  - Why: nobody reads a visitor's browser console, so a failure written there is lost, while the error reporter collects it where someone looks.
   - From: D42
 
 ## Browser storage, session and navigation
@@ -549,7 +550,7 @@ implementation.
 
 - **DATA-057. `fetchQuery` used for polling or reconciliation sets `staleTime: 0`.**
   **SHOULD.**
-  - Why: `invalidateQueries` marks the key fresh, so a later `fetchQuery` resolves from the cache unless it sets `staleTime: 0`.
+  - Why: `invalidateQueries` marks the query stale and refetches it while it is active, which makes the cached data fresh again, so a later `fetchQuery` within the provider's `staleTime` resolves from the cache instead of asking the server.
   - From: D54
 
 - **DATA-058. A hard navigation after an auth state change goes through
@@ -601,8 +602,10 @@ implementation.
 
 - **DATA-062. The first client render matches the server.** No `window`, `document`,
   `localStorage` or `matchMedia` read in a `useState` or `useMemo` initializer or in the
-  render body; use `useSyncExternalStore` with a server snapshot, or an effect. DATA-013 is
-  one case of this rule, and STRUCT-016 covers server entries. **SHOULD.**
+  render body; use `useSyncExternalStore` with a server snapshot, or an effect. One exception:
+  `perViewerSeedUpdatedAt()` of DATA-012 reads the stored auth flag in render, because the
+  value changes query timing and never markup. DATA-013 is one case of this rule, and
+  STRUCT-016 covers server entries. **SHOULD.**
   - Why: the server cannot read these values, so a first client render that reads them differs from the server HTML and fails hydration.
   - From: D56
 
