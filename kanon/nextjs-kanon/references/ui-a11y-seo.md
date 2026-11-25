@@ -39,8 +39,7 @@ rule that enforces a rule, where one exists.
   control and surface) is one `--radius-*` token in the `@theme` block of `app/globals.css`, and
   a component takes the radius of its role. A new radius is a new role, added once as a token,
   not a one-off class at a call site. **SHOULD.**
-  - Why: one radius per role keeps matching shapes across components, so a card with its own
-    radius does not stand out as a mistake.
+  - Why: one radius per role keeps matching shapes across components.
   - From: U2 (core part)
 
 - **UI-003. Container padding follows a small set of named roles.** For example, one role for
@@ -86,8 +85,8 @@ rule that enforces a rule, where one exists.
     change to the primitive no longer reaches it.
   - From: U67
 
-- **UI-008. Z-index goes through `src/constants/zIndex.ts`.** The file names each layer and
-  says why it exists. **SHOULD.**
+- **UI-008. Z-index goes through `src/constants/zIndex.ts`.** The file names each layer.
+  **SHOULD.**
   - Why: one list of layers shows which overlay sits above which, so two components do not
     race each other with ever larger numbers.
   - From: U41
@@ -384,7 +383,7 @@ rule that enforces a rule, where one exists.
   variables.** No font `<link>`, no `@font-face` in app code, and no font family name in
   `className` or an inline style. Add a face or weight by editing the `next/font` call in
   `app/layout.tsx`, then the copy in the Storybook stylesheet, since Storybook cannot use
-  `next/font`. The `ch` unit ban of UI-018 also applies to font-dependent widths. **SHOULD.**
+  `next/font`. Column widths in `ch` units are UI-018. **SHOULD.**
   - Why: `next/font` self-hosts the files and preloads the root layout font on every route, so
     a font loaded another way arrives later and shifts the text.
   - Source: Next.js, Font Module https://nextjs.org/docs/app/api-reference/components/font
