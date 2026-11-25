@@ -156,4 +156,29 @@ rule that enforces a rule, where one exists.
 
 ## What a change ships with
 
+- **TYPES-035. New or changed logic ships with a test in the same change**: services, stores, hooks, utils, schemas and metadata builders. **SHOULD.**
+  - Why: a test written with the change pins its behaviour, so a later refactor that breaks it fails at once; when the tests do not exist, they come first.
+  - Source: Refactoring Is Not Rewriting vault: Content/Insights/Refactoring Is Not Rewriting.md
+  - Source: Refactoring as a Discipline https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/refactoring-as-a-discipline
+  - From: T18
+- **TYPES-037. Do not commit `.env` files.** Add new variables to `.env.example`. **MUST.**
+  - Why: a committed `.env` keeps its secrets in the history for good, and `.env.example` tells the next developer which variables to set.
+  - From: T20
+- **TYPES-038. A new page or route updates the rows it touches in the guard test `src/lib/tests/architectureRules.test.ts`.** **MUST.**
+  - Why: a route the guard test does not know about is a route its checks skip.
+  - Check: `src/lib/tests/architectureRules.test.ts`.
+  - From: T21 (core part)
+- **TYPES-039. Lint output stays clean, and every lint disable names one rule and a reason after `--`.** Oxlint runs with `--max-warnings 0` and reports an unused disable directive as an error. A directive is written `// oxlint-disable-next-line <rule> -- <reason>` (Oxlint also honours `eslint-disable`). A disable of a React Compiler rule (`react-hooks/refs`, `set-state-in-effect`, `purity`, `immutability`) is not allowed: the compiler then skips that component silently. A disable of `react-hooks/exhaustive-deps` is not allowed either: rewrite the code instead. **MUST.**
+  - Why: the React Compiler is on by default in the fixed stack, so a disabled compiler rule turns optimization off for that component with no warning, and a disable without a stated reason leaves review guessing; no plugin checks the reason text, so review does.
+  - Check: Oxlint with `--max-warnings 0`, and unused disable directives reported as errors.
+  - Source: Claude Code Found 14 Rule Breaks in Merged Laravel Code https://codyssey.dev/insights/claude-code-found-14-rule-breaks-in-merged-laravel-code
+  - From: T27
+- **TYPES-040. Stories are optional.** A shared component in `src/features/global-ui/` with visual variants may ship a story in `stories/`. **MAY.**
+  - Why: a story pays off where a component has variants to compare side by side; elsewhere it is upkeep nobody reads.
+  - From: T22
+
 ## What is NOT a violation
+
+- A `.test.ts` without the node pragma that renders or reads browser globals.
+- `as` inside a type-guard body, `as const`, a branded type, and `as unknown as` in a test.
+- A `declare global` augmentation of a built-in, for example `Window`, with a `-- declaration merging only` disable.
