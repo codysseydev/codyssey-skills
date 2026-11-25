@@ -103,7 +103,7 @@ The course is PHP, so each rule says what its term means in TypeScript.
 
 - **DESIGN-008. API types are data only (DTO)** A type in `types/*.types.ts` that describes an API response is a plain `type`: named, typed fields, no methods, no validation. A rule about it is a function (DESIGN-003), not a method. **SHOULD.**
   - A value object (a type that refuses invalid values and has no identity) is worth adding only where a concept has real rules: a format, a constraint, a calculation or a comparison rule. Branded id types are not proposed (see the list at the end of this file).
-  - Why: a plain type survives the trip through JSON, the query cache and the server-to-client boundary as it is, while a class instance loses its methods on the way. The rules about the data stay in functions a test can call directly.
+  - Why: a plain type survives JSON, a dehydrated query cache and the props a server component passes to a client component as it is, while a class instance loses its methods through JSON and cannot cross the server-to-client boundary at all. The rules about the data stay in functions a test can call directly.
   - Source: Data Transfer Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/data-transfer-objects
   - Source: Value Objects https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/value-objects
   - From: P5
