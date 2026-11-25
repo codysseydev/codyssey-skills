@@ -120,7 +120,7 @@ rule that enforces a rule, where one exists.
   answer, member fields differ), `seedablePage(page, 'fresh')` (archive page). A gate waiting
   on `isFetchedAfterMount` also opens for a signed-out visitor, for whom no fetch runs.
   **MUST.**
-  - Why: the seed's timestamp decides whether the client refetches, so one module sets it the same way for every query.
+  - Why: the seed's timestamp decides who refetches: a signed-in member gets one credentialed refetch on mount, and a signed-out visitor trusts the seed.
   - Source: XState Store and TanStack Query vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/39 - XState Store and TanStack Query.md
   - From: D12
 
@@ -351,7 +351,7 @@ implementation.
   default chosen on purpose. The `z.infer` type of the schema matches the service parameter
   without a cast. A heavy schema used only on submit is imported inside the handler.
   **SHOULD.**
-  - Why: a shared field keeps one rule and one message on every form, and a schema per form never branches on which form it serves.
+  - Why: a field retyped in two schemas drifts until one has a regex nobody remembers writing, and a schema per form never branches on which form it serves.
   - Source: Input Validation vs Domain Validation: Where Each Belongs https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation
   - Source: Put the Date Rule in a DateRange vault: Content/Quick Tips/51 - Put the Date Rule in a DateRange.md
   - Source: One Form Request per Write Action vault: Content/Quick Tips/06 - One Form Request per Write Action.md
@@ -386,9 +386,135 @@ implementation.
 
 ## API calls and configuration
 
+- **DATA-039. Browser API calls use the configured `apiClient` from `src/lib/apiClient.ts`**,
+  never a raw HTTP client instance or `fetch`. Calls live in `services/`; hooks call services;
+  components never import `apiClient`. **SHOULD.** A service is an exported object of
+  functions (`export const thingService = { fetchThing }`), not a class and not a
+  `new XService()` singleton. **SHOULD.**
+  - Why: the configured client carries the base URL, the credentials and the error handling, and the service layer is the one place a test stubs the API.
+  - Check: guard-test row DATA-039: `apiClient` is imported only from `*.service.ts` and `*.service.tsx` files.
+  - From: D27 (core part)
+
+- **DATA-040. Handle API errors in the service or hook layer** and show a user-friendly
+  message, through the one mapper of DATA-047. **SHOULD.**
+  - Why: a failure is translated into a user-friendly message once, in the layer that knows the API, and the UI shows that message.
+  - Source: Exception Handling as Design https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/exception-handling-as-design
+  - From: D28
+
+- **DATA-041. Response types come from the service call** (`apiClient.get<T>`); see
+  TYPES-003. Where the UI needs a different shape, map it once at the boundary (DESIGN-006).
+  **SHOULD.**
+  - Why: the type is declared where the response arrives, so every caller reads the same shape and no component reshapes it again.
+  - From: D29
+
+- **DATA-042. Environment variables are read in one module.** `src/lib/env.ts` exports
+  typed, named values (`API_BASE_URL`, `SITE_URL`) and fails fast when a required one is
+  missing. No `process.env.*` elsewhere in `src/` or `app/`, except `NODE_ENV` and the
+  variables Next.js reads itself. Read each `NEXT_PUBLIC_*` variable with its literal name
+  (`process.env.NEXT_PUBLIC_API_BASE_URL`); Next inlines only literal reads, so no dynamic
+  lookup. `NEXT_PUBLIC_*` and `NODE_ENV` are inlined at build time. `APP_ENVIRONMENT` lives in
+  the module. `next.config` reads the variables the build needs before the app runs and stays
+  outside the module. **MUST.**
+  - Why: a missing variable fails at startup with its name, instead of later as an undefined URL deep in a request.
+  - Check: guard-test row DATA-042: environment variables are read only through `src/lib/env.ts`.
+  - From: D30 (core part)
+
+- **DATA-043. A `NEXT_PUBLIC_` variable holds only a value meant to be public, and every
+  variable the code reads is in `.env.example`.** Never a secret, token or private key. One
+  name per value: the API address is `NEXT_PUBLIC_API_BASE_URL` everywhere. **SHOULD.**
+  - Why: Next inlines every `NEXT_PUBLIC_` variable into the browser bundle, so anyone who loads the page can read it.
+  - From: D38
+
+- **DATA-044. Every API path is a constant in `src/constants/apiRoutes.ts`.** A service, hook
+  or component writes no `/api/` literal; a path with a value is a function there that
+  encodes the value (DATA-048). A plain `fetch` on a server (`content.server.ts`, a sitemap or
+  a feed) builds its query with `withQuery` (`src/lib/withQuery.ts`). Not a violation:
+  `/api/` strings in tests, stories, docs and comments. **SHOULD.**
+  - Why: if the backend renames a route, one constant changes.
+  - Check: guard-test row DATA-044: no `/api/` string literal outside `src/constants/apiRoutes.ts`; tests, stories, docs and comments are exempt.
+  - Source: Feature Modules vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/38 - Feature Modules.md
+  - From: D49
+
+- **DATA-045. A service takes its inputs as arguments.** A function in `services/` receives
+  what it sends as parameters. It does not read a store snapshot and does not write to a
+  store; the hook or form handler passes the values in. **SHOULD.**
+  - Why: a service that reads a store needs a store set up in every test, so a value that lives in a store (a selected filter, say) is read by the caller and passed in.
+  - Source: Don't Read Auth::user() Inside a Use Case https://codyssey.dev/quick-tips/dont-read-auth-user-inside-a-use-case
+  - Source: The Command Pattern: Commands and Command Handlers https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-pattern-commands-and-command-handlers
+  - Source: Why Your Laravel Codebase Is Unmaintainable vault: Content/Insights/Why Your Laravel Codebase Is Unmaintainable.md
+  - From: D70
+
+- **DATA-046. A query function only reads.** A `queryFn`, a `select` option, a selector, and
+  the `fetch*` or `get*` service function behind them do not call a mutating HTTP verb
+  (`post`, `put`, `patch`, `delete`), write browser storage, send a store event, navigate or
+  fire analytics. A read-only endpoint that takes a POST (a search with a request body, for
+  example) is on an allowlist with its reason (the allowlist style of TYPES-027). **SHOULD.**
+  - Why: a query can run twice, through a retry, a refetch or a remount, so a read that writes repeats the write.
+  - Check: a test scans `*.service.ts` functions named `fetch*` or `get*` for `apiClient.post`, `put`, `patch` or `delete`, and `queryFn` and `select` bodies for `.send(`, a storage write, an analytics call and `router.`, and fails unless the function is on the allowlist with a reason.
+  - Source: Command-Query Separation (CQS) https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-query-separation
+  - Source: Queries and Query Handlers https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/queries-and-query-handlers
+  - Source: Command Query Separation: Commands Change State, Queries Return It https://codyssey.dev/quick-tips/commands-change-state-queries-return-it
+  - From: NX-04
+
+- **DATA-047. One mapper turns a transport failure into a message.** A service turns a
+  transport failure into a user-facing `Error` with one helper in `src/lib` (a sibling of
+  `parseApiFormError`), keeps `{ cause }`, and does not repeat the network-error and status
+  ladder. No code reads the `message` of an error response body by hand to build a message.
+  UI does not show a raw `error.message`. The helper is `toServiceError` in
+  `src/lib/serviceError.ts`; a toast outside a service uses `showErrorToast` (which calls
+  `toUserMessage`). **SHOULD.**
+  - Why: the message for a failure is chosen once, at the edge of the app, so every screen says the same thing about the same failure.
+  - Source: Domain Exceptions vs Framework Exceptions https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions
+  - Source: Throw a Domain Exception, Not a Framework One https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one
+  - From: D71 (core part)
+
+- **DATA-048. A value interpolated into an API path is encoded; a query string is passed as
+  `params`.** The value goes through `encodeURIComponent`; a query string with values is
+  passed as the API client's `params` option (or built with `URLSearchParams`), never written
+  into the path string. The `apiRoutes.ts` builders encode, `serverFetchJson` takes `params`,
+  and a plain `fetch` uses `withQuery`. A detail page calls `notFoundOnImpossibleSlug`
+  (`src/lib/routeSlug.ts`) right after reading `params`, in the page and in
+  `generateMetadata`, before the first fetch. **SHOULD.**
+  - Why: Next hands a page the raw segment for `%2F`, so an encoded traversal slug can reach the backend and surface as a 500.
+  - From: D77
+
 ## Loading, success and error
 
+- **DATA-049. Every async flow handles loading, success and error, and shows each.** No
+  silent failures: no empty `catch`, no swallowed rejection. A `catch` that holds only a
+  comment is allowed when the comment says why the failure is safe to ignore. A mutation
+  failure is surfaced somewhere (`onError`, a `catch` around `mutateAsync`, or an `isError`
+  render). Decide the error before the skeleton. **MUST** for an empty `catch`; **SHOULD** for
+  rendering each state.
+  - Why: an empty `catch` hides the failure from everyone, and a failed fetch with no data shows the skeleton forever when the error is not decided first.
+  - Source: Guard Clauses and Defensive Programming https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/guard-clauses-and-defensive-programming
+  - From: D31
+
+- **DATA-050. Use error boundaries for render failures, at route level only.**
+  `app/error.tsx` and `app/global-error.tsx` are the boundaries. There is no component-level
+  boundary: a render failure replaces the page content with `app/error.tsx`. The
+  `react-error-boundary` package is not used. **SHOULD.**
+  - Why: one boundary per route gives every render failure the same screen, while a component boundary hides a broken section inside a page that looks fine.
+  - From: D32
+
+- **DATA-051. Loading feedback is visible** (a skeleton or a `Loading...` label), never a
+  blank box. **SHOULD.**
+  - Why: a blank box reads as missing content, while a skeleton says the content is on its way.
+  - From: D33
+
 ## Reporting errors
+
+- **DATA-052. Route error boundaries keep the digest on screen.** `app/error.tsx` and
+  `app/global-error.tsx` show the error's `digest`. **SHOULD.**
+  - Why: in production Next replaces a server error's message with a digest, so the digest is what a user can quote and the server logs can be searched for.
+  - From: D41 (core part)
+
+- **DATA-053. `console` is not a reporting channel.** The `no-console` lint rule runs with
+  `allow: ['warn', 'error']`; `console.log`, `console.info` and `console.debug` are not left
+  in shipped source; a service does not log and rethrow (the caller decides); where the UI
+  absorbs an error, report it through the project's error reporter. **MUST.**
+  - Why: stripping console calls from the production build hides them and does not stop them being written.
+  - From: D42
 
 ## Browser storage, session and navigation
 
