@@ -148,3 +148,56 @@ The course is PHP, so each rule says what its term means in TypeScript.
   - Source: The Result Pattern: An Alternative to Throwing Exceptions https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/result-pattern
   - Source: Result Objects When Failure Isn't Exceptional vault: Content/Quick Tips/10 - Result Objects When Failure Isn't Exceptional.md
   - From: NX-13
+
+- **DESIGN-014. Compose, do not configure** A component varies by what it is given to render (children, slots, a smaller component), not by a growing list of boolean flags. More than three boolean props on one component is a sign to split it or pass children. **SHOULD.**
+  - Passing one object through three components to reach one pair of buttons is the same smell: pass the buttons as `children` or a slot.
+  - Why: each boolean flag doubles the states a component can be in, and most combinations are never rendered or tested. Parts passed in keep each variant in the caller that needs it.
+  - Source: Composition vs Inheritance https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/composition-vs-inheritance
+  - Source: Composition Over Inheritance https://codyssey.dev/quick-tips/composition-over-inheritance
+  - From: P10
+
+- **DESIGN-015. A lookup table beats a branching chain** When the code picks behavior by a kind (a category, a status, a section type), use a typed lookup (`Record<Kind, handler>`, typed by the union or enum) instead of an `if`/`else if` or `switch` chain, so a new kind fails to compile until it is handled. This holds for a discriminated union as well: the handler for each kind takes that kind's narrowed payload. This is the Strategy idea in its smallest form. **SHOULD.**
+  - A `switch` that remains ends in a `never` exhaustiveness check (TYPES-015).
+  - Why: the choice of behavior lives in one place, and the `Record` type makes a new kind a compile error until its handler exists, where an `if` chain falls through to its last branch without a word.
+  - Check: the TYPES-015 guard-test row: a `switch` over a union or enum ends in a `never` exhaustiveness check.
+  - Source: The Factory Design Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-factory-pattern
+  - Source: The State Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-state-pattern
+  - Source: The Strategy Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-strategy-pattern
+  - From: P11
+
+- **DESIGN-016. Dependencies point one way** STRUCT-011 and STRUCT-012 state the direction: only `src/features/global-ui/` is shared across features, imports run from `app/` to `src/features/` to the shared folders such as `src/lib/`, and nothing shared imports a feature. The course calls the same idea honest dependencies: a module lists what it needs at its edge, in its imports, and nothing hides behind a global. **SHOULD.**
+  - Why: a shared layer that imports a feature can no longer be reused or tested alone, and a cycle between features means neither can be removed.
+  - Source: Dependency Injection vs the Service Locator Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location
+  - From: P12
+
+- **DESIGN-017. Components take `ref` as a prop and read context with `use()`** In React 19, `ref` is a regular prop, so a component does not wrap itself in `forwardRef`, and `use(Context)` replaces `useContext(Context)`. **SHOULD.**
+  - Why: React 19 no longer needs the `forwardRef` wrapper and plans to deprecate it, so the wrapper only adds a layer around a component that can stay a plain function.
+  - Source: Vercel composition rule `react19-no-forwardref` https://github.com/vercel-labs/agent-skills/blob/main/skills/composition-patterns/rules/react19-no-forwardref.md
+  - From: P13
+
+- **DESIGN-018. A display array is output; code does not read it back** `metadata: string[]` and similar arrays are what a card prints. No code reads one by index or by value, and a pre-joined string is never an item. A caller that needs the date, the status or the topic gets it as its own field, and a mapper builds the array last, from typed fields. **SHOULD.**
+  - Why: a display array has a slot order only its builder knows, so code that reads `metadata[2]` breaks without an error when a slot moves, and a second screen that wants the raw value has to parse the display text back.
+  - Source: Queries and Query Handlers https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/queries-and-query-handlers
+  - From: P14
+
+- **DESIGN-019. A function takes an options object when it has a boolean parameter, two or more positional parameters of the same primitive type, or more than three positional parameters** `formatPrice(amount, showSymbol, showCents = false)` becomes `formatPrice(amount, { showSymbol, showCents })`; `assignReviewer(postId, reviewerId)`, with two string ids, becomes `assignReviewer({ postId, reviewerId })`; a factory that gains a fifth positional parameter takes an object. DESIGN-014 says the same for component props. **SHOULD.**
+  - A `queryOptions` factory (`xQueryOptions(enabled = true)`) may take `enabled` as a positional boolean. It mirrors the signature of the hook that calls it (`useQuery(xQueryOptions(enabled))`), and `enabled` is the only boolean it takes. A factory that needs a second boolean takes an object.
+  - Why: at the call site `formatPrice(price, true, false)` says nothing about what each value means, and two arguments of the same primitive type can be swapped without a type error. Named options read at the call site and cannot be swapped.
+  - Source: Primitive Obsession https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/primitive-obsession
+  - Source: The Builder Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-builder-pattern
+  - From: P15
+
+- **DESIGN-020. A function declared inside a component that returns JSX becomes a component, or its branches move to the `return`** `renderBody()` and `renderContent()` with several return shapes inside the component body are the pattern. A small named component in the same file, or the branches written in the `return`, replaces them. **SHOULD.**
+  - Why: a render helper reads whatever the component body has in scope, so its inputs are hidden and its branches sit away from the markup they produce. A named component takes its inputs as props, and branches in the `return` read top to bottom.
+  - From: P16
+
+**Considered and not proposed.**
+
+- Branded id types (DESIGN-008): the ids are opaque strings used for URLs and display, so the payoff is low.
+- A repository or adapter layer over `apiClient`: the services are already that boundary, and adding one would be the "chain of the same fields" trap of DESIGN-001 (The Repository Pattern https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern).
+- Runtime schema validation of API responses, for example with Zod: the API is first-party and typed. Revisit if the API stops being first-party.
+- Factory classes: a frontend object rarely needs services plus a runtime choice to construct.
+- Server Actions for mutations, which the Next.js docs offer (https://nextjs.org/docs/app/getting-started/mutating-data): the app calls a separate API through `apiClient`, and DATA-070 rules them out.
+- Turning on `cacheComponents` (https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents): caching is decided by the prerendering and revalidate rules, DATA-001 to DATA-008.
+- Suspense around async content and wider `next/dynamic` use, which the vendored React skills suggest: they conflict with DATA-001 and DATA-019.
+- `<ViewTransition>`: it needs an experimental flag, and `router.back()` does not animate.
