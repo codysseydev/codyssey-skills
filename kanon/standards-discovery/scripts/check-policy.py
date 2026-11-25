@@ -12,8 +12,9 @@ git, never from the working tree, then looks the repo up in the registry (a JSON
 owner/name -> record path). A repo in the registry is a client repo whatever the file says.
 
 One JSON object on stdout. Exit 0 for `continue` and `not-client`, 1 for `stop`, 2 for bad usage.
-On `continue` the scan of the repo's policy files adds warnings. On `stop` nothing in the repo
-is read. Stdlib only.
+On `continue` the scan of the repo's policy files adds warnings: the registry form scans origin/main
+through git and opens no file under --repo, the --record form scans the working tree. On `stop`
+nothing in the repo is read. Stdlib only.
 """
 import argparse
 import json
@@ -109,8 +110,20 @@ def parse_retention(raw):
     return value
 
 
+def parse_models(raw):
+    items = parse_list(raw)
+    for item in items:
+        if "*" in item and not re.fullmatch(r"[^*\s]+-\*", item):
+            raise ValueError(item)
+    return items
+
+
 def _model_matches(entry, model):
-    return entry == "any" or model == entry or model.startswith(entry + "-")
+    if entry == "any":
+        return True
+    if entry.endswith("-*"):
+        return model.startswith(entry[:-1])
+    return model == entry
 
 
 # A step's column holds only what that step adds: STEPS lists the columns each step runs.
@@ -132,7 +145,7 @@ def _model_not_listed(value, ctx):
 FIELDS = {
     "ai_allowed": (parse_yes_no, {"read-code": _forbids_if_no}),
     "tools": (parse_list, {"read-code": _tool_not_listed}),
-    "models": (parse_list, {"read-code": _model_not_listed}),
+    "models": (parse_models, {"read-code": _model_not_listed}),
     "code_leaves_machine": (
         parse_one_of("no", "model-provider", "yes"),
         {"read-code": _forbids_if_no},
@@ -170,7 +183,9 @@ def check(raw, step, ctx):
 
 def _git(repo, *args):
     try:
-        return subprocess.run(["git", "-C", repo, *args], capture_output=True)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env["GIT_NO_REPLACE_OBJECTS"] = "1"
+        return subprocess.run(["git", "-C", repo, *args], capture_output=True, env=env)
     except OSError as error:
         raise RuntimeError(str(error))
 
@@ -193,24 +208,58 @@ def require_top_level(repo):
         raise RuntimeError(f"{repo} is not the top level of its git repo ({top})")
 
 
-def kanon_yml_at(repo, ref=BASE_REF):
-    """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError when it cannot be read."""
-    listed = _git(repo, "ls-tree", "-z", "--full-tree", ref, "--", ".ai", ".ai/kanon.yml")
+def _list_tree(repo, *args):
+    """The entries of a git tree as [(mode, oid, name)], names as str. Raises RuntimeError on a git error."""
+    listed = _git(repo, "ls-tree", "-z", *args)
     if listed.returncode != 0:
         raise RuntimeError(_git_error(listed, "ls-tree"))
-    entries = [entry.split(b"\t", 1) for entry in listed.stdout.split(b"\0") if entry]
-    for meta, path in entries:
-        if meta.split()[0] == b"120000" and path in (b".ai", b".ai/kanon.yml"):
-            raise RuntimeError(f"{path.decode('utf-8', 'replace')} is a symlink")
-    if not any(path == b".ai/kanon.yml" for _, path in entries):
+    entries = []
+    for entry in listed.stdout.split(b"\0"):
+        if entry:
+            meta, name = entry.split(b"\t", 1)
+            mode, _, oid = meta.split()
+            entries.append((mode.decode(), oid.decode(), name.decode("utf-8", "replace")))
+    return entries
+
+
+def _the_one(entries, wanted, label, variants):
+    """The (mode, oid) of the entry named exactly `wanted`, or None. Raises on a case variant."""
+    found = None
+    for mode, oid, name in entries:
+        if name == wanted:
+            found = (mode, oid)
+        elif name.casefold() in variants:
+            raise RuntimeError(f"{label} has a case variant: {name}")
+    return found
+
+
+def kanon_yml_at(repo, ref=BASE_REF):
+    """The text of .ai/kanon.yml at ref, or None when the file is absent. Raises RuntimeError when it cannot be read."""
+    root = _the_one(_list_tree(repo, "--full-tree", ref), ".ai", "the repo root", {".ai"})
+    if root is None:
         return None
-    shown = _git(repo, "show", f"{ref}:.ai/kanon.yml")
+    if root[0] != "040000":
+        raise RuntimeError(".ai is a symlink" if root[0] == "120000" else f".ai is not a folder (mode {root[0]})")
+    entry = _the_one(_list_tree(repo, "--full-tree", f"{ref}:.ai"), "kanon.yml", ".ai/", {"kanon.yml", "kanon.yaml"})
+    if entry is None:
+        return None
+    if entry[0] not in ("100644", "100755"):
+        raise RuntimeError(
+            ".ai/kanon.yml is a symlink" if entry[0] == "120000" else f".ai/kanon.yml is not a regular file (mode {entry[0]})"
+        )
+    shown = _git(repo, "cat-file", "blob", entry[1])
     if shown.returncode != 0:
-        raise RuntimeError(_git_error(shown, "show"))
+        raise RuntimeError(_git_error(shown, "cat-file"))
     try:
         return shown.stdout.decode("utf-8-sig")
     except UnicodeDecodeError as error:
         raise RuntimeError(f".ai/kanon.yml is not UTF-8: {error}")
+
+
+def valid_repo_name(name):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", name) or name.endswith(".git"):
+        return False
+    return not {".", ".."} & set(name.split("/"))
 
 
 def _case_collisions(registry):
@@ -221,8 +270,50 @@ def _case_collisions(registry):
     return "; ".join(", ".join(names) for names in groups.values() if len(names) > 1)
 
 
+_ROOT_KEY = re.compile(r"^(?:([A-Za-z0-9_-]+)|\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)')[ \t]*:(?:[ \t]+(.*))?$")
+_DOC_START = re.compile(r"^---(?:[ \t]+#.*|[ \t]*)$")
+_DOC_END = re.compile(r"^\.\.\.(?:[ \t]+#.*|[ \t]*)$")
+
+
+def read_modes(text):
+    """The raw `mode` values at the root of a kanon.yml, as unquoted strings. Raises ValueError on any shape it does not read.
+
+    An allow-list, not a YAML parser: one document, root keys at column 0 as plain or quoted names, and
+    everything indented (or a list item) under a key skipped. Anything else is unreadable.
+    """
+    given = []
+    started = content = False
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("\t"):
+            raise ValueError(f"line {number}: starts with a tab")
+        if _DOC_START.match(line):
+            if started or content:
+                raise ValueError(f"line {number}: more than one document")
+            started = True
+            continue
+        if _DOC_END.match(line):
+            raise ValueError(f"line {number}: more than one document")
+        found = _ROOT_KEY.match(line)
+        if not found:
+            if content and (line.startswith(" ") or line == "-" or line.startswith("- ")):
+                continue
+            raise ValueError(f"line {number}: not a root key: {line.strip()[:40]}")
+        content = True
+        key = found.group(1) or found.group(2) or found.group(3)
+        if key.casefold() == "mode" and key != "mode":
+            raise ValueError(f"line {number}: key {key} is not spelled mode")
+        if key == "mode":
+            given.append(_unquote(re.sub(r"(?:^|[ \t]+)#.*$", "", found.group(4) or "")))
+    return given
+
+
 def client_record(registry, repo_name, repo):
     """(mode, record path, blocking). A record path of None with no blocking means not a client repo."""
+    for name in registry:
+        if not valid_repo_name(name):
+            return None, None, [{"field": "record", "reason": f"registry key is not owner/name: {name}"}]
     colliding = _case_collisions(registry)
     if colliding:
         return None, None, [{"field": "record", "reason": f"registry keys differ only in case: {colliding}"}]
@@ -231,14 +322,15 @@ def client_record(registry, repo_name, repo):
         text = kanon_yml_at(repo)
     except RuntimeError as error:
         return None, None, [{"field": "mode", "reason": f"unreadable: {error}"}]
-    given = [
-        found.group(1)
-        for line in (text or "").splitlines()
-        if (found := re.match(r"^[\"']?mode[\"']?[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$", line))
-    ]
+    try:
+        given = read_modes(text or "")
+    except ValueError as error:
+        return None, None, [{"field": "mode", "reason": f"unreadable: {error}"}]
     if len(given) > 1:
         return None, None, [{"field": "mode", "reason": "mode given twice in .ai/kanon.yml"}]
-    mode = _unquote(given[0]) if given else "canon-first"
+    mode = given[0] if given else "canon-first"
+    if mode == "":
+        return None, None, [{"field": "mode", "reason": "empty"}]
     if mode not in MODES:
         return mode, None, [{"field": "mode", "reason": f"not an allowed value: {mode}"}]
     by_name = {name.casefold(): path for name, path in registry.items()}
@@ -274,15 +366,30 @@ def read_registry(path):
         try:
             os.lstat(path)
         except FileNotFoundError:
-            return {}
-        raise
+            pass
+        else:
+            raise
+        ancestor = os.path.dirname(os.path.abspath(path))
+        while True:
+            try:
+                os.lstat(ancestor)
+                break
+            except FileNotFoundError:
+                parent = os.path.dirname(ancestor)
+                if parent == ancestor:
+                    break
+                ancestor = parent
+        if os.path.islink(ancestor) and not os.path.exists(ancestor):
+            raise FileNotFoundError(f"{ancestor} is a symlink that does not resolve")
+        return {}
 
 
 # ---------- the scan ----------
 
 AI_CLAUSE = re.compile(
-    r"(?<!\w)(AI|A\.I\.|artificial intelligence|LLMs?|large language models?|ChatGPT|Copilot|Claude|Cursor|generative|GPT-?\d*)(?!\w)",
-    re.IGNORECASE,
+    r"(?<!\w)(?:ChatGPT|Copilot|Claude|Cursor|GPT-?\d*"
+    r"|(?i:artificial intelligence|large language models?|generative AI))(?!\w)"
+    r"|(?<![\w.])(?i:AI|A\.I\.|LLMs?)(?!\w)"
 )
 _TEXT_EXT = r"(\.(md|markdown|rst|txt))?"
 README_OR_CONTRIBUTING = re.compile(rf"(readme|contributing){_TEXT_EXT}", re.IGNORECASE)
@@ -290,7 +397,14 @@ CONTRIBUTING = re.compile(rf"contributing{_TEXT_EXT}", re.IGNORECASE)
 IGNORE_FILES = (".aiignore", ".cursorignore")
 
 
-def policy_files(repo):
+def _classify(mode, kind):
+    """The scan kind for a policy-named entry, by git file mode."""
+    if mode == "120000":
+        return "symlink"
+    return kind if mode in ("100644", "100755") else "unreadable"
+
+
+def disk_files(repo):
     """Yield (relative path, kind) for each file the scan may open. Lists only the root, .github/ and docs/.
 
     kind is ignore-file, clause, symlink, or unreadable (not a regular file, or a folder that cannot be listed).
@@ -322,15 +436,58 @@ def policy_files(repo):
                 yield rel, kind_of(rel, "clause")
 
 
-def scan(repo):
+def git_files(repo, ref):
+    """Like disk_files, read from the tree at ref. Returns (files, blobs): the (path, kind) list and {path: oid}.
+
+    Names match without regard to case and are reported as they stand in the tree.
+    """
+    files, blobs = [], {}
+
+    def add(rel, mode, oid, kind):
+        found = _classify(mode, kind)
+        files.append((rel, found))
+        if found == kind:
+            blobs[rel] = oid
+
+    def named(entries, wanted):
+        return [entry for entry in sorted(entries, key=lambda entry: entry[2]) if entry[2].casefold() == wanted]
+
+    try:
+        root = _list_tree(repo, "--full-tree", ref)
+    except RuntimeError:
+        return [(".", "unreadable")], blobs
+    for wanted in IGNORE_FILES:
+        for mode, oid, name in named(root, wanted):
+            add(name, mode, oid, "ignore-file")
+    for mode, oid, name in sorted(root, key=lambda entry: entry[2]):
+        if README_OR_CONTRIBUTING.fullmatch(name):
+            add(name, mode, oid, "clause")
+    for wanted in (".github", "docs"):
+        for mode, oid, folder in named(root, wanted):
+            if mode == "120000":
+                files.append((folder, "symlink"))
+            if mode != "040000":
+                continue
+            try:
+                entries = _list_tree(repo, oid)
+            except RuntimeError:
+                files.append((folder, "unreadable"))
+                continue
+            for mode, oid, name in sorted(entries, key=lambda entry: entry[2]):
+                if CONTRIBUTING.fullmatch(name):
+                    add(os.path.join(folder, name), mode, oid, "clause")
+    return files, blobs
+
+
+def _warnings(files, read):
+    """Warnings for (path, kind) pairs; read(path) returns the text or raises OSError."""
     warnings = []
-    for rel, kind in policy_files(repo):
+    for rel, kind in files:
         if kind in ("symlink", "unreadable"):
             warnings.append({"file": rel, "signal": kind})
             continue
         try:
-            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as handle:
-                lines = handle.read().splitlines()
+            lines = read(rel).splitlines()
         except OSError:
             warnings.append({"file": rel, "signal": "unreadable"})
             continue
@@ -342,6 +499,28 @@ def scan(repo):
             if AI_CLAUSE.search(line):
                 warnings.append({"file": rel, "line": number, "signal": "ai-clause", "text": line.strip()[:200]})
     return warnings
+
+
+def scan(repo):
+    """The warnings from the policy files on disk (the --record form)."""
+    def read(rel):
+        with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+
+    return _warnings(disk_files(repo), read)
+
+
+def scan_git(repo, ref=BASE_REF):
+    """The warnings from the policy files at ref, read through git and never from disk (the registry form)."""
+    files, blobs = git_files(repo, ref)
+
+    def read(rel):
+        shown = _git(repo, "cat-file", "blob", blobs[rel])
+        if shown.returncode != 0:
+            raise OSError(_git_error(shown, "cat-file"))
+        return shown.stdout.decode("utf-8", "replace")
+
+    return _warnings(files, read)
 
 
 # ---------- the command ----------
@@ -360,6 +539,8 @@ def main(argv=None):
         parser.error("give exactly one of --record and --registry")
     if args.registry and not args.repo_name:
         parser.error("--registry needs --repo-name")
+    if args.registry and not valid_repo_name(args.repo_name):
+        parser.error(f"--repo-name must be owner/name (letters, digits, . _ -; no . or .. part; not ending in .git): {args.repo_name}")
     if not os.path.isdir(args.repo):
         parser.error(f"--repo is not a directory: {args.repo}")
     if args.record:
@@ -391,7 +572,7 @@ def main(argv=None):
             result["blocking"] = [{"field": "record", "reason": f"unreadable: {error}"}]
     if not result["blocking"]:
         result["result"] = "continue"
-        result["warnings"] = scan(args.repo)
+        result["warnings"] = scan_git(args.repo) if args.registry else scan(args.repo)
     return emit(result)
 
 
