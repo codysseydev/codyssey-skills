@@ -493,6 +493,132 @@ rule that enforces a rule, where one exists.
 
 ## Page metadata
 
+- **UI-056. Every page exports `metadata` or `generateMetadata`.** **SHOULD.**
+  - Why: a page without its own metadata ships the layout's title and description, so search
+    results show the same snippet for many pages.
+  - From: U14
+
+- **UI-057. Build metadata with the helpers in `src/lib/metadata.ts`.**
+  `generateContentMetadata` builds a detail page whose content comes from the API,
+  `generateStaticPageMetadata` a static page, and `generateFallbackMetadata` the `catch` of a
+  detail page. A detail page whose content is not published yet follows UI-066. The helpers
+  keep the `<title>` at or under 60 characters with the ` | <Site name>` suffix, and the
+  description between 120 and 155 characters. **SHOULD.**
+  - Why: Next runs `generateMetadata` on the server before the page renders, so the helpers put
+    titles and descriptions of the right length into the first HTML a crawler reads.
+  - Source: SEO in a Decoupled Architecture vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/41 - SEO in a Decoupled Architecture.md
+  - From: U15
+
+- **UI-058. A new page type adds a default description to `CONTENT_TYPE_DESCRIPTIONS`** beside
+  the builders in `src/lib/metadata.ts`, long enough on its own to reach the 120-character
+  minimum with any title. **MUST.**
+  - Why: a page whose own description is missing or short falls back to this one, so it has to
+    pass the minimum alone.
+  - From: U16
+
+- **UI-059. Private and per-visitor pages set `robots: { index: false }`** (sign-in, sign-up,
+  dashboard, search, token links). An embargoed detail page is noindex through UI-066.
+  **SHOULD.**
+  - Why: these pages differ per visitor or carry a token, so an indexed copy is useless to
+    searchers or leaks a link.
+  - From: U17
+
+- **UI-060. A build that is not the production site sets `robots` to noindex and `robots.txt`
+  to `Disallow: /`, driven by one production flag, with a test for both branches.** The flag is
+  read through the env module (DATA-042). Noindex on single pages is UI-059. **MUST.**
+  - Why: a staging or preview build then never competes with the production site in search
+    results.
+  - Check: a test that `robots.txt` built with the flag off is `User-agent: *` and
+    `Disallow: /`; a test that the layout metadata `robots.index` follows the flag; no second
+    environment check outside the flag module.
+  - Source: SEO in a Decoupled Architecture vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/41 - SEO in a Decoupled Architecture.md
+  - From: NX-16
+
+- **UI-061. A page that sets its own `openGraph` restates `images`.** The builders do this, and a
+  hand-written `openGraph` must too. **MUST.**
+  - Why: a page-level `openGraph` replaces the root layout's block, so without `images` the
+    page ships no card.
+  - From: U18
+
+- **UI-062. `og:image` order for detail pages:** the API's `og_image` field when it is not
+  blank, then the item's image from the API, then the content type's archive card from
+  `CONTENT_TYPE_OG_IMAGES`. A detail page passes `ogImage: entry.og_image`. **SHOULD.**
+  - Why: an image picked for sharing beats a content image, and the archive card means a page
+    never ships without one.
+  - From: U19
+
+- **UI-063. Declare `1200x630` only on cards known to be that size:** the generated card, the
+  static fallback card, the teaser card and the static page cards. Do not declare it on an
+  image from the API. **SHOULD.**
+  - Why: a wrong declared size makes a link preview crop or stretch the image.
+  - From: U20
+
+- **UI-064. Every static page card is wired and present.** Each static page has a 1200x630
+  card at `public/images/static-og-images/<name>-og-image.png` and an entry in the card
+  manifest `scripts/og-static-pages.json`. Its metadata uses `STATIC_OG_IMAGE_BASE`, and
+  `og:image` and `twitter:image` point at its own card with `summary_large_image`. **MUST.**
+  - Why: a page without its own card shares the fallback image, and a card missing from
+    `public/` breaks the preview.
+  - From: U21
+
+- **UI-065. A static card carries the page's own `h1` word for word** (the page title for pages
+  without a server-rendered `h1`). Change the `h1` and regenerate the card in the same commit.
+  Never edit a card image by hand. **SHOULD.**
+  - Why: a card that says something other than the page reads as a different page when shared.
+  - From: U22
+
+- **UI-066. An embargoed detail page builds its metadata with the one teaser builder in
+  `src/lib/metadata.ts`, never with the published-page builder and never by hand.** An
+  embargoed page is one the API returns before its content is published. The teaser states
+  the page itself: `og:title` and `twitter:title` equal the page `<title>`; `og:url` and the
+  canonical URL are the page's own URL; `og:image` and `twitter:image` are the item's own card,
+  or the content type's archive card when it has none; one description fills the meta
+  description, `og:description` and `twitter:description`; `og:type` is `website`; `robots` is
+  `index: false, follow: false`. A new content type that can be embargoed branches the same
+  way. **MUST.**
+  - Why: Next replaces the layout's whole `openGraph` and `twitter` objects when a page sets
+    them, so a field the teaser does not state is lost.
+  - From: U28 (core part)
+
+- **UI-067. Embargoed items stay out of listings.** The sitemap, the feed, `llms.txt` and every
+  listing page skip an embargoed item and every child page of one, such as the chapters of an
+  embargoed guide. **MUST.**
+  - Why: a listing sends readers and crawlers to a noindex teaser, and a sitemap that lists a
+    URL the page itself marks noindex gives crawlers two answers.
+  - From: U29 (core part)
+
+- **UI-068. An aggregate file fetches its lists with `Promise.allSettled`.** A sitemap, feed or
+  `llms.txt` that combines several API lists keeps the lists that succeeded and reports each
+  list that failed through the reporting path of DATA-053; it never drops a failed list
+  silently. Pages do not do this: a page keeps DATA-002 (a failure that is not a 404 throws)
+  and DATA-071 (a failed fetch is not rendered as empty). **SHOULD.**
+  - Why: with `Promise.all`, one failed content type empties the whole file.
+  - Check: a test of the sitemap with one list mocked to reject, whose output still holds the
+    other lists and the static URLs; no `Promise.all` over content fetches in the sitemap, the
+    feed or `llms.txt`.
+  - Source: SEO in a Decoupled Architecture vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/41 - SEO in a Decoupled Architecture.md
+  - From: NX-17
+
 ## Structured data
+
+- **UI-069. Emit JSON-LD through `JsonLd` from `src/lib/JsonLd.tsx`,** never a hand-written
+  `<script type="application/ld+json">`. `JsonLd` replaces `<` with its unicode escape so text
+  from the API cannot close the script; that is enough, because `<` is the character that can
+  close the element (the helper in the Next.js guide also escapes `>`, `&`, U+2028 and
+  U+2029). Any other inline `<script>` goes through `InlineHeadScript` with a module-level
+  constant string; request or API data is never put into script code. **SHOULD.**
+  - Why: the HTML parser ends a script at the first `</script>` before any JavaScript escaping
+    applies, so API text that holds it would break out of the script.
+  - Source: Next.js, JSON-LD guide https://nextjs.org/docs/app/guides/json-ld
+  - Source: SEO in a Decoupled Architecture vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/41 - SEO in a Decoupled Architecture.md
+  - Source: The Injection Bugs Your Blade Templates Are Hiding vault: Content/Insights/The Injection Bugs Your Blade Templates Are Hiding.md
+  - From: U23
+
+- **UI-070. A detail page whose content comes from the API renders `JsonLd`** next to its
+  metadata, with the object built in `src/lib/structuredData.ts` and written through UI-069.
+  **SHOULD.**
+  - Why: structured data lets search engines show the page as a rich result, which metadata
+    alone cannot.
+  - From: U24
 
 ## What is NOT a violation
