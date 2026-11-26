@@ -40,6 +40,7 @@ _DOCS_TEXT = r"(\.(md|markdown|rst|txt))?"
 SOURCE_KINDS = {
     "instructions": [
         r"(.*/)?CLAUDE\.md", r"(.*/)?AGENTS\.md", r"\.cursor/rules/.*", r"\.cursorrules", r"\.github/copilot-instructions\.md",
+        r"\.ai/rules/.*\.md",
     ],
     "docs": [
         rf"(?i)readme{_DOCS_TEXT}", rf"(?i)(\.github/|docs/)?contributing{_DOCS_TEXT}", r"docs/.*\.(md|markdown|rst|txt)",

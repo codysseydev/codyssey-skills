@@ -4,7 +4,7 @@ Read only the paths in `inventory.json`: the `sources` lists, the `siblings` lis
 
 ## Instructions
 
-`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`. These are rules the team wrote for tools. Each rule sentence is a convention with source `written down`. Note rules that contradict the Kanon first, since those are `change` or `off`.
+`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`, `.ai/rules/**/*.md`. These are rules the team wrote for tools. Each rule sentence is a convention with source `written down`. Note rules that contradict the Kanon first, since those are `change` or `off`.
 
 ## Docs
 
