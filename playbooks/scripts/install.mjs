@@ -34,6 +34,7 @@ import { UsageError, inspectLock, lockIsStale, locksDir } from './pick-up.mjs';
 
 export const FACTORY_SKILLS = ['bootstrap', 'brief-to-backlog', 'brief-writer', 'event-model', 'factory-onboard'];
 export const KANON_SKILLS = ['standards-discovery'];
+export const KANON_SNAPSHOT = ['catalog', 'laravel-kanon/references', 'symfony-kanon/references'];
 export const FACTORY_TASKS = ['factory-pickup', 'factory-pickup-frontend', 'factory-pickup-tools'];
 export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
@@ -44,6 +45,8 @@ export function installMap({ agentsDir, skillsDir, tasksDir }) {
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
     ...FACTORY_SKILLS.map((name) => ({ prefix: `factory/${name}/`, dir: join(skillsDir, name) })),
     ...KANON_SKILLS.map((name) => ({ prefix: `kanon/${name}/`, dir: join(skillsDir, name) })),
+    // A snapshot of the Kanon the standards-discovery skill reads, so the paths in families.json resolve from its folder.
+    ...KANON_SNAPSHOT.map((path) => ({ prefix: `kanon/${path}/`, dir: join(skillsDir, 'standards-discovery', 'kanon', path) })),
     ...FACTORY_TASKS.map((name) => ({ prefix: `scheduled-tasks/${name}/`, dir: join(tasksDir, name), existingOnly: true })),
   ];
 }
