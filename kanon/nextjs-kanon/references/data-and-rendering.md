@@ -355,7 +355,7 @@ implementation.
   - Why: a field retyped in two schemas drifts until one has a regex nobody remembers writing, and a schema per form never branches on which form it serves.
   - Source: Input Validation vs Domain Validation: Where Each Belongs https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation
   - Source: Put the Date Rule in a DateRange vault: Content/Quick Tips/51 - Put the Date Rule in a DateRange.md
-  - Source: One Form Request per Write Action vault: Content/Quick Tips/06 - One Form Request per Write Action.md
+  - Source: One Form Request per Write Action https://codyssey.dev/quick-tips/one-form-request-per-write-action
   - Source: Require Every Field the Controller Reads vault: Content/Quick Tips/48 - Require Every Field the Controller Reads.md
   - From: D44
 
