@@ -392,6 +392,27 @@ class Load(Placement):
         self.assertIn(".ai/kanon.yml", out["reason"])
         self.assertEqual(snapshot(self.repo), before)
 
+    def test_a_symlinked_exclude_file_or_folder_stops_before_any_write(self):
+        for target in ("info/exclude", "info"):
+            with self.subTest(target=target):
+                self.setUp()
+                outside = os.path.join(self.tmp(), "outside")
+                path = os.path.join(self.repo, ".git", target)
+                if target == "info":
+                    shutil.copytree(path, outside)
+                    shutil.rmtree(path)
+                else:
+                    shutil.copyfile(path, outside)
+                    os.remove(path)
+                os.symlink(outside, path)
+                before = snapshot(self.repo)
+                outside_before = snapshot(os.path.dirname(outside))
+                code, out = self.load()
+                self.assertEqual((code, out["result"]), (1, "stop"), out)
+                self.assertIn("symlink", out["reason"])
+                self.assertEqual(snapshot(self.repo), before)
+                self.assertEqual(snapshot(os.path.dirname(outside)), outside_before)
+
     def test_load_never_reads_the_index(self):
         put(self.repo, ".git/index", b"not an index")
         code, out = self.load()

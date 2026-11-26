@@ -195,6 +195,9 @@ def load_into_tree(repo, work):
         return stop(reason="already in the working tree with other content, so loading would overwrite it: " + ", ".join(differ))
     exclude = text_of(git(repo, "rev-parse", "--git-path", "info/exclude"))
     exclude = exclude if os.path.isabs(exclude) else os.path.join(repo, exclude)
+    linked = [path for path in (os.path.dirname(exclude), exclude) if os.path.islink(path)]
+    if linked:
+        return stop(reason="a symlink is in the way of info/exclude, so loading could write outside the repo: " + ", ".join(linked))
     existing = open(exclude, encoding="utf-8").read() if os.path.exists(exclude) else ""
     missing = [line for line in EXCLUDE_LINES if line not in existing.splitlines()]
     if missing:
