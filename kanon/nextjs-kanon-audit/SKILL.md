@@ -125,8 +125,8 @@ read-only git calls:
 - **A dependency** is a key of `dependencies`, `devDependencies` or
   `optionalDependencies` in `git show <head>:package.json`. `peerDependencies` alone
   does not count.
-- **`<head>`** is `HEAD`. With uncommitted changes in scope, read `package.json` from the
-  working tree, test `wrangler.jsonc` with
+- **`<head>`** is `HEAD`. With uncommitted changes in scope, read `package.json` and
+  `next.config.*` from the working tree, test `wrangler.jsonc` with
   `git ls-files --cached --others --exclude-standard -- wrangler.jsonc` (it prints the
   path when the file exists), and run `git grep` with `--untracked` and without `<head>`.
 - **`git grep` prints a file** on a match and exits 0; it exits 1 on none, and a missing
@@ -134,7 +134,7 @@ read-only git calls:
 
 Read the two stack facts the `- Condition:` lines need from `next.config.*` at the
 audited head (`git ls-files -- 'next.config.*'` finds it, `git show <head>:<file>` reads
-it):
+it, or the working-tree file when uncommitted changes are in scope):
 
 - **Cache Components** is on only when `cacheComponents` is set to `true`; otherwise off.
 - **React Compiler** is on only when `reactCompiler` is set (to `true` or an options
