@@ -9,7 +9,7 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 - `SYM-001` Services **MUST NOT** be fetched with `$container->get()`; they **MUST** be autowired through the constructor. This is the Symfony form of the no-service-location rule in `php-core.md` (`laravel-kanon` skill).
 - `SYM-003` Product modules **MUST NOT** depend on a `ContainerInterface` (a closed locator under SYM-005 excepted), and production classes **MUST** inject contracts (`LoggerInterface`, `ClockInterface`, `Security` in controllers only) instead of globals; `Framework\` is exempt.
 - `SYM-004` Credentials and config values **MUST** come from `%env(...)%` parameters or the secrets vault, and production classes **MUST NOT** call `getenv()` or read `$_ENV` or `$_SERVER` outside `Framework\`.
-- `SYM-005` A service locator with a closed, declared service list (`#[AutowireLocator]`, `getSubscribedServices()`) **MAY** be used for runtime selection such as a keyed strategy map.
+- `SYM-005` A service locator with a closed, declared service list (`#[AutowireLocator]`, `getSubscribedServices()`) **MAY** be used for runtime selection such as a keyed strategy map; `->get()` on such a closed locator is not the container fetch SYM-001 bans.
 - `SYM-006` CI **SHOULD** run `bin/console lint:container` so an unautowirable service fails at compile time, not on first request.
 - `SYM-007` A query handler **MUST** stay pure (no cache reads or writes); caching **MUST** live in a middleware on `query.bus`, and logging around the handler **SHOULD** live there too.
 - `SYM-008` Cache keys, tags and TTLs **MUST** come from centralized enum or key classes, never raw strings or hardcoded integers.
@@ -79,7 +79,7 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 ## Authorization
 
 - `SYM-058` A message handler **MUST** receive the acting user as a field of its command and **MUST NOT** read `Security` or `TokenStorageInterface`; the controller takes the actor from the authenticated principal, never from the request body.
-- `SYM-059` Every endpoint touching owned data **MUST** authorize the actor against the loaded entity with a Voter, checked in the handler through `AuthorizationCheckerInterface` on a synchronous bus, and a handler **MUST NOT** use `find()` plus a hand-written ownership check.
+- `SYM-059` Every endpoint touching owned data **MUST** authorize the actor against the loaded entity with a Voter, checked in the handler through `AuthorizationCheckerInterface`; the controller **MUST** build the command's actor from the same authenticated token the Voter reads, which is why the handler runs on the synchronous bus, and a handler **MUST NOT** use `find()` plus a hand-written ownership check.
 - `SYM-060` The authorization gate **MUST** throw a product `*Exception` carrying `#[WithHttpStatus(403)]` (or a Voter denial raising `AccessDeniedException`), and controllers **MUST NOT** build 403 responses inline.
 - `SYM-061` Capability-gated endpoints **MUST** use `#[IsGranted]` with a class constant or a backed-enum `->value`, never a string literal.
 - `SYM-062` State-changing and owned-data routes **MUST** require authentication through `access_control` or `#[IsGranted('IS_AUTHENTICATED_FULLY')]`; only genuinely public reads **MAY** use `PUBLIC_ACCESS`.
@@ -93,7 +93,7 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 - `SYM-067` Entities and custom Doctrine types **MUST NOT** run queries or depend on `EntityManagerInterface` or a repository; derived values **MUST** be computed from data already loaded.
 - `SYM-068` A read model **MUST** be strictly read-only: a `final readonly` DTO built by a query handler, or an `#[ORM\Entity(readOnly: true)]` over a table the module does not write; mutations belong to the write entity.
 - `SYM-069` Handlers and entities **MUST NOT** throw `\RuntimeException` or Symfony HTTP exceptions for business rules; they **MUST** throw a named product exception.
-- `SYM-070` Domain and application classes **MUST NOT** import `HttpFoundation`, `HttpKernel` or `Doctrine\` types, except ORM mapping attributes and `Collection` on entities and `#[WithHttpStatus]` on product exceptions; each vendor SDK or HTTP client **MUST** sit behind an interface with an adapter (the Doctrine repository is that adapter), while Symfony attributes, `Assert` constraints, Messenger, Uid and PSR contracts **MAY** be imported.
+- `SYM-070` Domain and application classes **MUST NOT** import `HttpFoundation`, `HttpKernel` or `Doctrine\` types, except ORM mapping attributes and `Collection` on entities, `#[WithHttpStatus]` on product exceptions and `Doctrine\DBAL\Connection` in read-model query classes (SYM-074, SYM-076); each vendor SDK or HTTP client **MUST** sit behind an interface with an adapter (the Doctrine repository is that adapter), while Symfony attributes, `Assert` constraints, Messenger, Uid and PSR contracts **MAY** be imported.
 
 ## Doctrine persistence
 
@@ -140,7 +140,7 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 - `SYM-101` A module **MUST NOT** import another module's classes (entities, enums, messages, handlers, services or value objects), except a published domain event and an interface the consuming module owns that the providing module implements (SYM-102); `Framework\` is allowed from every module.
 - `SYM-102` Cross-module collaboration **MUST** go through a contract (interface) defined by the consuming module and implemented by the providing module, or through a published domain event, never through any other import; a module **MUST** own its copy of any value object it needs, and a slice **MUST** live in the module that owns the capability.
 - `SYM-103` Cross-module references **MUST** be plain columns holding the other module's id, never a Doctrine association (`ManyToOne`, `OneToMany`, `OneToOne`, `ManyToMany`) to another module's entity and never a database foreign key across modules.
-- `SYM-104` Data another module owns but this module needs at runtime **MUST** be materialized on this module's own table and kept in sync by an event listener, not fetched across modules per request.
+- `SYM-104` Data another module owns but this module needs at runtime **MUST** be materialized on this module's own table and kept in sync by an event listener, not fetched across modules per request; a call through a consumer-owned contract (SYM-102) and a read-only query under SYM-074 are the two exceptions to materializing.
 - `SYM-105` Once a second application exists, application namespaces **MUST NOT** import from each other, in either direction.
 - `SYM-106` Once a second application exists, an application **MUST NOT** register a listener on another application's event (by attribute, tag or string FQCN).
 - `SYM-107` Once a second application exists, every side effect of an application's action **MUST** be handled by that application's own listeners, and an application **MUST NOT** dispatch another application's domain events to reuse its cascades.

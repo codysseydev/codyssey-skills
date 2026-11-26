@@ -61,8 +61,8 @@
             }
           ],
           "examples": {
-            "bad": "namespace Billing\\Invoices\\IssueInvoice;\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(private ContainerInterface $container) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->container->get(LoggerInterface::class)->info('Issuing invoice');\n    }\n}",
-            "good": "namespace Billing\\Invoices\\IssueInvoice;\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(\n        private LoggerInterface $logger,\n        private ClockInterface $clock,\n    ) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->logger->info('Issuing invoice', ['at' => $this->clock->now()->format('c')]);\n    }\n}"
+            "bad": "namespace Billing\\IssueInvoice;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(private ContainerInterface $container) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->container->get(LoggerInterface::class)->info('Issuing invoice');\n    }\n}",
+            "good": "namespace Billing\\IssueInvoice;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(\n        private LoggerInterface $logger,\n        private ClockInterface $clock,\n    ) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->logger->info('Issuing invoice', ['at' => $this->clock->now()->format('c')]);\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-008, ORCH-010 (no facades or global helpers, where facades are allowed).",
           "status": "active"
@@ -105,7 +105,7 @@
           "family": "symfony",
           "scope": "symfony",
           "keyword": "MAY",
-          "rule": "A service locator with a closed, declared service list (`#[AutowireLocator]`, `getSubscribedServices()`) **MAY** be used for runtime selection such as a keyed strategy map.",
+          "rule": "A service locator with a closed, declared service list (`#[AutowireLocator]`, `getSubscribedServices()`) **MAY** be used for runtime selection such as a keyed strategy map; `->get()` on such a closed locator is not the container fetch SYM-001 bans.",
           "applies_to": [
             "Strategy selectors"
           ],
@@ -180,7 +180,7 @@
           ],
           "examples": {
             "bad": "#[AsMessageHandler(bus: 'query.bus')]\nfinal readonly class GetInvoiceSummaryQueryHandler\n{\n    public function __construct(private CacheInterface $cache, private InvoiceSummaries $summaries) {}\n\n    public function __invoke(GetInvoiceSummaryQuery $query): InvoiceSummaryResult\n    {\n        return $this->cache->get('invoice_summary_'.$query->invoiceId, fn () => $this->summaries->for($query->invoiceId));\n    }\n}",
-            "good": "// the handler stays pure: it only calls $this->summaries->for($query->invoiceId)\nfinal readonly class CacheQueryMiddleware implements MiddlewareInterface\n{\n    public function __construct(private CacheInterface $cache) {}\n    public function handle(Envelope $envelope, StackInterface $stack): Envelope\n    {\n        $query = $envelope->getMessage();\n        if (!$query instanceof CacheableQuery) {\n            return $stack->next()->handle($envelope, $stack);\n        }\n        $result = $this->cache->get($query->cacheKey(), fn () => $stack->next()->handle($envelope, $stack)->last(HandledStamp::class)?->getResult());\n        return $envelope->with(new HandledStamp($result, self::class));\n    }\n}\n// messenger.yaml: query.bus middleware: [App\\Framework\\Bus\\CacheQueryMiddleware]"
+            "good": "final readonly class CacheQueryMiddleware implements MiddlewareInterface\n{\n    public function __construct(private CacheInterface $cache) {}\n    public function handle(Envelope $envelope, StackInterface $stack): Envelope\n    {\n        $query = $envelope->getMessage();\n        if (!$query instanceof CacheableQuery) { return $stack->next()->handle($envelope, $stack); }\n        $result = $this->cache->get(CacheKeys::forQuery($query), function (ItemInterface $item) use ($envelope, $stack) {\n            $item->expiresAfter(CacheTtl::Query->value);\n            return $stack->next()->handle($envelope, $stack)->last(HandledStamp::class)?->getResult();\n        });\n        return $envelope->with(new HandledStamp($result, self::class));\n    }\n}\n// messenger.yaml: query.bus middleware: [Framework\\Bus\\CacheQueryMiddleware]"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/query-bus"
@@ -703,7 +703,7 @@
           },
           "examples": {
             "bad": "final readonly class IssueInvoiceController\n{\n    public function __construct(private MessageBusInterface $bus) {}\n\n    public function __invoke(IssueInvoiceRequest $request): Response\n    {\n        $this->bus->dispatch(new IssueInvoiceCommand(/* ... */));\n        $summary = $this->bus->dispatch(new GetInvoiceSummaryQuery(/* ... */));\n    }\n}",
-            "good": "final readonly class IssueInvoiceController\n{\n    public function __construct(private CommandBus $commandBus, private QueryBus $queryBus) {}\n\n    public function __invoke(IssueInvoiceRequest $request): Response\n    {\n        $this->commandBus->dispatch(new IssueInvoiceCommand(/* ... */));\n        $summary = $this->queryBus->ask(new GetInvoiceSummaryQuery(/* ... */));\n    }\n}"
+            "good": "#[Route('/invoices', name: 'billing.invoice.issue', methods: ['POST'])]\nfinal readonly class IssueInvoiceController\n{\n    public function __construct(private CommandBus $commandBus, private QueryBus $queryBus) {}\n\n    public function __invoke(#[MapRequestPayload] IssueInvoiceRequest $request): Response\n    {\n        $this->commandBus->dispatch(new IssueInvoiceCommand(/* ... */));\n        $summary = $this->queryBus->ask(new GetInvoiceSummaryQuery(/* ... */));\n\n        return new JsonResponse(IssueInvoiceResource::from($summary), Response::HTTP_CREATED);\n    }\n}"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/query-bus",
@@ -728,7 +728,7 @@
             ]
           },
           "examples": {
-            "bad": "// no bus named: this listener is also registered on command.bus and query.bus\n#[AsMessageHandler]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __invoke(InvoiceIssued $event): void { /* ... */ }\n}",
+            "bad": "// messenger.yaml: event.bus has no allow_no_handlers, so dispatching an event nobody handles throws NoHandlerForMessageException\n// no bus named: this listener is also registered on command.bus and query.bus\n#[AsMessageHandler]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __invoke(InvoiceIssued $event): void { /* ... */ }\n}",
             "good": "// messenger.yaml: framework.messenger.buses.event.bus.default_middleware.allow_no_handlers: true\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __invoke(InvoiceIssued $event): void { /* ... */ }\n}"
           },
           "sources": [
@@ -1369,7 +1369,7 @@
           },
           "examples": {
             "bad": "// camelCase keys, no data envelope\nreturn new JsonResponse(['orderId' => $id, 'createdAt' => $createdAt]);\n\n// custom error shape instead of RFC 7807\nreturn new JsonResponse(['error' => 'Order not found'], 404);",
-            "good": "// success: snake_case keys inside the data envelope\nreturn new JsonResponse(['data' => ['order_id' => $id, 'created_at' => $createdAt]]);\n\n// error: throw a product exception marked #[WithHttpStatus(404)] and let the\n// serializer's ProblemNormalizer render the RFC 7807 body\nthrow new OrderNotFoundException($id);\n// {\"type\": \"https://example.com/errors/order-not-found\", \"title\": \"Not Found\", \"status\": 404, \"detail\": \"Order not found\"}"
+            "good": "// success: a *Resource builds the body, snake_case keys inside the data envelope\nreturn new JsonResponse(new OrderResource($order)); // {\"data\": {\"order_id\": \"...\", \"created_at\": \"...\"}}\n\n// collection: the resource adds meta and links\nreturn new JsonResponse(new OrderCollectionResource($orders, $total, $nextPage));\n\n// error: throw a product exception marked #[WithHttpStatus(404)] and let the\n// serializer's ProblemNormalizer render the RFC 7807 body (default context, production)\nthrow new OrderNotFoundException($id);\n// {\"type\": \"https://tools.ietf.org/html/rfc2616#section-10\", \"title\": \"An error occurred\", \"status\": 404, \"detail\": \"Not Found\"}"
           },
           "lane_note": "Laravel counterpart: HTTP-021 (response envelope and keys).",
           "status": "active"
@@ -1562,7 +1562,7 @@
           "family": "symfony",
           "scope": "symfony",
           "keyword": "MUST",
-          "rule": "Every endpoint touching owned data **MUST** authorize the actor against the loaded entity with a Voter, checked in the handler through `AuthorizationCheckerInterface` on a synchronous bus, and a handler **MUST NOT** use `find()` plus a hand-written ownership check.",
+          "rule": "Every endpoint touching owned data **MUST** authorize the actor against the loaded entity with a Voter, checked in the handler through `AuthorizationCheckerInterface`; the controller **MUST** build the command's actor from the same authenticated token the Voter reads, which is why the handler runs on the synchronous bus, and a handler **MUST NOT** use `find()` plus a hand-written ownership check.",
           "applies_to": [
             "endpoints and handlers that touch owned data"
           ],
@@ -1583,7 +1583,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(CancelOrderCommand $command): void\n{\n    $order = $this->orders->find($command->orderId);\n    if ($order->ownerId !== $command->actorId) {\n        throw new OrderAccessDeniedException();\n    }\n    $order->cancel();\n}",
-            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CancelOrderCommandHandler\n{\n    public function __construct(private OrderRepository $orders, private AuthorizationCheckerInterface $authorization) {}\n\n    public function __invoke(CancelOrderCommand $command): void\n    {\n        $order = $this->orders->get($command->orderId);\n        if (!$this->authorization->isGranted(OrderVoter::CANCEL, $order)) {\n            throw new AccessDeniedException();\n        }\n        $order->cancel();\n    }\n}"
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CancelOrderCommandHandler\n{\n    public function __construct(private OrderRepository $orders, private AuthorizationCheckerInterface $authorization) {}\n\n    public function __invoke(CancelOrderCommand $command): void\n    {\n        // the controller built $command->actorId from the same token the Voter reads\n        $order = $this->orders->get($command->orderId);\n        if (!$this->authorization->isGranted(OrderVoter::CANCEL, $order)) {\n            throw new OrderAccessDeniedException(); // a product exception with #[WithHttpStatus(403)]\n        }\n        $order->cancel();\n    }\n}"
           },
           "lane_note": "Laravel counterpart: AUTH-002, AUTH-003 (actor-scoped lookup, ownership gate).",
           "status": "active"
@@ -1845,7 +1845,7 @@
           ],
           "examples": {
             "bad": "class SubscriptionSummary\n{\n    public function __construct(public string $id, public string $status)\n    {\n    }\n\n    public function markCancelled(): void\n    {\n        $this->status = 'cancelled';\n    }\n}",
-            "good": "final readonly class SubscriptionSummary // DTO built by a query handler\n{\n    public function __construct(public string $id, public string $status) {}\n}\n\n#[ORM\\Entity(readOnly: true)] // over a table this module does not write\n#[ORM\\Table(name: 'subscription_summary')]\nclass SubscriptionSummaryRow\n{\n    #[ORM\\Id, ORM\\Column]\n    private string $id;\n    #[ORM\\Column]\n    private string $status;\n}"
+            "good": "final readonly class SubscriptionSummaryResult // DTO built by a query handler\n{\n    public function __construct(public string $id, public SubscriptionStatus $status) {}\n}\n\n#[ORM\\Entity(readOnly: true)] // over a table this module does not write\n#[ORM\\Table(name: 'subscription_summary')]\n#[ORM\\Index(columns: ['status'])]\nclass SubscriptionSummaryRow\n{\n    #[ORM\\Id, ORM\\Column]\n    private string $id;\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n}"
           },
           "lane_note": "Laravel counterpart: MD-015 (read models read-only).",
           "status": "active"
@@ -1889,7 +1889,7 @@
           "family": "symfony",
           "scope": "symfony",
           "keyword": "MUST NOT",
-          "rule": "Domain and application classes **MUST NOT** import `HttpFoundation`, `HttpKernel` or `Doctrine\\` types, except ORM mapping attributes and `Collection` on entities and `#[WithHttpStatus]` on product exceptions; each vendor SDK or HTTP client **MUST** sit behind an interface with an adapter (the Doctrine repository is that adapter), while Symfony attributes, `Assert` constraints, Messenger, Uid and PSR contracts **MAY** be imported.",
+          "rule": "Domain and application classes **MUST NOT** import `HttpFoundation`, `HttpKernel` or `Doctrine\\` types, except ORM mapping attributes and `Collection` on entities, `#[WithHttpStatus]` on product exceptions and `Doctrine\\DBAL\\Connection` in read-model query classes (SYM-074, SYM-076); each vendor SDK or HTTP client **MUST** sit behind an interface with an adapter (the Doctrine repository is that adapter), while Symfony attributes, `Assert` constraints, Messenger, Uid and PSR contracts **MAY** be imported.",
           "applies_to": [
             "entities",
             "handlers",
@@ -1905,19 +1905,22 @@
           "checks": [
             {
               "tool": "PHPArkitect",
-              "coverage": "Domain and application namespaces must not depend on `Symfony\\Component\\HttpFoundation`, `Symfony\\Component\\HttpKernel` or `Doctrine\\`, except ORM mapping attributes, `Collection` and `#[WithHttpStatus]`; vendor SDK namespaces are allowed only in the adapter.",
+              "coverage": "Domain and application namespaces must not depend on `Symfony\\Component\\HttpFoundation`, `Symfony\\Component\\HttpKernel` or `Doctrine\\`, except ORM mapping attributes, `Collection`, `#[WithHttpStatus]` and `Doctrine\\DBAL\\Connection` in read-model query classes; vendor SDK namespaces are allowed only in the adapter.",
               "status": "draft"
             }
           ],
           "examples": {
             "bad": "use Doctrine\\ORM\\EntityManagerInterface;\nuse Symfony\\Component\\HttpFoundation\\RequestStack;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class ApplyDiscountCommandHandler\n{\n    public function __construct(\n        private EntityManagerInterface $entityManager,\n        private RequestStack $requestStack,\n    ) {\n    }\n}",
-            "good": "use Doctrine\\Common\\Collections\\Collection; // allowed on an entity\nuse Doctrine\\ORM\\Mapping as ORM; // allowed: mapping attributes\nuse Symfony\\Component\\HttpKernel\\Attribute\\WithHttpStatus; // allowed on a product exception\n\n#[ORM\\Entity]\nclass Order { #[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')] private Collection $lines; }\n\n#[WithHttpStatus(404)]\nfinal class OrderNotFoundException extends \\DomainException {}\n\ninterface PaymentGateway { public function charge(Order $order): void; } // the handler depends on this\n// StripePaymentGateway holds the vendor SDK and implements it; OrderRepository is a Doctrine adapter"
+            "good": "use Doctrine\\Common\\Collections\\Collection; // allowed on an entity\nuse Doctrine\\ORM\\Mapping as ORM; // allowed: mapping attributes\nuse Symfony\\Component\\HttpKernel\\Attribute\\WithHttpStatus; // allowed on a product exception\n\n#[ORM\\Entity]\nclass Order\n{\n    /** @var Collection<int, OrderLine> */\n    #[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\n    private Collection $lines;\n}\n\n#[WithHttpStatus(404)]\nfinal class OrderNotFoundException extends OrderException {} // OrderException is the module base\ninterface PaymentGateway { public function charge(Order $order): void; } // the handler depends on this\n// StripePaymentGateway holds the vendor SDK and implements it; OrderRepository is a Doctrine adapter"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling",
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions"
           ],
-          "status": "active"
+          "status": "active",
+          "allowed_in": [
+            "read-model query classes (SYM-074, SYM-076)"
+          ]
         }
       ]
     },
@@ -1998,7 +2001,7 @@
           },
           "examples": {
             "bad": "// Billing module\n$this->connection->executeStatement(\n    'UPDATE customers_customer SET email = :email WHERE id = :id',\n    ['email' => $email, 'id' => $customerId->toRfc4122()],\n);",
-            "good": "// Billing module: a read-model query, read-only\nfinal readonly class CustomerEmailQuery\n{\n    public function __construct(private Connection $connection) {}\n\n    public function emailFor(Uuid $customerId): ?string\n    {\n        $email = $this->connection->fetchOne(\n            'SELECT email FROM customers_customer WHERE id = :id',\n            ['id' => $customerId->toRfc4122()],\n        );\n\n        return false === $email ? null : $email;\n    }\n}"
+            "good": "// Billing module: a read-only query for a nightly export, not a per-request lookup\nfinal readonly class CustomerEmailExportQuery\n{\n    public function __construct(private Connection $connection) {}\n\n    /** @return list<string> */\n    public function emailsFor(Uuid $customerId): array\n    {\n        return $this->connection->fetchFirstColumn(\n            'SELECT email FROM customers_customer WHERE id = :id',\n            ['id' => $customerId],\n            ['id' => UuidType::NAME],\n        );\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ISO-007 (cross-module reads are read-only).",
           "status": "active"
@@ -2683,7 +2686,7 @@
           ],
           "examples": {
             "bad": "namespace Billing\\IssueInvoice;\n\nuse Orders\\Order\\Order; // another module's entity\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n}",
-            "good": "namespace Billing\\IssueInvoice;\n\nuse Framework\\Bus\\CommandBus; // allowed: Framework\\ from every module\nuse Orders\\PlaceOrder\\OrderPlaced; // allowed: a published domain event\n\nnamespace Orders\\Integration;\n\nuse Billing\\IssueInvoice\\OrderTotals; // allowed: interface the consuming module owns\n\nfinal readonly class BillingOrderTotals implements OrderTotals {}"
+            "good": "namespace Billing\\IssueInvoice;\n\nuse Orders\\PlaceOrder\\OrderPlaced; // allowed: a published domain event\n\nnamespace Orders\\Integration;\n\nuse Billing\\IssueInvoice\\OrderTotals; // allowed: interface the consuming module owns\n\nfinal readonly class BillingOrderTotals implements OrderTotals\n{\n    public function totalInCentsFor(string $orderId): int { /* ... */ }\n}"
           },
           "lane_note": "Laravel counterpart: ISO-001 (no cross-module imports).",
           "status": "active"
@@ -2702,7 +2705,7 @@
           },
           "examples": {
             "bad": "namespace Billing\\IssueInvoice;\n\nuse Orders\\Order\\OrderRepository; // direct import across modules\nuse Orders\\PlaceOrder\\PlaceOrderCommandHandler; // another module's handler",
-            "good": "namespace Billing\\IssueInvoice;\n\ninterface OrderTotals // defined by the consumer\n{\n    public function totalInCentsFor(string $orderId): int;\n}\n\nnamespace Orders\\Integration;\n\nfinal readonly class BillingOrderTotals implements OrderTotals // implemented by the provider\n{\n}\n\n// or: Billing listens to Orders\\PlaceOrder\\OrderPlaced, a published domain event"
+            "good": "namespace Billing\\IssueInvoice;\n\ninterface OrderTotals // defined by the consumer\n{\n    public function totalInCentsFor(string $orderId): int;\n}\n\nnamespace Orders\\Integration;\n\nuse Billing\\IssueInvoice\\OrderTotals;\n\nfinal readonly class BillingOrderTotals implements OrderTotals // implemented by the provider\n{\n    public function totalInCentsFor(string $orderId): int { /* ... */ }\n}"
           },
           "lane_note": "Laravel counterpart: ISO-002, ISO-003, ISO-004, ARCH-011 (contract or event, consumer defines it, no shared kernel, slice in the owning context).",
           "status": "active"
@@ -2741,7 +2744,7 @@
           "family": "symfony",
           "scope": "symfony",
           "keyword": "MUST",
-          "rule": "Data another module owns but this module needs at runtime **MUST** be materialized on this module's own table and kept in sync by an event listener, not fetched across modules per request.",
+          "rule": "Data another module owns but this module needs at runtime **MUST** be materialized on this module's own table and kept in sync by an event listener, not fetched across modules per request; a call through a consumer-owned contract (SYM-102) and a read-only query under SYM-074 are the two exceptions to materializing.",
           "detect": {
             "signals": [
               "#[AsMessageHandler(bus: 'event.bus')]"
