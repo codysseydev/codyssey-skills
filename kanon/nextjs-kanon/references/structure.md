@@ -89,7 +89,7 @@ rule, or the sheet's check idea for a rule, where one exists.
 - **STRUCT-017. `params` and `searchParams` are Promises in Next.js 16.** Type them as `Promise<...>` and `await` them. **MUST.**
   - Why: Next.js 16 passes both as Promises, so code that reads a property without `await` gets `undefined` instead of the route value.
   - From: S15
-- **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable: no functions other than Server Functions, and no class instances. `Date`, `Map` and `Set` are serializable. **SHOULD.**
+- **STRUCT-018. Prefer server rendering.** Keep data fetching and static markup in server components and pass plain props to client components. A client component is never `async`, and props crossing the server to client boundary are serializable: no functions and no class instances. React's exception for Server Functions does not apply, because the app has no Server Actions (DATA-070). `Date`, `Map` and `Set` are serializable. **SHOULD.**
   - Why: server components keep their code out of the browser bundle, and every prop that crosses to a client component is serialized, so a function or a class instance cannot cross, while a `Date`, `Map` or `Set` can.
   - Source: Server and Client Components https://nextjs.org/docs/app/getting-started/server-and-client-components
   - From: S16
