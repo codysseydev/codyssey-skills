@@ -210,16 +210,25 @@ def sibling_kind(path):
     return last_word.group(0) if last_word else stem
 
 
+MAX_KINDS = 25
+MAX_PER_KIND = 3
+
+
 def siblings(repo, php_files, sha):
-    """Up to 3 PHP files per class kind, the most recently committed before sha first."""
+    """Up to 3 PHP files for each of the 25 class kinds with the most files, the most recently committed before sha first.
+
+    Blade templates are not classes and form no kind. Kinds tied on file count are kept by name.
+    """
     order = _names(log(repo, "--format=", "--name-only", "-z", sha, "--"))
     rank = {}
     for index, name in enumerate(order):
         rank.setdefault(name, index)
     kinds = collections.defaultdict(list)
     for path in php_files:
-        kinds[sibling_kind(path)].append(path)
-    return {kind: sorted(paths, key=lambda p: (rank.get(p, len(order)), p))[:3] for kind, paths in sorted(kinds.items())}
+        if not path.endswith(".blade.php"):
+            kinds[sibling_kind(path)].append(path)
+    biggest = sorted(kinds, key=lambda kind: (-len(kinds[kind]), kind))[:MAX_KINDS]
+    return {kind: sorted(kinds[kind], key=lambda p: (rank.get(p, len(order)), p))[:MAX_PER_KIND] for kind in sorted(biggest)}
 
 
 def branches(repo):

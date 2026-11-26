@@ -28,7 +28,7 @@ Note required sections and checklists.
 
 ## Sibling files
 
-`siblings` groups PHP classes by kind (`Controller`, `Handler`, `Test`, and so on), up to three per kind. Read them for the pattern, and note a convention only when the siblings agree. Questions to ask of each kind:
+`siblings` groups PHP classes by kind (`Controller`, `Handler`, `Test`, and so on), up to three per kind. It lists the 25 kinds with the most classes, and no Blade templates. Read them for the pattern, and note a convention only when the siblings agree. Questions to ask of each kind:
 
 - Controllers: invokable or resourceful, thin or fat.
 - Validation: form requests or inline rules.
