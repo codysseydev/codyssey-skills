@@ -48,7 +48,8 @@ Rules use RFC-2119 keywords, and they mean it:
 
 The core rules assume this stack, as the Laravel Kanon assumes PHPUnit:
 
-- Next.js App Router.
+- Next.js App Router, with Cache Components off. The template sets `cacheComponents: false`
+  in `next.config`, because current `create-next-app` (16.4) turns it on by default.
 - React with the React Compiler on.
 - Tailwind 4 with tailwind-merge.
 - TanStack Query.

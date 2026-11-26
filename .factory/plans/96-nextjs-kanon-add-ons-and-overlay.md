@@ -57,7 +57,7 @@ Columns: source keyword (src), planned keyword and what sets it (plan), safety-p
 | SENTRY-005 | D30 (Sentry clause) | MUST | MUST, source | none | | | DATA-042 |
 | SENTRY-006 | D41 (Sentry clause) | SHOULD | SHOULD, source | none | Sentry Next.js manual setup guide (public URL; quote to recheck) | | DATA-052 |
 | SENTRY-007 | A9 (Sentry clause) | SHOULD | SHOULD, source | drop; parameters named by role only | | | ACCESS-004 |
-| SENTRY-008 | A10 (Sentry clause) | MUST (sub-bullet) | MUST, source sub-bullet | move to the source project's overlay; one entry per vendor | | | ACCESS-011 |
+| SENTRY-008 | A10 (Sentry clause) | MUST (sub-bullet) | MUST for the connect-src entry, SHOULD for the report destination | move to the source project's overlay; one entry per vendor | | | ACCESS-011 |
 | SENTRY-009 | A14 (Sentry clause) | MUST | MUST, source (decision 8) | generalize: no sampling rate | | Sentry consent guard | ACCESS-015 |
 | SENTRY-010 | C6 (Sentry clause) | SHOULD | SHOULD, source (decision 22 places it) | none | | | TOOLING-006 |
 
@@ -65,8 +65,8 @@ Columns: source keyword (src), planned keyword and what sets it (plan), safety-p
 
 | pack id | From | src | plan | safety fix | sources | Check | cites |
 |---|---|---|---|---|---|---|---|
-| TURNSTILE-001 | D47 | SHOULD | SHOULD, source | generalize: the token field and the loader named by role | | | DATA-042 |
-| TURNSTILE-002 | D48 | SHOULD | Q8 | generalize: no file references | Cloudflare Turnstile server-side validation doc (public URL; quote to recheck) | | TURNSTILE-001 |
+| TURNSTILE-001 | D47 | SHOULD | SHOULD, source | generalize: the token field named by role; the component and its loader named by file (owner decision 1 of 2026-11-25) | | | TURNSTILE-004 |
+| TURNSTILE-002 | D48 | SHOULD; MUST on a condition | MUST | generalize: the named forms become every form that renders the widget; `Captcha` named per owner decision 1 | Cloudflare Turnstile server-side validation doc (public URL; no quote) | |  |
 | TURNSTILE-003 | D16 (Turnstile clause) | MUST | MUST, source; example-only (recount) | generalize, as D16 | | | DATA-019 |
 | TURNSTILE-004 | D30 (Turnstile clause) | MUST | MUST, source; example-only (Q9) | none | | | DATA-042 |
 | TURNSTILE-005 | A10 (Turnstile clause) | none in its sentence | SHOULD, parent A10 | move to the source project's overlay: no origin named | | | ACCESS-011 |
@@ -135,7 +135,7 @@ U44 repeats the S23 clause (a custom icon only where Heroicons has none). HEROIC
 | CF-013 | D27 (Cloudflare clause) | SHOULD | SHOULD, source | generalize: "a same-origin edge endpoint" | Workers: an endpoint the Worker serves itself | | | DATA-039 |
 | CF-014 | D30 (Cloudflare clause) | MUST | MUST, source | none | OpenNext: OpenNext fills `process.env` per request | | | DATA-042 |
 | CF-015 | D57 (Cloudflare clause) | MUST | MUST, source (decision 2) | generalize: drop the Observed note | Workers: the edge cache is on in the Workers config | | | DATA-064 |
-| CF-016 | T34 (Cloudflare clause) | SHOULD | SHOULD, source | generalize: drop the Observed note and the access example | Q3 | | | TYPES-009 |
+| CF-016 | T34 (Cloudflare clause) | SHOULD | SHOULD, source | generalize: drop the Observed note and the source example | Q3 | | | TYPES-009 |
 | CF-017 | T31 (Cloudflare clause) | MUST | MUST, source | move to the source project's overlay (the shared-vectors clause); the skew-mapping clause comes here | OpenNext: skew protection in the OpenNext config | | skew-mapping sync check | TYPES-032 |
 | CF-018 | U47 (Cloudflare clause) | MUST | MUST, source (decision 3) | none | Workers: `public/_headers` is a Workers static assets file | | | UI-055 |
 | CF-019 | A10 (Cloudflare clause) | MUST (sub-bullet) | MUST, source sub-bullet | move to the source project's overlay | Workers: an edge setting another adapter on Workers keeps | | | ACCESS-011 |
