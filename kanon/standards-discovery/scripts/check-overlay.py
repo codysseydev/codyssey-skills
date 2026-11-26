@@ -56,6 +56,8 @@ YAML_WORDS = {"off", "on", "yes", "no", "true", "false", "y", "n", "null", "~"}
 # YAML 1.1 readers break lines on these and YAML 1.2 readers do not, so the two can read different values.
 ODD_BREAKS = {"\x85": "U+0085", "\u2028": "U+2028", "\u2029": "U+2029", "\r": "a carriage return without a line feed"}
 PLAIN = re.compile(r"[A-Za-z_./][A-Za-z0-9_./+:-]*")
+# YAML's c-printable set, without the line breaks: tab, printable ASCII, and the printable Unicode ranges.
+NOT_PRINTABLE = re.compile("[^\t\x20-\x7e\x85\xa0-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
 
 
 def _scalar(text, number):
@@ -96,6 +98,9 @@ def parse_kanon_yml(text):
         for char, name in ODD_BREAKS.items():
             if char in line:
                 raise ValueError(f"line {number}: {name} is a line break to some YAML readers and not to others")
+        odd = NOT_PRINTABLE.search(line)
+        if odd:
+            raise ValueError(f"line {number}: U+{ord(odd.group(0)):04X} is not a printable YAML character")
         line = line.rstrip()
         if not line.strip() or line.lstrip().startswith("#"):
             continue

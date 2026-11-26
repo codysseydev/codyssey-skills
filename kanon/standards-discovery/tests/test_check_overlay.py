@@ -146,6 +146,17 @@ class ParseErrors(unittest.TestCase):
                 self.fails(entry + f"# note{char}  - id: ORCH-008\n", 7, "line break")
                 self.fails(entry.replace("'CLAUDE.md:1'", f"'CLAUDE.md{char}:1'"), 6, "line break")
 
+    def test_a_character_outside_yamls_printable_set_is_refused_with_its_line(self):
+        entry = "mode: project-first\noverlay:\n  - id: ORCH-011\n    effect: adopt\n    evidence:\n      - CLAUDE.md:7\n"
+        for char in ("\x0c", "\x00", "\x7f", "\x9b", "\x0b", "\ufffe"):
+            with self.subTest(char=repr(char)):
+                self.fails(entry + f"# note{char} here\n", 7, "printable")
+                self.fails(entry.replace("- CLAUDE.md:7", f"- 'CLAUDE.md:7{char}'"), 6, "printable")
+
+    def test_a_tab_and_non_ascii_letters_in_a_quoted_value_are_read(self):
+        parsed = co().parse_kanon_yml("mode: project-first\noverlay:\n  - note: 'caf\u00e9\tok'\n")
+        self.assertEqual(parsed["overlay"][0]["note"], "caf\u00e9\tok")
+
     def test_crlf_line_endings_are_read(self):
         parsed = co().parse_kanon_yml("mode: project-first\r\noverlay:\r\n  - id: ORCH-011\r\n")
         self.assertEqual(parsed["overlay"], [{"id": "ORCH-011"}])
