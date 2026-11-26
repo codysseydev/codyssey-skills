@@ -89,7 +89,7 @@ Counts:
 
 - **C1.** Keep: a package is imported by source, scripts or config, or is a peer of one that is; build tools sit in `devDependencies`. STRUCT-032 already says knip is a blocking CI step with its entry points set once in `knip.json`, and that a change deletes a module nothing imports. So TOOLING-001 cites STRUCT-032 for those, and does not say them again. Dropped: the guide pointer and the Not migrated note.
 - **C2.** Keep one sentence, as the safety pass words it: a config file is referenced by a tool, and an installed lint plugin is loaded by the `lint` block of `vite.config.ts` (`plugins` or `jsPlugins`). The skills clause and its note are left out.
-- **C3.** CI reads the Node version from `.nvmrc` (`node-version-file: .nvmrc`), and the `pull_request` trigger names only the live branches. That is the safety pass rewrite. The staging-branch history goes.
+- **C3.** CI reads the Node version from `.nvmrc` (`node-version-file: .nvmrc`), and the `pull_request` trigger names only the live branches. That is the safety pass rewrite. The history sentence goes.
 - **C4.** Core part:
   - A new package with an install script is added to `allowBuilds` in `pnpm-workspace.yaml`.
   - The git hooks install through the `prepare` script, `vp config`, which pnpm runs on install.
@@ -100,7 +100,7 @@ Counts:
 - **C6.** Core part:
   - The Storybook family and the Vite+ family move together, with exact specifiers. Storybook is `storybook` and every `@storybook/*` package at one version. Vite+ is `vite-plus`, which bundles one Vitest, plus `vitest` and `@vitest/*` packages if added.
   - The Vite+ family has one exact version per package in the `catalog:` block of `pnpm-workspace.yaml`, and `package.json` refers to it with `catalog:`. `vp migrate` writes that block.
-  - Dependabot runs weekly with grouped updates: one group for Storybook, one for the Vite+ toolchain (`vite-plus`, `@voidzero-dev/*`, `vitest`, `@vitest/*`), one for everything else, and a weekly `github-actions` entry. SENTRY-010 adds the Sentry group.
+  - Dependabot runs weekly with grouped updates: one group for Storybook, one for the Vite+ toolchain (`vite-plus`, `@voidzero-dev/*`, `vitest`, `@vitest/*`), one for everything else, and a weekly `github-actions` entry. SENTRY-010 adds the Sentry group by citing TOOLING-006. TOOLING-006 names no Sentry entry, so the issue's Sentry grep stays empty.
 - **C7.** Core part:
   - Files under `scripts/` are `.ts` and run with Node's type stripping (`node scripts/x.ts`), with no `tsx` dependency, so they use no enums and no namespaces.
   - `tsconfig.json` and `tsconfig.scripts.json` cover `scripts/**/*.ts`. The typecheck script runs the second one with `erasableSyntaxOnly` and `verbatimModuleSyntax`.
@@ -206,31 +206,33 @@ From the worktree root, at the head commit, on a clean tree:
 
 ## Open questions
 
-- **Q1. T19's note on `vp test related`.** The frontend note says the hook follows static imports only. Check 4 found that Vite+ 1.8.0 with Vitest 5.1.1 also follows string-literal dynamic imports. It does not follow a module that a test replaces with `vi.mock` and a factory, the style TYPES-022 asks for. Which note does TYPES-036 carry?
-  - (a) **Recommended.** Reword it to the gap seen: a staged module that a test replaces with `vi.mock` does not bring that test into the commit-time run, so CI is the backstop (cites TYPES-022).
-  - (b) Drop the note, and keep "CI runs the full suite".
-  - (c) Keep the source wording.
-- **Q2. How TYPES-036 names the CI gates.** #91's answer to its Q4 was to name what the tool does, and to have #95 word T12 and T19. Which form?
-  - (a) **Recommended.** The typecheck script, `vp check` (Oxfmt, then Oxlint), the test script (`vp test`) and `next build`, plus the confirmed hook commands `vp staged` and `vp test related`.
+- **Q1. Which commit-time note does TYPES-036 carry for `vp test related`?**
+  - Context: the source says it follows static imports only. Check 4 found that it also follows string-literal dynamic imports, but not a module a test replaces with `vi.mock` and a factory, the style TYPES-022 asks for.
+  - (a) **Recommended.** The gap seen: a staged module that a test replaces with `vi.mock` does not bring that test into the commit-time run, so CI is the backstop (cites TYPES-022).
+  - (b) No note; "CI runs the full suite" only.
+  - (c) The source wording.
+- **Q2. How does TYPES-036 name the CI gates?**
+  - Context: #91's Q4 answer named what each tool does and left T12 and T19 to #95.
+  - (a) **Recommended.** The typecheck script, `vp check` (Oxfmt, then Oxlint), the test script (`vp test`) and `next build`, plus the hook commands `vp staged` and `vp test related`.
   - (b) The source's script names: `pnpm typecheck`, `pnpm check`, `pnpm test`, `pnpm build`.
-- **Q3. The `Check:` lines marked unconfirmed, and NX-10.** Check 2 confirms these rules exist in Oxlint:
-  - TYPES-002, TYPES-005, TYPES-021 and TYPES-039 say their rules are unconfirmed.
-  - DESIGN-004 (NX-10) waits on a mutation rule. The rules exist, but none catches `push`, `splice` or a `Date` setter on data the code does not own.
-
-  Which change updates those entries?
+- **Q3. Which change updates the unconfirmed `Check:` lines on TYPES-002, TYPES-005, TYPES-021 and TYPES-039, and DESIGN-004 (NX-10)?**
+  - Context: check 2 found each rule. For NX-10, no rule catches `push`, `splice` or a `Date` setter on data the code does not own.
   - (a) **Recommended.** The single follow-up PR after #89 to #96, with this PR's check report as its input.
   - (b) This PR, on top of TYPES-022 and TYPES-036.
   - (c) None until stage 2 confirms the template's own lint config.
-- **Q4. C7's thin JavaScript config file.** The source keeps `next.config.mjs` as JavaScript. `create-next-app` 16.4.6 writes `next.config.ts`, and the overlay already holds `worker.js`. What does TOOLING-007 say?
-  - (a) **Recommended.** Drop the clause. The template's Next config is TypeScript, so no core file stays JavaScript.
+- **Q4. What does TOOLING-007 say about a config file that stays JavaScript?**
+  - Context: the source keeps `next.config.mjs` as JavaScript, `create-next-app` 16.4.6 writes `next.config.ts`, and CF-022 holds `worker.js`.
+  - (a) **Recommended.** Nothing: the clause goes, since no core file stays JavaScript.
   - (b) A generic clause: a config file that its runtime loads as written stays JavaScript and holds glue only, with logic in typed modules under `src/lib/`.
-  - (c) Keep `next.config.mjs` as the source has it.
-- **Q5. C9's Node major and Volta.** The source pins `26.x` and lists `volta.node`. Volta is not in the fixed stack. What does TOOLING-009 write?
-  - (a) **Recommended.** No number: one major, written `<major>.x` in `engines.node` and `devEngines.runtime`, with `.nvmrc` and CI naming the same major. No Volta. The Why notes that the hook's `vp staged` needs Node 22.22.1+ or 24.11.0+.
+  - (c) `next.config.mjs`, as the source has it.
+- **Q5. Which Node major and which version files does TOOLING-009 name?**
+  - Context: the source pins `26.x` and lists `volta.node`; Volta is not in the fixed stack, and `vp staged` needs Node 22.22.1+ or 24.11.0+.
+  - (a) **Recommended.** No number: one major, `<major>.x`, in `engines.node` and `devEngines.runtime`, with `.nvmrc` and CI naming the same major. No Volta.
   - (b) `26.x`, the major the checks ran on, without Volta.
   - (c) `26.x` with Volta, as the source has it.
-- **Q6. C8's `paths-ignore` folders.** The safety pass says C8 stands once its note goes. The recount calls `.agents/` and `.claude/` source-specific. Which folders does TOOLING-008 name?
-  - (a) **Recommended.** `docs/`, `/*.md`, `.agents/` and `.claude/`. The last two are where the vendored skills and agent settings live, so they are tool folders rather than source-project names.
+- **Q6. Which `paths-ignore` folders does TOOLING-008 name?**
+  - Context: the safety pass says C8 stands once its note goes; the recount calls `.agents/` and `.claude/` source-specific.
+  - (a) **Recommended.** `docs/`, `/*.md`, `.agents/` and `.claude/`, since the last two hold the vendored skills and agent settings, not source-project names.
   - (b) `docs/` and `/*.md` only.
   - (c) `docs/`, `/*.md` and "the folders that hold agent skills and settings", with no folder names.
 
