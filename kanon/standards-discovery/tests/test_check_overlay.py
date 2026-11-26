@@ -286,6 +286,44 @@ class ChangeAndRuleFiles(Golden):
         self.assertProblem(".ai/rules/project/testing.md", "paths")
 
 
+class ReportText(Golden):
+    """Only the Conventions table carries rows, and every citation anywhere in the report is checked."""
+
+    def test_a_row_without_its_leading_pipe_fails(self):
+        row = "| Branch names start with `feature/` and a ticket key | `branch:feature/ORD-12-cancel-refund` | pattern in code | none | project-only |\n"
+        extra = 'Legacy billing uses raw SQL | `app/Legacy/OldBilling.php:999` "SECRET" | pattern in code | none | project-only\n'
+        self.edit("standards-report.md", row, row + extra)
+        self.assertProblem("Conventions", "only its table", "app/Legacy/OldBilling.php:999", "ignored")
+
+    def test_a_table_in_another_section_has_its_citations_checked(self):
+        put(self.work, "standards-report.md", read(self.work, "standards-report.md")
+            + '\n## Notes\n\n| Convention | Evidence |\n|---|---|\n| Billing keys live in code | `app/Legacy/OldBilling.php:1` "STRIPE_KEY" |\n')
+        self.assertProblem("app/Legacy/OldBilling.php:1", "ignored")
+
+    def test_a_conventions_section_of_prose_fails_and_its_citations_are_checked(self):
+        text = read(self.work, "standards-report.md")
+        head, rest = text.split("## Conventions", 1)
+        silent = "## Silent on" + rest.split("## Silent on", 1)[1]
+        put(self.work, "standards-report.md", head + '## Conventions\n\nLegacy billing reads `app/Legacy/OldBilling.php:1` "STRIPE_KEY".\n\n' + silent)
+        self.assertProblem("needs its table", "app/Legacy/OldBilling.php:1", "ignored")
+
+    def test_two_tables_in_conventions_fail(self):
+        self.edit("standards-report.md", "\n\n## Silent on", "\n\n| Convention | Evidence | Source | Kanon rule | Effect |\n|---|---|---|---|---|\n\n## Silent on")
+        self.assertProblem("Conventions", "one table")
+
+    def test_an_unquoted_citation_outside_the_evidence_cells_is_refused(self):
+        self.edit("standards-report.md", "Framework: laravel\n", "Framework: laravel\nSee `CLAUDE.md:7` for the test names.\n")
+        self.assertProblem("CLAUDE.md:7", "needs a quote")
+
+    def test_a_quoted_citation_outside_the_table_that_holds_passes(self):
+        self.edit("standards-report.md", "Framework: laravel\n", 'Framework: laravel\nSee `CLAUDE.md:7` "Test methods use the".\n')
+        self.assertEqual(self.check()[0], 0)
+
+    def test_a_citation_in_a_convention_cell_is_checked(self):
+        self.edit("standards-report.md", "| Classes are `final` |", '| Classes are `final`, see `app/Legacy/OldBilling.php:2` "class" |')
+        self.assertProblem("app/Legacy/OldBilling.php:2", "ignored")
+
+
 class CitationStrictness(Golden):
     def test_a_quote_of_spaces_fails(self):
         self.edit("standards-report.md", '`composer.json:7` "php-cs-fixer fix --dry-run --diff"', '`composer.json:2` " "')

@@ -334,14 +334,31 @@ def _cells(line):
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
+def loose_citations(text, number):
+    """[(item, problem)] for each backticked path:line or path:a-b in text. Outside the evidence
+    cells a citation still needs its quote, and is checked like any other."""
+    found = []
+    for match in CITATION.finditer(text):
+        parts = FILE_REF.fullmatch(match.group(1))
+        if not parts:
+            continue
+        item = {
+            "kind": "file", "path": parts.group(1), "start": int(parts.group(2)),
+            "end": int(parts.group(3)) if parts.group(3) else None, "quote": match.group(2), "ref": match.group(1), "line": number,
+        }
+        problem = None if item["quote"] else f"{item['ref']}: a citation outside the evidence cells needs a quote too"
+        found.append((item, problem))
+    return found
+
+
 def parse_report(text):
-    """(report, problems). report: read_at, framework, rows, silent."""
+    """(report, problems). report: read_at, framework, rows, silent, loose (citations outside the evidence cells)."""
     problems = []
 
     def add(where, problem):
         problems.append({"where": where, "problem": problem})
 
-    report = {"read_at": None, "framework": None, "rows": [], "silent": []}
+    report = {"read_at": None, "framework": None, "rows": [], "silent": [], "loose": []}
     lines = text.splitlines()
     for line in lines:
         for field, name in (("read_at", "Read at"), ("framework", "Framework")):
@@ -369,7 +386,21 @@ def parse_report(text):
         end = min([n for n in headings.values() if n > start], default=len(lines))
         return list(enumerate(lines[start + 1:end], start + 2))
 
-    table = [(number, line) for number, line in section("## Conventions") if line.strip().startswith("|")]
+    body = [(number, line) for number, line in section("## Conventions") if line.strip()]
+    table = []
+    for number, line in body:
+        if not line.strip().startswith("|"):
+            add("Conventions", f"line {number}: `## Conventions` holds only its table, and this line is not a table row")
+        elif table and number != table[-1][0] + 1:
+            add("Conventions", f"line {number}: `## Conventions` holds one table, and this line starts another")
+        else:
+            table.append((number, line))
+    if "## Conventions" in headings and not table:
+        add("Conventions", "`## Conventions` needs its table")
+    in_table = {number for number, _ in table}
+    for number, line in enumerate(lines, start=1):
+        if number not in in_table:
+            report["loose"].extend(loose_citations(line, number))
     if table:
         if _cells(table[0][1]) != HEADER:
             add("Conventions", "the table header must be: " + " | ".join(HEADER))
@@ -384,6 +415,8 @@ def parse_report(text):
                 continue
             convention, evidence, source, rule_cell, effect = cells
             where = f"report row {index} ({convention[:50]})"
+            for cell in (convention, source, rule_cell, effect):
+                report["loose"].extend(loose_citations(cell, number))
             row = {"line": number, "where": where, "convention": convention, "citations": [], "source": source,
                    "rule": {"kind": "none"}, "effect": effect, "ok": True}
             if not convention:
@@ -650,6 +683,11 @@ def check_work(work, repo, kanon_root):
 
     if report is None:
         return problems, sha
+
+    for item, problem in report["loose"]:
+        problem = problem or (check_citation(repo, sha, item, ignored, listed) if sha else None)
+        if problem:
+            add(f"report line {item['line']}", problem)
 
     # the rows, and the rows against the entries
     row_keys = {}
