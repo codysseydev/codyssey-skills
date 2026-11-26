@@ -72,6 +72,7 @@ Each entry keeps its key order: `sources` goes where the schema lists it, after 
 ## Overlap with other open work
 
 - #137 (39 plain-PHP rules into `php-core.json`) and #138 (5 Symfony rules into `symfony.json`) run in a sibling session, and #47 may write catalog files. This PR edits `php-core.json` (PHP-001, PHP-003, PHP-004, PHP-005, PHP-007, PHP-008) and not `symfony.json`. The change is a few added lines per entry, so a conflict is a local merge. Right before the PR: rebase onto origin/main, run `node kanon/scripts/catalog.mjs generate`, and re-check rows 26 to 31, 44 and 55 against any new php-core rule that fits them better.
+- Row 40 ("Throw a Domain Exception, Not a Framework One") is linked here from MD-032. #137 plans a new php-core rule backed by the same tip (its candidate P-43). Whether that new entry also cites the tip is asked in #137's plan, not here.
 
 ## Acceptance evidence
 
