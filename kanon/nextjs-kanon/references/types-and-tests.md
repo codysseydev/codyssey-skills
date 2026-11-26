@@ -105,6 +105,10 @@ rule, or the sheet's check idea for a rule, where one exists.
   - Check: the sheet's idea: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`. Oxlint 1.94 lists both rules under those names.
   - Source: Your Tests Are Green and the Bug Shipped Anyway vault: Content/Insights/Your Tests Are Green and the Bug Shipped Anyway.md
   - From: NX-14
+- **TYPES-022. Mock external modules with `vi.mock()` at the top of the file.** A mocked method is its own `vi.fn()` constant from `vi.hoisted`, since `vi.mock` is hoisted, not `vi.mocked(obj.method)`, which `typescript/unbound-method` reports. Test files import from `vite-plus/test`, not `vitest`. The shared Vitest config resets mocks before each test (TYPES-030), so a test file does not call `vi.clearAllMocks()` itself. **SHOULD.**
+  - Why: `vi.mock` runs before the imports, so a mock factory that reads a plain constant from the file body fails because the constant does not exist yet; `vi.hoisted` declares it before the hoisted call.
+  - Check: Oxlint `typescript/unbound-method`, type-aware, a rule Oxlint 1.94 lists under that name; and `vite-plus/prefer-vite-plus-imports`, which loads through `jsPlugins: ['vite-plus/oxlint-plugin']`.
+  - From: T12
 - **TYPES-023. Wrap components that use TanStack Query in a `QueryClientProvider` through the shared test helper** (TYPES-034), which returns a client with `retry: false`. **SHOULD.**
   - Why: TanStack Query retries a failed query by default, so an error-state test without `retry: false` waits through the retries before it sees the error.
   - From: T13
@@ -161,6 +165,10 @@ rule, or the sheet's check idea for a rule, where one exists.
   - Source: Refactoring Is Not Rewriting vault: Content/Insights/Refactoring Is Not Rewriting.md
   - Source: Refactoring as a Discipline https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/refactoring-as-a-discipline
   - From: T18
+- **TYPES-036. A change passes every gate CI runs:** the typecheck script, `vp check` (Oxfmt, then Oxlint with clean output, TYPES-039), `vp test` and `next build`. The pre-commit hook runs `vp staged`, which is `vp check --fix` on the staged files only (CI runs the full `vp check`), and then `vp test related` for the staged files. `vp test related` follows static imports and dynamic imports of a string literal, but not a module that a test replaces with `vi.mock(path, factory)` (TYPES-022): a staged change to such a module runs that test only in CI, which is the backstop. **MUST.**
+  - Why: the gates run in a fixed order and a change that fails one does not merge; the hook runs the fast part on the staged files, so most failures show before the push.
+  - Source: Claude Code Found 14 Rule Breaks in Merged Laravel Code https://codyssey.dev/insights/claude-code-found-14-rule-breaks-in-merged-laravel-code
+  - From: T19
 - **TYPES-037. Do not commit `.env` files.** Add new variables to `.env.example`. **MUST.**
   - Why: a committed `.env` keeps its secrets in the history for good, and `.env.example` tells the next developer which variables to set.
   - From: T20
