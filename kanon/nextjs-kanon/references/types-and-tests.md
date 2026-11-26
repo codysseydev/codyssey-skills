@@ -30,7 +30,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T1
 - **TYPES-002. No `any`, no implicit `any`.** Use `unknown` and narrow, or a real type. **MUST.**
   - Why: `any` switches off checking for every value it touches, so one untyped response spreads unchecked fields into each component that reads it.
-  - Check: Oxlint `typescript/no-explicit-any`, unconfirmed until the template's Oxlint rules are checked.
+  - Check: Oxlint `typescript/no-explicit-any`, a rule Oxlint 1.95 ships under that name.
   - From: T2
 - **TYPES-003. Type every service response.** Pass the response type to the call, `apiClient.get<OrderResponse>(...)`, and give the service function an explicit return type. Whenever the code reads the body, the call has a type argument. A call that ignores the body is exempt. **SHOULD.**
   - Why: the core API client's response is untyped unless the call names its type, so every field read from it escapes the type checker, as an `any` does under TYPES-002.
@@ -41,7 +41,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T4
 - **TYPES-005. Use `type` for object shapes, including component props.** Extend with an intersection (`type A = B & { ... }`); there is no exception for `interface ... extends`. Augmenting a global (`Window`, `Navigator`) inside `declare global` stays `interface`, with `// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- declaration merging only`. **MUST.**
   - Why: one form for every object shape ends the choice in review, and two `interface` declarations with one name merge silently where two `type` declarations fail to compile.
-  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`, unconfirmed until the template's Oxlint rules are checked.
+  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`, a rule Oxlint 1.95 ships under that name.
   - From: T5
 - **TYPES-006. Use an enum when the value set is meaningful and reused** (event names, states, categories the code switches on). Enums live in `types/*.enums.ts` (STRUCT-020). A string union is fine for a short local set. A set is declared once: not as a union in `*.types.ts` and an enum in `*.enums.ts`. **SHOULD.**
   - Why: a set declared twice drifts when one copy gains a member, and the code that switches on the other copy never sees it.
@@ -102,7 +102,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T11
 - **TYPES-021. A test of a calculation or a decision asserts the exact expected value.** It asserts the exact value, the boundary case included. A type-only or presence-only assertion (`toBeDefined`, `toBeTruthy`, `typeof x` equals `'number'`) is never the only assertion of such a test. **SHOULD.**
   - Why: an assertion that the result is a number passes whatever the math returns; a discount function whose only assertion is `typeof total === 'number'` stays green when the discount is applied twice.
-  - Check: the sheet's idea, unconfirmed until the template's Oxlint rules are checked: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`.
+  - Check: the sheet's idea: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`. Oxlint 1.95 ships both rules under those names.
   - Source: Your Tests Are Green and the Bug Shipped Anyway vault: Content/Insights/Your Tests Are Green and the Bug Shipped Anyway.md
   - From: NX-14
 - **TYPES-023. Wrap components that use TanStack Query in a `QueryClientProvider` through the shared test helper** (TYPES-034), which returns a client with `retry: false`. **SHOULD.**
@@ -170,7 +170,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T21 (core part)
 - **TYPES-039. Lint output stays clean, and every lint disable names one rule and a reason after `--`.** Oxlint runs with `--max-warnings 0` and reports an unused disable directive as an error. A directive is written `// oxlint-disable-next-line <rule> -- <reason>` (Oxlint also honours `eslint-disable`). A disable of a React Compiler rule (`react-hooks/refs`, `set-state-in-effect`, `purity`, `immutability`) is not allowed: the compiler then skips that component silently. A disable of `react-hooks/exhaustive-deps` is not allowed either: rewrite the code instead. **MUST.**
   - Why: the React Compiler is on by default in the fixed stack, so a disabled compiler rule turns optimization off for that component with no warning. A stated reason tells review why the rule does not apply; no plugin checks the reason text, so review does.
-  - Check: Oxlint with `--max-warnings 0`, and unused disable directives reported as errors, unconfirmed until the template's Oxlint rules are checked.
+  - Check: Oxlint with `--max-warnings 0`, and unused disable directives reported as errors. These are options, not rules: Oxlint 1.94 has the `--max-warnings` flag, and its `reportUnusedDisableDirectives: 'error'` lint option reports an unused disable directive as an error.
   - Source: Claude Code Found 14 Rule Breaks in Merged Laravel Code https://codyssey.dev/insights/claude-code-found-14-rule-breaks-in-merged-laravel-code
   - From: T27
 - **TYPES-040. Stories are optional.** A shared component in `src/features/global-ui/` with visual variants may ship a story in `stories/`. **MAY.**
