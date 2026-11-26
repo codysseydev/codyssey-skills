@@ -140,23 +140,42 @@ class IgnorePatterns(Inventory):
         )
         self.head = git(self.repo, "rev-parse", "HEAD")
 
+    def match(self, lines):
+        return inv().ignored_by(self.repo, "".join(line + "\n" for line in lines).encode(), self.head)
+
     def test_a_bare_name_matches_at_any_depth(self):
-        self.assertEqual(inv().ignored_by(self.repo, ["secrets"], self.head), {"secrets/k.php", "secrets/keep.php", "a/secrets/k.php"})
+        self.assertEqual(self.match(["secrets"]), {"secrets/k.php", "secrets/keep.php", "a/secrets/k.php"})
 
     def test_a_double_star_pattern_matches(self):
-        self.assertIn("secrets/k.php", inv().ignored_by(self.repo, ["**/secret*"], self.head))
-        self.assertIn("b/secret_x.php", inv().ignored_by(self.repo, ["**/secret*"], self.head))
+        self.assertIn("secrets/k.php", self.match(["**/secret*"]))
+        self.assertIn("b/secret_x.php", self.match(["**/secret*"]))
 
     def test_a_rooted_pattern_matches_only_the_root(self):
-        self.assertEqual(inv().ignored_by(self.repo, ["/root.php"], self.head), {"root.php"})
+        self.assertEqual(self.match(["/root.php"]), {"root.php"})
 
     def test_a_negated_child_of_an_ignored_folder_stays_ignored(self):
-        got = inv().ignored_by(self.repo, ["secrets/", "!secrets/keep.php"], self.head)
+        got = self.match(["secrets/", "!secrets/keep.php"])
         self.assertIn("secrets/keep.php", got)
         self.assertIn("secrets/k.php", got)
 
+    def test_the_file_is_read_by_git_as_an_ignore_file(self):
+        repo = self.plain_repo({
+            "app/Legacy/Old.php": "<?php\n", "trail ": "x\n", "#hash.php": "<?php\n", "spaced.php": "<?php\n",
+            "commented.php": "<?php\n", "kept.php": "<?php\n",
+        })
+        head = git(repo, "rev-parse", "HEAD")
+        blob = "\ufeffapp/Legacy/\n# commented.php\ntrail\\ \n\\#hash.php\nspaced.php   \n".encode()
+        self.assertEqual(inv().ignored_by(repo, blob, head), {"app/Legacy/Old.php", "trail ", "#hash.php", "spaced.php"})
+
+    def test_a_bom_in_a_committed_aiignore_keeps_its_first_pattern(self):
+        repo, _ = self.client()
+        put(repo, ".aiignore", b"\xef\xbb\xbfapp/Legacy/\n")
+        git(repo, "commit", "-qam", "chore: aiignore with a BOM")
+        code, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual((code, out["ignored"]), (0, ["app/Legacy/OldBilling.php"]))
+
     def test_no_patterns_ignore_nothing(self):
-        self.assertEqual(inv().ignored_by(self.repo, [], self.head), set())
+        self.assertEqual(self.match([]), set())
 
 
 class IgnoreFilesAtReadAt(Inventory):

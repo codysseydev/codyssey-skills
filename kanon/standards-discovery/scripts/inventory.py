@@ -128,12 +128,6 @@ def require_same_ignore_files(repo, committed):
         raise Stop(", ".join(differ) + " in the working tree differs from read_at. Commit or restore it, then rerun")
 
 
-def ignore_patterns(blob):
-    """The pattern lines of an ignore file: no blank lines, no comments, whitespace trimmed."""
-    lines = blob.decode("utf-8", "replace").splitlines()
-    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
-
-
 def ignored_paths(repo, sha, committed):
     """Every path in the tree of sha that an ignore file at sha covers.
 
@@ -142,24 +136,24 @@ def ignored_paths(repo, sha, committed):
     """
     ignored = set()
     for blob in committed.values():
-        patterns = ignore_patterns(blob)
-        ignored |= ignored_by(repo, patterns, sha)
+        ignored |= ignored_by(repo, blob, sha)
     return ignored
 
 
-def ignored_by(repo, patterns, sha):
-    """The paths of the tree of sha that git's own matcher says the patterns cover.
+def ignored_by(repo, blob, sha):
+    """The paths of the tree of sha that an ignore file holding blob covers, by git's own matcher.
 
-    The tree is read into a temporary index outside the repo. The repo's own index is never read.
+    git reads the bytes as it reads any ignore file (a BOM, comments, escaped spaces), from a copy
+    outside the repo. The tree is read into a temporary index there too; the repo's index is never read.
     """
-    if not patterns:
-        return set()
-    args = ["ls-files", "-z", "-c", "-i", *[f"--exclude={pattern}" for pattern in patterns]]
     with tempfile.TemporaryDirectory(prefix="ignored-by-") as scratch:
+        patterns = os.path.join(scratch, "patterns")
+        with open(patterns, "wb") as handle:
+            handle.write(blob)
         env = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
         if git(repo, "read-tree", sha, env=env).returncode != 0:
             raise Stop(f"cannot read the tree of {sha}")
-        proc = git(repo, *args, env=env)
+        proc = git(repo, "ls-files", "-z", "-c", "-i", f"--exclude-from={patterns}", env=env)
     if proc.returncode != 0:
         raise Stop(f"git ls-files failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return set(_names(proc))

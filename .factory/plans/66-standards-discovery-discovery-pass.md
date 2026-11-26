@@ -123,7 +123,7 @@ standards-report.md
 ```
 
 - The universe is the tree of `read_at` (`git ls-tree -r --full-tree`, tracked files only), never a folder walk. `siblings` and `commit_subjects` read the history of `read_at` too, so `check-overlay.py` gets the same list from the same commit. Vendor folders are usually untracked, and `vendor/` and `node_modules/` are dropped too.
-- `ignored` comes from git's own matcher. The root `.aiignore` and `.cursorignore` (names matched without regard to case) are read from `read_at` with `ls-tree --full-tree` and `cat-file` on a regular-file blob. A symlink, a folder or a gitlink stops the inventory, because the patterns are unknown. Each file's patterns run through their own `git ls-files -z -c -i --exclude=<pattern>...` on a temporary index of `read_at` outside the repo, and the results are joined. A `!` line in one file cannot bring back what the other hides. `policy.json` is not an input to the ignore set (2026-11-25). An ignored path appears in no other list.
+- `ignored` comes from git's own matcher. The root `.aiignore` and `.cursorignore` (names matched without regard to case) are read from `read_at` with `ls-tree --full-tree` and `cat-file` on a regular-file blob. A symlink, a folder or a gitlink stops the inventory, because the patterns are unknown. Each file's raw blob is written to a temp file outside the repo and passed to its own `git ls-files -z -c -i --exclude-from=<file>` on a temporary index of `read_at`, and the results are joined. git parses the file as it parses any ignore file (a BOM, comments, escaped trailing spaces); Python reads no pattern (decision q). A `!` line in one file cannot bring back what the other hides. `policy.json` is not an input to the ignore set (2026-11-25). An ignored path appears in no other list.
 - A working-tree `.aiignore` or `.cursorignore` that differs from `read_at`, including one present on one side only, stops the inventory and the overlay check.
 - `--repo` must be the top level of the checkout (`require_top_level` from `check-policy.py`). Every git call runs with `core.hooksPath=/dev/null`, `core.fsmonitor=false` and `core.splitIndex=false`.
 - Tracked symlinks and submodules (`git ls-files -s` modes `120000` and `160000`) are dropped from every list. A symlink can point outside the repo.
@@ -280,7 +280,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `kanon root` | A copy laid out as the installed skill folder resolves. A root without `families.json` exits 2 | fails |
 | `inventory of the fixture` (`test_inventory.py`) | The JSON above: sources by kind, siblings, `ignored`, `read_at` equals `HEAD`, subjects, branches | fails |
 | `inventory needs a continue` | A `stop` policy JSON: exit 1, and no git command runs in the repo | fails |
-| `ignore patterns use git's matcher` | `secrets` matches `a/secrets/k.php`, `**/secret*` matches `secrets/k.php`, a negated child of an ignored folder stays ignored | fails |
+| `ignore patterns use git's matcher` | `secrets` matches `a/secrets/k.php`, `**/secret*` matches `secrets/k.php`, a negated child of an ignored folder stays ignored. A file with a BOM, a comment line, an escaped trailing space, `\#` and unescaped trailing spaces reads as git reads it, and a committed `.aiignore` with a BOM keeps its first pattern | fails |
 | `ignore files at read_at` | Two ignore files where `.cursorignore` holds `!*.php`: the path `.aiignore` hides stays ignored. A `policy.json` without ignore warnings still ignores, in the inventory and the overlay check. An uncommitted ignore line, an untracked `.cursorignore` and a deleted `.aiignore` stop. A committed symlink, folder or gitlink `.aiignore` stops with nothing listed | fails |
 | `client git config` | With `core.splitIndex=true`, the inventory, the check and `place` with a `no` record leave every byte and mtime under the repo, `.git` included, unchanged. With `.git/index` overwritten by garbage, the inventory prints the same JSON, the check passes, and `place` and `load` work. A folder inside the repo as `--repo` stops | fails |
 | `symlinks and dirty paths` | A tracked symlink and a submodule appear in no list. An edited `CLAUDE.md` stops with its path. A listed file replaced by a symlink, and one under a symlinked folder, stop | fails |
@@ -541,3 +541,8 @@ p. A report with a second `## Conventions` or `## Silent on` heading. The parser
    Decided 2026-11-25 by the owner: A.
    - **A. `check-overlay.py` refuses a report with more than one of either heading (recommended).**
    - B. Leave it.
+
+q. How the scripts read an ignore file's patterns. Python's own line parsing kept a UTF-8 BOM on the first pattern, so it matched nothing, and it mangled escaped trailing spaces.
+   Decided 2026-11-26 by the owner: A.
+   - **A. Write each ignore file's raw blob from `Read at` to a temp file outside the repo and pass it to `ls-files` with `--exclude-from=<file>`, once per file, then join the results (recommended).** git parses it exactly as it parses an ignore file. Python parses no pattern.
+   - B. Fix the Python parser (strip the BOM, handle escapes). A second parser to keep in step with git.

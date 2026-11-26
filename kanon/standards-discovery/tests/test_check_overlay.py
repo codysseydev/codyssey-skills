@@ -502,7 +502,7 @@ class ReadAtAndIgnoredPaths(Golden):
     def test_ignored_by_matches_the_tree_of_a_commit_not_the_index(self):
         git(self.repo, "rm", "-q", "--cached", "app/Legacy/OldBilling.php")
         inventory = load_script("inventory.py")
-        self.assertEqual(inventory.ignored_by(self.repo, ["app/Legacy/"], self.info["read_at"]), {"app/Legacy/OldBilling.php"})
+        self.assertEqual(inventory.ignored_by(self.repo, b"app/Legacy/\n", self.info["read_at"]), {"app/Legacy/OldBilling.php"})
 
 
 class ReportAndOverlayAgree(Golden):
