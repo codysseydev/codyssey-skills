@@ -118,6 +118,8 @@ The orchestrator also reads `next.config.*` once for the two stack facts the `Co
   git ls-files --others --exclude-standard -- ':(top,glob)src/**' ':(top,glob)app/**'
   ```
 
+  With uncommitted changes in scope, the first call uses the two-dot form, `git diff --name-only --diff-filter=d <base> -- <pathspecs>`, so a tracked file with uncommitted edits is routed too. Every call also carries the step 1 ignores as `':(exclude)<path>'` pathspecs, for example `':(exclude).next/**'`.
+
   This is a read-only git call, it matches as the prototype measured (`*` stays in one folder, `**/` matches zero or more folders including dot folders, every glob starts at the repo root), and no glob is matched by eye.
 - A changed file that no applicable rule file matches is listed under "Unreviewed" in the header.
 
@@ -336,7 +338,7 @@ From the worktree root at the head commit, on a clean tree:
 
    prints nothing.
 4. `grep -rniE 'codyssey' kanon/nextjs-kanon-audit | grep -vE 'https://codyssey\.dev/|codysseydev/|codyssey-frontend-reviewer'` prints nothing.
-5. `codyssey-frontend` is unchanged: `git -C <codyssey-frontend checkout> status --porcelain` prints nothing, and its `HEAD` is the same before and after the build.
+5. `codyssey-frontend` is unchanged: its `HEAD` and its `git status --porcelain` output are the same before and after the build.
 6. No em dash (U+2014) in the new or changed files: `grep -n "$(printf '\342\200\224')" kanon/nextjs-kanon-audit/SKILL.md README.md kanon/nextjs-kanon/SKILL.md` prints nothing.
 7. The 12 checks in `.factory/recipe.yml`. None reads the new file; `install-tests` covers Q5 (b) if chosen.
 
@@ -381,6 +383,8 @@ From the worktree root at the head commit, on a clean tree:
 ## Inputs that disagree
 
 None changes a rule. The PR lists them for the owner.
+
+- The dry-run criterion says "a branch" and "the report". One repo state cannot hold an add-on package both installed and removed, so the plan meets it with two runs and two reports (see "Dry run").
 
 - The vault "Audit" paragraph names "the 'Not migrated' handling"; the owner decision of 2026-11-23 in the issue drops it. The issue wins.
 - Step 3 names a `grep` for Turnstile and Plausible; step 7 allows only read-only `git` and `gh` (Q1).
