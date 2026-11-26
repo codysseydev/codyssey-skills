@@ -255,9 +255,11 @@ The rule issues match these numbers. A mismatch is reported in the pull request,
 | `access-and-security.md` | 6 | 7 | 2 | 0 | 15 |
 | `tooling.md` | 8 | 4 | 0 | 0 | 12 |
 | add-on files (10) | 14 whole rules | | 1 (NX-15) | 25 | 40 |
-| `overlays/cloudflare.md` | 7 Cloudflare rules plus I9 (a core rule) | 1 (I10) | 0 | 15 | 24 |
+| `overlays/cloudflare.md` | 7 Cloudflare rules plus I9 (a core rule) | 1 (I10) | 0 | 14 | 23 |
 
 The core files hold 204 core rules and 43 core parts. The 45 split rows give 44 core parts, because I2 has no core part. The core rule I9 and the core part of I10 are overlay entries.
+
+The overlay holds 23 entries and 14 clause entries, because CF-020, the slot for the A11 Cloudflare clause, stays reserved and unused.
 
 ## Frontend accounting
 
