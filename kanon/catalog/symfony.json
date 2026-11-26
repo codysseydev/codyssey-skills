@@ -3166,6 +3166,35 @@
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
           ],
           "status": "active"
+        },
+        {
+          "id": "SYM-122",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "An outbound-HTTP adapter's own tests **MUST** fake the HTTP client with `MockHttpClient` and `MockResponse` or `JsonMockResponse`, never the real network; tests of code above the adapter fake the port (SYM-070), not the HTTP client.",
+          "detect": {
+            "signals": [
+              "MockHttpClient",
+              "MockResponse",
+              "JsonMockResponse",
+              "HttpClient::create(",
+              "getRequestsCount()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Flags a test class that depends on `Symfony\\Component\\HttpClient\\HttpClient`, `CurlHttpClient` or `NativeHttpClient`; it does not see a real client autowired from the kernel in a `WebTestCase`, nor whether the test asserts on the request.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "use PHPUnit\\Framework\\Attributes\\Test;\nuse PHPUnit\\Framework\\TestCase;\nuse Symfony\\Component\\HttpClient\\HttpClient;\n\nfinal class ShippingRateGatewayTest extends TestCase\n{\n    #[Test]\n    public function it_requests_a_quote(): void\n    {\n        $gateway = new ShippingRateGateway(HttpClient::create(['base_uri' => 'https://rates.example.com']));\n\n        $gateway->quote('SKU-1', 'SE'); // a real request over the network\n    }\n}",
+            "good": "use PHPUnit\\Framework\\Attributes\\Test;\nuse PHPUnit\\Framework\\TestCase;\nuse Symfony\\Component\\HttpClient\\MockHttpClient;\nuse Symfony\\Component\\HttpClient\\Response\\JsonMockResponse;\n\nfinal class ShippingRateGatewayTest extends TestCase\n{\n    #[Test]\n    public function it_requests_a_quote(): void\n    {\n        $response = new JsonMockResponse(['quote_id' => 'q_1', 'amount' => 1999]);\n        $client = new MockHttpClient($response, 'https://rates.example.com');\n\n        (new ShippingRateGateway($client))->quote('SKU-1', 'SE'); // sends ['json' => ['sku' => 'SKU-1', 'country' => 'SE']]\n\n        self::assertSame(1, $client->getRequestsCount());\n        self::assertSame('POST', $response->getRequestMethod());\n        self::assertSame('https://rates.example.com/v1/quotes', $response->getRequestUrl());\n        self::assertSame('SKU-1', json_decode($response->getRequestOptions()['body'], true)['sku']);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-010 (its testing sentence: fake at the Saloon connector with `MockClient` and `MockResponse`). Adapter behind an interface: SYM-070. Test doubles and the in-memory bus for controller tests: SYM-121.",
+          "status": "active"
         }
       ]
     }
