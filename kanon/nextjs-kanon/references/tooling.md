@@ -27,7 +27,7 @@ rule, or the sheet's check idea for a rule, where one exists.
 
 ## Dependencies, config and tooling
 
-- **TOOLING-001. Dependencies are used, and in the right section.** A package in `package.json` is imported by source, scripts or config, or is a peer of one that is. Build tools sit in `devDependencies`. knip reports an unused package as a blocking CI step, with its entry points set once in `knip.json` (STRUCT-032). **SHOULD.**
+- **TOOLING-001. Dependencies are used, and in the right section.** A package in `package.json` is imported by source, scripts or config, or is a peer of one that is. Build tools sit in `devDependencies`. knip, a blocking CI step, reports an unused package, with its entry points set once in `knip.json` (STRUCT-032). **SHOULD.**
   - Why: a package nothing imports still installs and still gets update pull requests, for example a date library left behind after its last import was removed.
   - From: C1
 - **TOOLING-002. No dead scaffolding or unwired config.** A config file is referenced by a tool, and an installed lint plugin is loaded by the `lint` block of `vite.config.ts`, in `plugins` or `jsPlugins`. **SHOULD.**
