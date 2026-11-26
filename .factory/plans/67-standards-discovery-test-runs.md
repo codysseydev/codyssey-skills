@@ -6,6 +6,8 @@ Issue codysseydev/codyssey-skills#67. Base origin/main 17ad8df. Branch `factory/
 
 Run `kanon/standards-discovery` three times before it meets a client. Run 1 reads the Codyssey backend as it is. Run 2 reads a copy of the backend without `CLAUDE.md`, `AGENTS.md` and `.ai/`. Run 3 reads `symfony/demo`. For each backend run, count the answer-key rules the skill found again, the ones it missed, and the conventions it reported that the answer key lacks, each checked as real or made up. Judge run 3 without an answer key. Fix what the runs show in the skill, in the same PR, each fix with a test where one can be written. Nothing is written to `codysseydev/codyssey` or `symfony/demo`.
 
+By the owner's decision c, the backend reports go to the private vault and the PR carries counts only, so acceptance criterion 1 is amended to match.
+
 ## Problem
 
 The skill has only run on its own 9-file fixture. The planning dry run of steps 1 and 2 (policy check and inventory) on copies of both repos already shows three gaps (Prototype):
@@ -309,47 +311,56 @@ sequenceDiagram
 - The answer key moves. The backend gained one rule file on 2026-11-04. The implement session re-pins and recounts.
 - F2's cap of 25 kinds (decision i) drops patterns in rare kinds. The prototype's top 25 kinds each hold 22 or more classes.
 
-## Open decisions
+## Decisions
 
 a. When to fix the inventory gaps the dry run found (F1 `.ai/rules/` not listed, F2 sibling kinds, F3 read fan-out).
+   Decided 2026-11-26 by the owner: A.
    - **A. Fix them first, each script fix with a failing test, then run all three on the fixed skill (recommended).** Run 1 can then see the rules, and the counts measure a skill that read what it was told. Cost: the runs measure the fixed skill, and the base skill is described only by the Prototype numbers.
    - B. Run at base, then fix, then rerun the backend runs. Both sets of counts are in the PR. Cost: two more backend runs, and the base runs read a fraction of 2.2M tokens in an order nobody chose.
    - C. Run at base only, and fix after without a rerun. Cheapest. The counts then measure a skill that could not see the answer key.
 
 b. The answer key's unit.
+   Decided 2026-11-26 by the owner: A.
    - **A. 23 items (22 rule files and `CLAUDE.md`). An item is found again when a row matches one of its 1 to 3 key conventions, which the grader freezes before grading and the owner checks once. Key-convention counts are reported too (recommended).** Close to the issue's "23 rules", and testable. Cost: the owner reviews the key list.
    - B. Per `##` section, 149 sections. Finer numbers. Cost: about 6 times the grading, and some sections hold no rule.
    - C. 23 files as the issue counts them, `index.md` included. Matches the issue's number, but `index.md` has no convention to find.
 
 c. Where the backend reports go. codyssey-skills is public, codyssey is private, and 8 rules should not be public.
+   Decided 2026-11-26 by the owner: A.
    - **A. Backend reports, `backend-key.md` and the backend `verdicts.md` go to the vault (codyssey-docs, private). The PR carries the counts per run with no rule file names and no paths, plus the full symfony/demo report (recommended).** Nothing private reaches a public page. Cost: criterion 1 needs the owner's amendment.
    - B. Redacted backend reports in the PR: topic, Source, Kanon ID and effect per row, no quotes or paths. Cost: each row is checked against the 8 non-public rules, and a missed one is public for good.
    - C. The PR links a private commit in codyssey-docs. Reviewers of the public repo cannot open it. Never a gist, which is public to anyone with the link, and never codysseydev/codyssey, which criterion 2 forbids.
 
 d. Where the backend copies come from.
+   Decided 2026-11-26 by the owner: A.
    - **A. `git fetch` from the local checkout into a fresh scratch repo with no remote (recommended).** Offline, the same sha the owner's machine has, and the Prototype showed it writes nothing to the original. Cost: one command touches the original.
    - B. Clone from GitHub at the pinned sha, then remove `origin`. The original is never opened. Cost: network and `gh` credentials, and the branch list comes from GitHub, not the owner's machine.
 
 e. The model.
+   Decided 2026-11-26 by the owner: A.
    - **A. Opus for the run agent, its readers and the grader. Records list `claude-opus-*` (recommended).** The owner's interactive sessions run Opus, so the counts describe what a client run would get. Cost: the most tokens.
    - B. Opus for the run agent and grader, Sonnet for readers. Records list `claude-*`. Cheaper reads. Cost: the counts mix two models.
    - C. A, plus a second blind run on Sonnet to compare. Cost: one more backend run.
 
 f. Reruns after fixes the runs find.
+   Decided 2026-11-26 by the owner: A.
    - **A. No agent rerun for a script fix: its test proves it, and the script steps rerun on the existing work folders. One rerun of the blind run if a fix changes `SKILL.md` or `references/` (recommended).** Prose has no test, so a rerun is its only proof. Cost: possibly one more backend run.
    - B. Rerun all three after all fixes. Cleanest numbers. Cost: three more runs.
    - C. No rerun. Prose fixes stay unproven.
 
 g. What the PR commits.
+   Decided 2026-11-26 by the owner: A.
    - **A. This plan and the fix commits only. The counts table goes in the PR body, and the symfony/demo report and grading in one PR comment linked from it (recommended).** Nothing stale in the tree. `install.mjs` copies all of `kanon/standards-discovery/` into `~/.claude/skills`, so run outputs there would be installed. Cost: the run record lives in a PR comment.
    - B. Also commit `.factory/runs/67/` with the symfony/demo outputs and `counts.json` per run. Reviewable as a diff. Cost: files no code reads, and they go stale.
 
 h. What the blind copy removes.
+   Decided 2026-11-26 by the owner: A.
    - **A. `CLAUDE.md`, `AGENTS.md` and `.ai/`, as the issue says. Found counts are split by Source (recommended).** Follows the issue. The split shows how many came from `docs/`. Cost: the run is not blind to written rules in `docs/`.
    - B. Also remove `docs/` and the other agent folders, so only configs and code remain. Closer to "find the rules in configs and code". Cost: departs from the issue's list.
    - C. Both, as a fourth run. Cost: one more backend run.
 
 i. Which sibling kinds the inventory lists (F2). The numbers are from the as-is backend copy, blade templates already excluded.
+   Decided 2026-11-26 by the owner: A.
    - **A. The 25 kinds with the most tracked PHP classes, ties by name, up to 3 files each (recommended).** 75 files, 456 KB. The fixture's 3 kinds stay as they are, so no golden file changes. Cost: patterns in rarer kinds go unread. The 25th kind on the backend has 22 classes.
    - B. Every kind with 2 or more classes, up to 3 files each. 495 files, 1.46 MB, which needs several readers per run. Cost: the fixture's single-file kinds (`Controller`, `Test`) drop out, so the golden inventory and report change.
    - C. No cap, blade templates excluded only, and fan-out does the rest. About 1000 files. Cost: the largest read, and most of it is one-file kinds that show no pattern.
