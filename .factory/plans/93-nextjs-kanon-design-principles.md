@@ -29,7 +29,7 @@ In file order. The pack id and `From:` value are the id map's. Keyword "SHOULD" 
 | 7 | DESIGN-007 | NX-11 | none, SHOULD (NX-11 decision note: N = 2, review only) | new rule: two property levels, deeper values from a mapper, a query `select` or a selector; exemptions per question e | review only, lint check only after its noise is measured (question g) | DESIGN-006 (P4) |
 | 8 | DESIGN-008 | P5 | SHOULD, SHOULD (frontend) | notes; the "none today" sentence on value objects becomes general advice; branded ids stay in "Considered and not proposed" | none | DESIGN-003 (P3) |
 | 9 | DESIGN-009 | P6 | SHOULD, SHOULD (frontend) | possible miss from the regex scan, rename: neutral mapper names in the lead and the examples; drop the Migrated and Known exception notes and the doc link | none | none |
-| 10 | DESIGN-010 | P7 | SHOULD, SHOULD (frontend) | possible miss from the regex scan, rename: neutral wrapper and file names; the Why keeps its point (time zones differ between server and browser) with no host or test file names; drop the Migrated and Exempt notes and the doc link; clause X7: a bullet for randomness (`Math.random()` and `crypto.randomUUID()` inside `utils/` logic are hidden dependencies) | none | DATA-042 (D30) |
+| 10 | DESIGN-010 | P7 | SHOULD, SHOULD (frontend) | possible miss from the regex scan, rename: neutral wrapper and file names; the Why keeps its point (server and browser time zones can differ) with no host or test file names; drop the Migrated and Exempt notes and the doc link; clause X7: a bullet for randomness (`Math.random()` and `crypto.randomUUID()` inside `utils/` logic are hidden dependencies) | none | DATA-042 (D30) |
 | 11 | DESIGN-011 | P8 | SHOULD, SHOULD (frontend) | notes | none | DESIGN-003 (P3) |
 | 12 | DESIGN-012 | P9 | SHOULD, SHOULD (frontend) | drop clause: the flagged sentence goes; drop the Not migrated block; the named-error example is neutral; one added line points at DESIGN-013 (outcomes the user's input causes, from a pure function, never from a `queryFn` or `mutationFn`); the rule text is unchanged | none | DESIGN-013 (NX-13) |
 | 13 | DESIGN-013 | NX-13 | none, question c | new rule from the C8 split: named errors stay for faults and not-found, a discriminated union for outcomes the user's input causes, returned by a pure function, never by a `queryFn` or `mutationFn` | question g | DESIGN-012 (P9), TYPES-015 (T26), DATA-025 (D23), DATA-026 (D24) |
@@ -129,7 +129,7 @@ These follow from the inputs. The PR lists them so the owner can change any of t
 - "For new code" qualifiers in P2 and P15 belong to the frontend's Not migrated regime and are dropped.
 - The intro line naming the course keeps the course URL on the same physical line, so the acceptance grep prints nothing for it, which meets the criterion.
 - The draft P4 source from chapter 08 of the course about the source project's frontend is cited by its `vault: Content/Courses/...` path. The approved Sources-tab row names it, and the issue's acceptance grep exempts `vault: Content/` lines.
-- Long tables (the source list, the from-check output) go in a PR comment linked from the body, per the operator's PR body rule. The body keeps the 10-row fix table and the keyword table.
+- Long tables (the fix table, the keyword table, the source list, the from-check output) go in a PR comment linked from the body, per the operator's PR body rule.
 - The keyword table in the PR lists P12 and the four NX rows. Every other entry keeps the frontend's SHOULD.
 
 ## Verification
