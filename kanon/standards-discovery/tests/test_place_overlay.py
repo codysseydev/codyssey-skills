@@ -301,6 +301,40 @@ class PlaceUsesPlumbing(Placement):
         self.assertEqual((code, out["result"]), (0, "placed"), out)
         self.assertEqual(git(self.repo, "show", "sd/probe:.ai/kanon.yml"), read(self.work, ".ai/kanon.yml").strip())
 
+    def test_a_placed_file_already_identical_at_read_at_is_not_a_change(self):
+        for rel in (".ai/kanon.yml", ".ai/rules/project/testing.md"):
+            put(self.repo, rel, read(self.work, rel))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "chore: overlay already there")
+        self.rebuild_work()
+        for rel in (".ai/kanon.yml", ".ai/rules/project/testing.md"):
+            self.assertEqual(read_bytes(os.path.join(self.work, rel)), read_bytes(os.path.join(self.repo, rel)))
+        code, out, _ = self.place_yes()
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+        changed = git(self.repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "sd/probe").splitlines()
+        self.assertEqual(changed, [".ai/standards-report.md"])
+
+    def test_a_changed_path_that_is_not_a_placed_file_stops(self):
+        module = fs.load_script("place-overlay.py")
+        real = module.git
+
+        def with_extra_path(repo, *args, **kwargs):
+            done = real(repo, *args, **kwargs)
+            if args[0] == "diff-tree":
+                done.stdout += b"app/Backdoor.php\0"
+            return done
+
+        out = io.StringIO()
+        with mock.patch.object(module, "git", side_effect=with_extra_path), \
+                mock.patch.dict(os.environ, fs.GIT_ENV), contextlib.redirect_stdout(out):
+            code = module.main([
+                "place", "--record", ALLOWING_COMMIT, "--model", MODEL, "--work", self.work, "--repo", self.repo, "--branch", "sd/probe",
+            ])
+        result = json.loads(out.getvalue())
+        self.assertEqual((code, result["result"]), (1, "stop"))
+        self.assertIn("app/Backdoor.php", result["reason"])
+        self.assertEqual(git(self.repo, "branch", "--list", "sd/probe"), "")
+
     def test_an_os_error_prints_one_json_object_and_leaves_no_branch(self):
         module = fs.load_script("place-overlay.py")
         out = io.StringIO()

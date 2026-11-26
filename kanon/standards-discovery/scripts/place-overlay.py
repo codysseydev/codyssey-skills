@@ -150,8 +150,9 @@ def place_on_branch(repo, work, branch, subject, read_at):
         tree = text_of(git(repo, "write-tree", index=index))
         listed = git(repo, "diff-tree", "-r", "-z", "--no-renames", "--name-only", read_at, tree, index=index)
     changed = {p for p in listed.stdout.decode("utf-8", "replace").split("\0") if p}
-    if changed != {rel for rel, _ in files}:
-        return stop(reason="the new tree differs from Read at in other paths than the placed files: " + ", ".join(sorted(changed ^ {rel for rel, _ in files})))
+    extra = changed - {rel for rel, _ in files}
+    if extra:
+        return stop(reason="the new tree differs from Read at in other paths than the placed files: " + ", ".join(sorted(extra)))
     sha = text_of(git(repo, "commit-tree", "--no-gpg-sign", tree, "-p", read_at, "-m", subject))
     git(repo, "update-ref", f"refs/heads/{branch}", sha, "")
     return emit(
