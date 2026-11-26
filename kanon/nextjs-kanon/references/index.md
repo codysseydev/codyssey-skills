@@ -157,6 +157,11 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `src/lib/testing/createTestQueryClient.ts` | the query client for tests |
 | `tsconfig.scripts.json` | the TypeScript config for `scripts/` |
 | `scripts/` | the TypeScript build and deploy scripts |
+| `vite.config.ts` | the Vite+ config: its `lint`, `test` and `staged` blocks |
+| `.vite-hooks/` | the git hooks that `vp config` installs |
+| `knip.json` | the knip config and its entry points |
+| `.nvmrc` | the Node major that CI and local shells read |
+| `.storybook/main.ts` | the Storybook config and the `define` it passes the bundler |
 | `.storybook/mocks` | Storybook's mocks of `next/*` |
 | `--radius-*`, `--header-h` | role tokens in the `@theme` block of `app/globals.css` |
 | `src/constants/zIndex.ts` | the named z-index layers |
