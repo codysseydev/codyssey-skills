@@ -145,6 +145,6 @@ The owner answered the rule-wording findings of the independent review on 2026-1
 Owner answers of 2026-11-26 on the rule wording:
 
 5. ACCESS-011: no `'unsafe-eval'` in the enforced policy is a strict MUST NOT, stated as a plain rule.
-6. ACCESS-011: a Report-Only policy only reports and never allows a script, so a vendor script that needs `eval` stays blocked by the enforced policy. A Report-Only policy may be used only to trial dropping a script's need for `eval` and to collect the reports.
+6. ACCESS-011: a Report-Only policy only reports and never allows a script, so a vendor script that needs `eval` stays blocked by the enforced policy. A Report-Only policy MAY trial a tighter policy before it is enforced; it never loosens the enforced one.
 7. ACCESS-011 Check line: the guard asserts that the enforced policy's `script-src` and `default-src` have no `'unsafe-eval'`, that `img-src` includes `https:` and has no `http:`, and that `upgrade-insecure-requests` is set.
 8. ACCESS-010: content access is decided by the API response; the client never infers it from an HTTP status or from client state.
