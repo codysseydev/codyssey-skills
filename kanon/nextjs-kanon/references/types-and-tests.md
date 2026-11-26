@@ -30,7 +30,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T1
 - **TYPES-002. No `any`, no implicit `any`.** Use `unknown` and narrow, or a real type. **MUST.**
   - Why: `any` switches off checking for every value it touches, so one untyped response spreads unchecked fields into each component that reads it.
-  - Check: Oxlint `typescript/no-explicit-any`, a rule Oxlint 1.95 ships under that name.
+  - Check: Oxlint `typescript/no-explicit-any`, a rule Oxlint 1.94 lists under that name.
   - From: T2
 - **TYPES-003. Type every service response.** Pass the response type to the call, `apiClient.get<OrderResponse>(...)`, and give the service function an explicit return type. Whenever the code reads the body, the call has a type argument. A call that ignores the body is exempt. **SHOULD.**
   - Why: the core API client's response is untyped unless the call names its type, so every field read from it escapes the type checker, as an `any` does under TYPES-002.
@@ -41,7 +41,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T4
 - **TYPES-005. Use `type` for object shapes, including component props.** Extend with an intersection (`type A = B & { ... }`); there is no exception for `interface ... extends`. Augmenting a global (`Window`, `Navigator`) inside `declare global` stays `interface`, with `// oxlint-disable-next-line @typescript-eslint/consistent-type-definitions -- declaration merging only`. **MUST.**
   - Why: one form for every object shape ends the choice in review, and two `interface` declarations with one name merge silently where two `type` declarations fail to compile.
-  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`, a rule Oxlint 1.95 ships under that name.
+  - Check: Oxlint `typescript/consistent-type-definitions` set to `'type'`, a rule Oxlint 1.94 lists under that name.
   - From: T5
 - **TYPES-006. Use an enum when the value set is meaningful and reused** (event names, states, categories the code switches on). Enums live in `types/*.enums.ts` (STRUCT-020). A string union is fine for a short local set. A set is declared once: not as a union in `*.types.ts` and an enum in `*.enums.ts`. **SHOULD.**
   - Why: a set declared twice drifts when one copy gains a member, and the code that switches on the other copy never sees it.
@@ -102,7 +102,7 @@ rule, or the sheet's check idea for a rule, where one exists.
   - From: T11
 - **TYPES-021. A test of a calculation or a decision asserts the exact expected value.** It asserts the exact value, the boundary case included. A type-only or presence-only assertion (`toBeDefined`, `toBeTruthy`, `typeof x` equals `'number'`) is never the only assertion of such a test. **SHOULD.**
   - Why: an assertion that the result is a number passes whatever the math returns; a discount function whose only assertion is `typeof total === 'number'` stays green when the discount is applied twice.
-  - Check: the sheet's idea: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`. Oxlint 1.95 ships both rules under those names.
+  - Check: the sheet's idea: `vitest/expect-expect`, plus `vitest/no-restricted-matchers` for `toBeDefined`, `toBeTruthy` and `toBeFalsy`. Oxlint 1.94 lists both rules under those names.
   - Source: Your Tests Are Green and the Bug Shipped Anyway vault: Content/Insights/Your Tests Are Green and the Bug Shipped Anyway.md
   - From: NX-14
 - **TYPES-023. Wrap components that use TanStack Query in a `QueryClientProvider` through the shared test helper** (TYPES-034), which returns a client with `retry: false`. **SHOULD.**

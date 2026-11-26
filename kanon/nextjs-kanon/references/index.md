@@ -132,7 +132,8 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `src/lib/useFeatureMutation.ts` | `useFeatureMutation`, the mutation wrapper that owns the toast and the error report |
 | `src/lib/emailSchema.ts` | `emailField`, the shared email field schema |
 | `src/lib/passwordValidationSchema.ts` | `passwordField` and `passwordValidationSchema` |
-| `src/lib/serviceError.ts` | `toServiceError` and `RATE_LIMIT_MESSAGE`, the service error mapping |
+| `src/lib/serviceError.ts` | `toServiceError`, the service error mapping |
+| `RATE_LIMIT_MESSAGE` | the wait message `toServiceError` returns for a 429 (file not named) |
 | `parseApiFormError`, `toUserMessage` | the form-error and user-message helpers (file not named) |
 | `showToast`, `showErrorToast` | the toast calls (file not named) |
 | `createCooldown` | the shared cooldown for resend buttons (file not named) |
@@ -142,7 +143,8 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `<app>_` | placeholder prefix of every storage key, as `<app>_<snake_case>` and `<app>_auth` |
 | `AuthProvider` | the provider of the session state: `isSessionVerified`, `checkAuth`, `isAuthenticated` (file not named) |
 | `useAuth`, `useMediaQuery` | shared hooks outside feature folders (files not named) |
-| `src/lib/navigation.ts` | the navigation helpers: `beginHardNavigation`, `toSameOriginPath`, `toSameOriginParts` and `safeRedirect` |
+| `src/lib/navigation.ts` | the navigation helpers: `beginHardNavigation`, `toSameOriginPath` and `toSameOriginParts` |
+| `safeRedirect` | the redirect helper that goes through `toSameOriginPath` (file not named) |
 | `src/lib/formatDate.ts` | the shared date formatter: `formatPublishDate`, `formatDate` and `formatDateTime` |
 | `src/lib/formatPrice.ts` | `formatPrice` |
 | `src/lib/formatCount.ts` | `formatCount` and `pluralize` |

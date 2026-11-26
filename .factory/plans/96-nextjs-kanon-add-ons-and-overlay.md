@@ -57,7 +57,7 @@ Columns: source keyword (src), planned keyword and what sets it (plan), safety-p
 | SENTRY-005 | D30 (Sentry clause) | MUST | MUST, source | none | | | DATA-042 |
 | SENTRY-006 | D41 (Sentry clause) | SHOULD | SHOULD, source | none | Sentry Next.js manual setup guide (public URL; quote to recheck) | | DATA-052 |
 | SENTRY-007 | A9 (Sentry clause) | SHOULD | SHOULD, source | drop; parameters named by role only | | | ACCESS-004 |
-| SENTRY-008 | A10 (Sentry clause) | MUST (sub-bullet) | MUST, source sub-bullet | move to the source project's overlay; one entry per vendor | | | ACCESS-011 |
+| SENTRY-008 | A10 (Sentry clause) | MUST (sub-bullet) | MUST for the connect-src entry, SHOULD for the report destination | move to the source project's overlay; one entry per vendor | | | ACCESS-011 |
 | SENTRY-009 | A14 (Sentry clause) | MUST | MUST, source (decision 8) | generalize: no sampling rate | | Sentry consent guard | ACCESS-015 |
 | SENTRY-010 | C6 (Sentry clause) | SHOULD | SHOULD, source (decision 22 places it) | none | | | TOOLING-006 |
 
@@ -66,7 +66,7 @@ Columns: source keyword (src), planned keyword and what sets it (plan), safety-p
 | pack id | From | src | plan | safety fix | sources | Check | cites |
 |---|---|---|---|---|---|---|---|
 | TURNSTILE-001 | D47 | SHOULD | SHOULD, source | generalize: the token field named by role; the component and its loader named by file (owner decision 1 of 2026-11-25) | | | TURNSTILE-004 |
-| TURNSTILE-002 | D48 | SHOULD; MUST on a condition | Q8 | generalize: the named forms become every form that renders the widget; `Captcha` named per owner decision 1 | Cloudflare Turnstile server-side validation doc (public URL; no quote) | | TURNSTILE-001 |
+| TURNSTILE-002 | D48 | SHOULD; MUST on a condition | MUST | generalize: the named forms become every form that renders the widget; `Captcha` named per owner decision 1 | Cloudflare Turnstile server-side validation doc (public URL; no quote) | |  |
 | TURNSTILE-003 | D16 (Turnstile clause) | MUST | MUST, source; example-only (recount) | generalize, as D16 | | | DATA-019 |
 | TURNSTILE-004 | D30 (Turnstile clause) | MUST | MUST, source; example-only (Q9) | none | | | DATA-042 |
 | TURNSTILE-005 | A10 (Turnstile clause) | none in its sentence | SHOULD, parent A10 | move to the source project's overlay: no origin named | | | ACCESS-011 |
