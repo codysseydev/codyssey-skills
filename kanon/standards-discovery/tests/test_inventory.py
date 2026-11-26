@@ -117,6 +117,26 @@ class InventoryOfTheFixture(Inventory):
         self.assertEqual(src["pr_templates"], [".github/pull_request_template.md"])
 
 
+class RuleFilesAreInstructions(Inventory):
+    def test_rule_files_are_instructions(self):
+        repo = self.plain_repo({
+            ".ai/rules/testing.md": "# Testing\n\nTests use PHPUnit.\nEvery test extends the base case.\n",
+            ".ai/rules/project/x.md": "# X\n",
+            ".ai/rules/notes.txt": "not a rule file\n",
+            "app/A.php": "<?php\n",
+        })
+        _, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual(out["sources"]["instructions"], [".ai/rules/project/x.md", ".ai/rules/testing.md"])
+
+    def test_a_citation_into_a_rule_file_resolves(self):
+        repo = self.plain_repo({".ai/rules/testing.md": "# Testing\n\nTests use PHPUnit.\n", "app/A.php": "<?php\n"})
+        sha = git(repo, "rev-parse", "HEAD")
+        checker = load_script("check-overlay.py")
+        listed = inv().listed_paths(inv().listing(repo, sha, set()))
+        item = {"kind": "file", "path": ".ai/rules/testing.md", "start": 3, "end": None, "quote": "Tests use PHPUnit"}
+        self.assertIsNone(checker.check_citation(repo, sha, item, set(), listed))
+
+
 class InventoryNeedsAContinue(Inventory):
     def test_a_stop_policy_exits_1_and_runs_no_git_command(self):
         stop = self.fake_policy(result="stop")
