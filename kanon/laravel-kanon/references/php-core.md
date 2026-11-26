@@ -2,9 +2,9 @@
 
 # PHP Core
 
-Applies to: every production PHP class, whatever the framework. These rules hold in Laravel and Symfony alike; framework overlays name the framework-specific calls (`orchestration-di.md` for Laravel, the `symfony-kanon` skill's `references/symfony.md` for Symfony).
+Applies to: every PHP class, production code and tests, whatever the framework. These rules hold in Laravel and Symfony alike; framework overlays name the framework-specific calls (`orchestration-di.md` for Laravel, the `symfony-kanon` skill's `references/symfony.md` for Symfony).
 
-Lane boundaries: file shape (`strict_types`, `final readonly`, constructor promotion) and the Laravel calls (`app()`, `resolve()`, facades, helpers) are owned by `orchestration-di.md`; do not re-audit them here.
+Lane boundaries: this family owns the plain-PHP file shape (`strict_types`, `final readonly`, constructor promotion) for every framework, in its File shape section; `orchestration-di.md` owns the Laravel calls (`app()`, `resolve()`, facades, helpers) and the Laravel-only file kinds (migrations, factories, config).
 
 ## Dependencies
 
@@ -25,3 +25,19 @@ Lane boundaries: file shape (`strict_types`, `final readonly`, constructor promo
 ## Commands and queries
 
 - `PHP-008` A method **SHOULD NOT** both change state and return data for display. A command **MAY** return the id it created or the outcome or decision of the change (see the handler Result DTO rule in `orchestration-di.md` and the command/query slices in `architecture.md`).
+
+## Naming
+
+## File shape
+
+## Domain model
+
+## Boundaries and integrations
+
+## Input and authorization
+
+## Time and caching
+
+## Events
+
+## Testing

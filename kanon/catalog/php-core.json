@@ -2,8 +2,8 @@
   "family": "php-core",
   "title": "PHP Core",
   "intro": [
-    "Applies to: every production PHP class, whatever the framework. These rules hold in Laravel and Symfony alike; framework overlays name the framework-specific calls (`orchestration-di.md` for Laravel, the `symfony-kanon` skill's `references/symfony.md` for Symfony).",
-    "Lane boundaries: file shape (`strict_types`, `final readonly`, constructor promotion) and the Laravel calls (`app()`, `resolve()`, facades, helpers) are owned by `orchestration-di.md`; do not re-audit them here."
+    "Applies to: every PHP class, production code and tests, whatever the framework. These rules hold in Laravel and Symfony alike; framework overlays name the framework-specific calls (`orchestration-di.md` for Laravel, the `symfony-kanon` skill's `references/symfony.md` for Symfony).",
+    "Lane boundaries: this family owns the plain-PHP file shape (`strict_types`, `final readonly`, constructor promotion) for every framework, in its File shape section; `orchestration-di.md` owns the Laravel calls (`app()`, `resolve()`, facades, helpers) and the Laravel-only file kinds (migrations, factories, config)."
   ],
   "sections": [
     {
@@ -32,7 +32,7 @@
               "status": "draft"
             }
           ],
-          "lane_note": "file shape (`strict_types`, `final readonly`, constructor promotion) and the Laravel calls (`app()`, `resolve()`, facades, helpers) are owned by `orchestration-di.md`; do not re-audit them here. Laravel overlay: ORCH-008 (its `app()`, `resolve()`, `collect()` item).",
+          "lane_note": "The Laravel calls (`app()`, `resolve()`, facades, helpers) are owned by `orchestration-di.md`; the plain-PHP file shape is in this family's File shape section. Laravel overlay: ORCH-008 (its `app()`, `resolve()`, `collect()` item).",
           "status": "active"
         },
         {
@@ -135,6 +135,820 @@
           "keyword": "SHOULD NOT",
           "rule": "A method **SHOULD NOT** both change state and return data for display. A command **MAY** return the id it created or the outcome or decision of the change (see the handler Result DTO rule in `orchestration-di.md` and the command/query slices in `architecture.md`).",
           "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Naming",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PHP-009",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "A module **MUST** be named after the business capability in the domain's own language, not after a technical role.",
+          "examples": {
+            "bad": "namespace App\\Managers;\n\nfinal class ReservationManager\n{\n}",
+            "good": "namespace Booking;\n\nfinal class Reservation\n{\n}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-002. Symfony counterpart: SYM-100 (one root namespace per capability, listed in `modules.php`); the `modules.php` listing stays in SYM-100.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-010",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "A project **SHOULD** keep a domain glossary (ubiquitous language table) in its docs; a change that introduces a new context **SHOULD** add its key terms there.",
+          "examples": {
+            "bad": "// Three names for one concept, and no glossary to settle which is right.\nfinal class Booking {}\nfinal class StayOrder {}\nfinal class Reservation {}",
+            "good": "// docs/glossary.md\n// | Term        | Meaning                                         |\n// | Reservation | A guest's claim on a room type for a date range |\n// | Stay        | The nights a guest actually spends in a room    |\nfinal class Reservation {}\nfinal class Stay {}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-004. The Laravel entry says \"a slice that introduces a new context\"; the php-core wording says \"a change\" because a slice is a Laravel vertical-slice term.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-011",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Classes, methods, commands and events **MUST** be named after the business language of their context.",
+          "applies_to": [
+            "classes",
+            "methods",
+            "commands",
+            "events"
+          ],
+          "examples": {
+            "bad": "final class ReservationRecordUpdater\n{\n    public function updateRecord(Reservation $reservation, int $statusId): void {}\n}",
+            "good": "final readonly class CancelReservation\n{\n    public function __construct(public int $reservationId) {}\n}\n\nfinal class Reservation\n{\n    public function cancel(): void {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-013. ARCH-013 also lists `routes` and `abilities` (\"Classes, methods, commands, events, routes, and abilities\"); those two are Laravel-only and stay there, and route naming stays owned by `http-api.md`.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-012",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "Technical, ETL or CRUD jargon **MUST NOT** be used in a name where a domain term exists: `Manager`, `Processor`, `Helper`, `Util`, `Registry`, `Resolver`, `Transformer`, `Ingest`, `Upsert`, `Outcome`, generic `Service`. A name fixed by a framework or library contract is exempt.",
+          "detect": {
+            "signals": [
+              "Manager",
+              "Processor",
+              "Helper",
+              "Util",
+              "Registry",
+              "Resolver",
+              "Transformer",
+              "Ingest",
+              "Upsert",
+              "Outcome",
+              "Service"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on a class name ending in one of the listed terms. Does not cover method or parameter names, whether a domain term exists, or names a framework contract fixes (allow-list those).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final class ReservationManager {}\n\nfinal class StayHelper\n{\n    public static function nights(Stay $stay): int {}\n}",
+            "good": "final class Reservation {}\n\nfinal readonly class Stay\n{\n    public function nights(): int {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-014. The exemption covers framework types such as an `ArgumentResolver` or a service locator, which have no domain term. The list keeps `Outcome` as in ARCH-014; it bans the word in a name, while PHP-008 and MD-031 use \"outcome\" only in prose, so they do not clash.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-013",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Methods and parameters **MUST** be named after the value actually passed, not aspirational domain language the value is not (`forGuest(int $guestId)`, not `forVip(int $guestId)` when the argument is a plain guest id).",
+          "applies_to": [
+            "methods",
+            "parameters"
+          ],
+          "examples": {
+            "bad": "final class Reservations\n{\n    public function forVip(int $guestId): array {}\n}",
+            "good": "final class Reservations\n{\n    /** @return list<Reservation> */\n    public function forGuest(int $guestId): array {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-015.",
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "heading": "File shape",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PHP-014",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "`declare(strict_types=1);` **MUST** open every PHP file.",
+          "detect": {
+            "signals": [
+              "declare(strict_types=1);"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: report a PHP file whose first statement is not declare(strict_types=1).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "<?php\n\nnamespace Booking;\n\nfinal class Reservation {}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nnamespace Booking;\n\nfinal class Reservation {}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-011. ORCH-011's second sentence (\"This family owns the file-shape rules for the whole codebase (models, migrations, factories, config, tests included)\") is Laravel framing and stays in the Laravel entry; php-core now owns the plain-PHP file shape for every framework.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-015",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "Comments **MUST NOT** narrate what the next line does and **MUST NOT** form step-by-step blocks. A brief why-comment (workaround, ordering constraint), a short class-level PHPDoc, or a type-only PHPDoc such as an array shape (PHP-018) **MAY** exist.",
+          "examples": {
+            "bad": "public function confirm(Reservation $reservation): void\n{\n    // Step 1: check the room is free\n    $this->rooms->assertFree($reservation->roomId);\n    // Step 2: mark the reservation confirmed\n    $reservation->confirm();\n}",
+            "good": "public function confirm(Reservation $reservation): void\n{\n    $this->rooms->assertFree($reservation->roomId);\n    // Confirm before charging: the payment provider rejects a charge for an unconfirmed stay.\n    $reservation->confirm();\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-017. The type-only PHPDoc carve-out keeps this rule consistent with PHP-018.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-016",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "A project **MUST NOT** define traits of its own; traits from the framework or a package **MAY** be used. Shared behavior goes into a class that is injected, not a trait.",
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: report a trait declared in application code.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "trait CalculatesPrice\n{\n    public function totalCents(int $nights): int\n    {\n        return $nights * $this->nightlyRateCents;\n    }\n}\n\nfinal class Reservation\n{\n    use CalculatesPrice;\n}",
+            "good": "final readonly class NightlyRatePricing\n{\n    public function totalCents(int $nightlyRateCents, int $nights): int\n    {\n        return $nights * $nightlyRateCents;\n    }\n}\n\nfinal readonly class StayQuote\n{\n    public function __construct(private NightlyRatePricing $pricing) {}\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-put-business-rules-in-traits"
+          ],
+          "lane_note": "Laravel counterpart: MD-012. Its allowed-trait list (`HasFactory`, `SoftDeletes`, `RefreshDatabase`) is Laravel-only and stays there; php-core allows framework and package traits without naming any. This rule newly binds Symfony: SYM-110 only says the Foundry `ResetDatabase` and `Factories` traits are deprecated.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-017",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "A DTO **MUST** be a `final readonly class` with constructor property promotion and explicit types.",
+          "applies_to": [
+            "DTOs"
+          ],
+          "detect": {
+            "signals": [
+              "final readonly"
+            ]
+          },
+          "examples": {
+            "bad": "class ReservationRequest\n{\n    public string $guestName;\n    public string $checkIn;\n\n    public function __construct(string $guestName, string $checkIn)\n    {\n        $this->guestName = $guestName;\n        $this->checkIn = $checkIn;\n    }\n}",
+            "good": "final readonly class ReservationRequest\n{\n    public function __construct(\n        public string $guestName,\n        public DateTimeImmutable $checkIn,\n    ) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-024 (no subject in that entry; ORCH-012 also covers it). Symfony counterpart: SYM-015, SYM-068. Scoped to DTOs: the carve-outs in ORCH-012 (queued jobs and queued listeners that may drop `readonly`) and SYM-015 (entities, console commands extending a non-readonly base) are not DTOs and stay there. MD-024 also lists value objects; those are left to the value-object rules.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-018",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Complex array parameters and returns **MUST** carry array-shape PHPDoc (`@param list<Guest>`, `@return array<string, int>`).",
+          "detect": {
+            "signals": [
+              "@param list<",
+              "@return array<"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Report array parameters and return types that have no PHPDoc value type.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final class Occupancy\n{\n    public function byRoomType(array $stays): array {}\n}",
+            "good": "final class Occupancy\n{\n    /**\n     * @param list<Stay> $stays\n     * @return array<string, int>\n     */\n    public function byRoomType(array $stays): array {}\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-033.",
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "heading": "Domain model",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PHP-019",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Condition-plus-action **MUST** live on the domain object (Tell, Don't Ask): `$reservation->confirm($now)`, never `if ($reservation->isPending()) { $reservation->markConfirmed(); }` in the caller; entities **MUST NOT** be anemic data holders, and logic spanning several aggregates **MUST** live in a handler.",
+          "applies_to": [
+            "entities",
+            "domain objects"
+          ],
+          "examples": {
+            "bad": "final class Reservation\n{\n    public ReservationStatus $status;\n    public ?DateTimeImmutable $confirmedAt = null;\n}\n\n// in a handler\nif ($reservation->status === ReservationStatus::PENDING && $reservation->confirmedAt === null) {\n    $reservation->status = ReservationStatus::CONFIRMED;\n    $reservation->confirmedAt = $now;\n}",
+            "good": "final class Reservation\n{\n    public function confirm(DateTimeImmutable $now): void\n    {\n        if ($this->status !== ReservationStatus::PENDING) {\n            throw new ReservationNotConfirmable($this->id);\n        }\n\n        $this->status = ReservationStatus::CONFIRMED;\n        $this->confirmedAt = $now;\n    }\n}\n\n// in a handler\n$reservation->confirm($now);"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/anemic-models-vs-rich-models",
+            "https://codyssey.dev/quick-tips/tell-dont-ask"
+          ],
+          "lane_note": "Laravel counterpart: ORCH-005 and the condition-plus-action half of MD-006. Symfony counterpart: SYM-064. Finders are left out of this entry on purpose: MD-006 puts finders on the model while SYM-064 says \"finders MUST NOT live on the entity\", so each overlay keeps its own finder rule. Logic spanning several aggregates stays in a handler, as in MD-006 and SYM-064. PHP-006 (do not chain through objects) is a different rule.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-020",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "Comparisons **SHOULD** hide behind intention-revealing methods on the owning object (`$stay->overlaps($other)`, `$a->isHigherThan($b)`), not raw attribute comparisons in the caller. A primitive validity guard on a single scalar **MAY** stay inline.",
+          "examples": {
+            "bad": "if ($stay->checkIn < $other->checkOut && $stay->checkOut > $other->checkIn) {\n    throw new RoomAlreadyBooked($room->id);\n}",
+            "good": "if ($stay->overlaps($other)) {\n    throw new RoomAlreadyBooked($room->id);\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-007, which says \"in an orchestrator\"; this entry says \"in the caller\" so it holds outside the orchestrator pattern. Symfony counterpart: none.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-021",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "Domain objects **SHOULD** be created through a named constructor that returns a valid object, not `new` plus setters, with a private constructor wherever no framework or ORM needs to instantiate the class itself.",
+          "applies_to": [
+            "domain objects"
+          ],
+          "examples": {
+            "bad": "$reservation = new Reservation();\n$reservation->setGuest($guest);\n$reservation->setStay($stay);",
+            "good": "final readonly class Reservation\n{\n    private function __construct(public Guest $guest, public Stay $stay) {}\n\n    public static function book(Guest $guest, Stay $stay): self\n    {\n        return new self($guest, $stay);\n    }\n}\n\n$reservation = Reservation::book($guest, $stay);"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/named-constructors-over-new-plus-setters"
+          ],
+          "lane_note": "Laravel counterpart: MD-027 (and MD-016 for read models). Carve-out that stays in the framework entries: Eloquent models keep a public constructor because the framework instantiates them, so this entry does not require a private constructor where the framework or ORM instantiates the class. Doctrine entities may use a private constructor. Symfony counterpart: none. Value objects are covered by PHP-026 and PHP-027; their public constructors are not a breach.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-022",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Enums **MUST** be backed, case names **MUST** be UPPER_CASE (`case CONFIRMED = 'confirmed'`), and the class name carries no `Enum` suffix.",
+          "applies_to": [
+            "enums"
+          ],
+          "detect": {
+            "signals": [
+              "case CONFIRMED = 'confirmed'",
+              "Enum"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: report a non-backed enum, a case name that is not UPPER_CASE, or an enum class name ending in `Enum`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "enum ReservationStatusEnum\n{\n    case Pending;\n    case Confirmed;\n}",
+            "good": "enum ReservationStatus: string\n{\n    case PENDING = 'pending';\n    case CONFIRMED = 'confirmed';\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-017. Symfony counterpart: none. No Symfony entry states a case-naming rule, but the Symfony examples in SYM-008, SYM-044, SYM-061 and SYM-064 use PascalCase cases (`PostAbility::Publish`, `SubscriptionStatus::Cancelled`); that is a decision for the owner.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-023",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "A user-facing enum **MUST** provide a `label()` (or equivalent) method, so display text lives with the cases and not in a `match` at each call site.",
+          "applies_to": [
+            "user-facing enums"
+          ],
+          "detect": {
+            "signals": [
+              "label()"
+            ]
+          },
+          "examples": {
+            "bad": "// repeated in every view and report\n$text = match ($reservation->status) {\n    ReservationStatus::PENDING => 'Awaiting confirmation',\n    ReservationStatus::CONFIRMED => 'Confirmed',\n};",
+            "good": "enum ReservationStatus: string\n{\n    case PENDING = 'pending';\n    case CONFIRMED = 'confirmed';\n\n    public function label(): string\n    {\n        return match ($this) {\n            self::PENDING => 'Awaiting confirmation',\n            self::CONFIRMED => 'Confirmed',\n        };\n    }\n}\n\n$text = $reservation->status->label();"
+          },
+          "lane_note": "Laravel counterpart: MD-018. Symfony counterpart: none. FIL-013 (the Filament label interface) is Filament-only and stays there.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-024",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "A stateful field that could grow past two states **MUST** be a status enum, not a boolean flag: `status` (`PENDING`/`CONFIRMED`/`CANCELLED`), never a new `$isActive`-style flag.",
+          "detect": {
+            "signals": [
+              "is_active",
+              "isActive"
+            ]
+          },
+          "examples": {
+            "bad": "final class Reservation\n{\n    public bool $isActive = true;\n}",
+            "good": "final class Reservation\n{\n    public ReservationStatus $status = ReservationStatus::PENDING;\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-019. Symfony counterpart: SYM-082 (its mapping half: a string column mapped to a backed enum with an index). This entry is the modeling half only. MD-019's per-state `isActive()`-style helpers on the model and its `is_active` column ban stay in MD-019, and the column mapping stays in SYM-082.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-025",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Domain constants **MUST** be referenced through their enum, or through a class constant on a dedicated class where the values are an open set (capability names), never string literals scattered through the code.",
+          "examples": {
+            "bad": "if ($reservation->status === 'confirmed') {\n    // ...\n}",
+            "good": "if ($reservation->status === ReservationStatus::CONFIRMED) {\n    // ...\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-020. Symfony counterpart: none. The class-constant allowance keeps this entry consistent with AUTH-006 (\"a typed constant\") and SYM-061 (\"a class constant or a backed-enum ->value\"), which name a constant for capability names, so a constant on a dedicated class is not banned. MD-020 itself says \"through their enum\" and stays stricter in Laravel.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-026",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "Values with format rules (email, money, date ranges) **SHOULD** be value objects validated once in their constructor, not strings re-checked in each method.",
+          "examples": {
+            "bad": "public function invite(string $email): void\n{\n    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {\n        throw new InvalidArgumentException('Invalid email');\n    }\n}",
+            "good": "final readonly class EmailAddress\n{\n    public function __construct(public string $value)\n    {\n        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {\n            throw new InvalidArgumentException(\"Invalid email: {$value}\");\n        }\n    }\n}\n\npublic function invite(EmailAddress $email): void {}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/a-string-is-not-an-email"
+          ],
+          "lane_note": "Laravel counterpart: MD-025. Symfony counterpart: none.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-027",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Invariants across related fields (check-in before check-out) **MUST** be enforced in a value object's constructor, not only in the request validation layer, which never runs for imports, jobs or console input.",
+          "why": "never runs for imports, jobs or console input",
+          "applies_to": [
+            "value objects"
+          ],
+          "examples": {
+            "bad": "// only the HTTP request rules check the dates\nfinal readonly class Stay\n{\n    public function __construct(public DateTimeImmutable $checkIn, public DateTimeImmutable $checkOut) {}\n}",
+            "good": "final readonly class Stay\n{\n    public function __construct(public DateTimeImmutable $checkIn, public DateTimeImmutable $checkOut)\n    {\n        if ($checkOut <= $checkIn) {\n            throw new InvalidStay($checkIn, $checkOut);\n        }\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation"
+          ],
+          "lane_note": "Laravel counterpart: MD-026 (which names Form Request, Laravel-only; this entry says \"the request validation layer\"), plus HTTP-014. Symfony counterpart: SYM-045. The field-level rule that stays on the request even when a value object enforces it is HTTP-014 and SYM-045, and stays in those entries.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-028",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "A result or value object **SHOULD** own the interpretation of its own data (`wasRejected()`, `isHigherThan()`) rather than making consumers branch on raw fields.",
+          "applies_to": [
+            "result objects",
+            "value objects"
+          ],
+          "examples": {
+            "bad": "if ($cancellation->status === CancellationStatus::REFUSED && $cancellation->fee->amount > 0) {\n    // ...\n}",
+            "good": "if ($cancellation->wasRefused()) {\n    // ...\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-028. Symfony counterpart: none. MD-028's carve-out \"events stay method-free\" is not part of this entry; it belongs to MD-023 and SYM-023, which stay as they are.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-029",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "An outcome the caller handles in the same flow (try the next room, show a price without discount) **SHOULD** be returned as a result object, one `final readonly` class per outcome; a broken rule that ends the use case **MUST** throw a domain exception.",
+          "examples": {
+            "bad": "public function book(RoomId $room): Reservation\n{\n    // throws RoomUnavailable, and the caller catches it to try the next room\n}",
+            "good": "public function book(RoomId $room): BookingResult\n{\n    // returns RoomBooked or RoomUnavailable\n}\n\n$result = $this->bookings->book($room);\n\nreturn match (true) {\n    $result instanceof RoomBooked => $result->reservation,\n    $result instanceof RoomUnavailable => $this->bookNext($result),\n};"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/result-pattern"
+          ],
+          "lane_note": "Laravel counterpart: MD-031. Partly covered by PHP-008, which lets a command return the outcome or decision of the change; this entry says when that outcome is a result object and not an exception, and does not restate PHP-008. Symfony counterpart: SYM-017 narrows Symfony command handlers to void (they return nothing, so the caller creates the id), as #62 decision 6 narrowed PHP-008 for Symfony; this entry applies where the deciding method's return value reaches the caller. No Symfony entry changes.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-030",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "Domain code **MUST NOT** throw framework or generic exceptions (`\\RuntimeException`, an HTTP exception) for business rules; it **MUST** throw a named domain exception. The not-found case of a plain id lookup is left to the framework overlay.",
+          "applies_to": [
+            "handlers",
+            "entities",
+            "domain objects"
+          ],
+          "allowed_in": [
+            "plain id lookups: the not-found case is owned by the framework overlay"
+          ],
+          "detect": {
+            "signals": [
+              "RuntimeException",
+              "NotFoundHttpException"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: report a thrown framework or generic exception in domain classes; the not-found exception of a plain id lookup stays allowed.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function cancel(): void\n{\n    if ($this->status === ReservationStatus::CANCELLED) {\n        throw new \\RuntimeException('Already cancelled.');\n    }\n}",
+            "good": "final class ReservationAlreadyCancelled extends \\DomainException {}\n\npublic function cancel(): void\n{\n    if ($this->status === ReservationStatus::CANCELLED) {\n        throw new ReservationAlreadyCancelled($this->id);\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one"
+          ],
+          "lane_note": "Laravel counterpart: MD-032, MD-030 and ORCH-006 (a plain id lookup keeps `findOrFail()` and no bespoke not-found exception). Symfony counterpart: SYM-069, and SYM-072, which instead requires a repository method that throws a product exception for a missing row. The two overlays disagree on the plain id lookup, so this entry leaves the not-found case of a plain id lookup to the framework overlay; both MD-032/MD-030 and SYM-072 stay as they are.",
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "heading": "Boundaries and integrations",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PHP-031",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "Vendor vocabulary **MUST NOT** leak past the integration boundary: the adapter translates the vendor's statuses, codes and payload shapes into the project's own types, and domain code reaches a vendor SDK only through an adapter class the project owns.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling"
+          ],
+          "applies_to": [
+            "domain classes",
+            "application handlers"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class ConfirmStay\n{\n    public function __construct(private PaymentSdk $sdk) {}\n\n    public function handle(Reservation $reservation): void\n    {\n        $charge = $this->sdk->charge($reservation->total());\n\n        if ($charge['status'] === 'succeeded_pending_3ds') {\n            $reservation->confirm();\n        }\n    }\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class ConfirmStay\n{\n    public function __construct(private DepositGateway $deposits) {}\n\n    public function handle(Reservation $reservation): void\n    {\n        if ($this->deposits->collect($reservation->total()) === DepositResult::COLLECTED) {\n            $reservation->confirm();\n        }\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-002. Symfony counterpart: SYM-070 and SYM-085. The Laravel connector (Saloon) wording stays in the Laravel entries.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-032",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "An integration adapter **SHOULD** be fronted by an interface owned by its consumer when more than one module uses it or when tests need a fake.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class SendArrivalReminder\n{\n    public function __construct(private SmsVendorAdapter $sms) {}\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\ninterface GuestNotifier\n{\n    public function remind(Guest $guest, Stay $stay): void;\n}\n\nfinal readonly class SendArrivalReminder\n{\n    public function __construct(private GuestNotifier $notifier) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-003. Symfony counterpart: SYM-070, which is stricter and requires an interface for every vendor SDK or HTTP client.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-033",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Requests and responses crossing an integration boundary **MUST** be typed objects; associative arrays **MUST NOT** cross it.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\ninterface RoomInventory\n{\n    public function availability(array $query): array;\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\ninterface RoomInventory\n{\n    public function availability(AvailabilityQuery $query): Availability;\n}\n\nfinal readonly class AvailabilityQuery\n{\n    public function __construct(\n        public DateTimeImmutable $checkIn,\n        public DateTimeImmutable $checkOut,\n        public int $guests,\n    ) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-006. The Saloon `$body` property rule of INT-010 is Laravel-only and stays there.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-034",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Integration adapter classes **MUST** be `final readonly`, receiving their clients and contracts through the constructor.",
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nclass SmsVendorAdapter implements GuestNotifier\n{\n    private ?SmsClient $client = null;\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class SmsVendorAdapter implements GuestNotifier\n{\n    public function __construct(private SmsClient $client) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-008 (depends on the connector, which is Saloon and Laravel-only). Symfony counterpart: none; SYM-015 covers controllers, handlers, listeners, messages, events and DTOs, not gateways. File shape is owned by php-core.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-035",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "A focused capability **SHOULD** get its own narrow interface rather than one wide interface that forces implementers and test doubles to stub methods they never use.",
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\ninterface GuestGateway\n{\n    public function notify(Guest $guest): void;\n    public function verifyIdentity(Guest $guest): bool;\n    public function chargeDeposit(Reservation $reservation): void;\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\ninterface GuestNotifier\n{\n    public function notify(Guest $guest): void;\n}\n\ninterface IdentityVerifier\n{\n    public function verify(Guest $guest): bool;\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-009. Symfony counterpart: none.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-036",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST NOT",
+          "rule": "Domain and application code **MUST NOT** import HTTP or request-scoped types (request, response, session, kernel) or persistence-driver types (database driver, raw connection), except in adapters, controllers, read-model query classes and cross-module readers; the framework overlay names the framework imports that stay allowed.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-service-pattern",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling"
+          ],
+          "applies_to": [
+            "domain classes",
+            "application handlers"
+          ],
+          "allowed_in": [
+            "adapters",
+            "controllers",
+            "read-model query classes"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nuse Framework\\Http\\Request;\nuse Framework\\Database\\Connection;\n\nfinal readonly class CancelReservation\n{\n    public function handle(Request $request, Connection $db): void\n    {\n        $db->execute('UPDATE reservations SET cancelled = 1 WHERE id = ?', [$request->input('id')]);\n    }\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class CancelReservation\n{\n    public function __construct(private Reservations $reservations) {}\n\n    public function handle(CancelReservationCommand $command): void\n    {\n        $this->reservations->get($command->reservationId)->cancel();\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: none (ORCH-008 is the imports half). Symfony counterpart: SYM-070. Scoped to HTTP and driver types only; framework ORM, event and contract imports are left to the overlays. Cross-module readers are the exception ISO-007 requires (\"Cross-module data access MUST be read-only, via an injected `ConnectionInterface` with id-based queries\").",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-037",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "SHOULD",
+          "rule": "Where a repository exists, it **SHOULD** expose an interface shaped by the domain and return domain types, not query builders, ORM rows or driver results.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern"
+          ],
+          "applies_to": [
+            "repositories"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\ninterface ReservationRepository\n{\n    public function query(): QueryBuilder;\n    public function rows(): array;\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\ninterface Reservations\n{\n    public function get(ReservationId $id): Reservation;\n    /** @return list<Reservation> */\n    public function arrivingOn(DateTimeImmutable $day): array;\n}"
+          },
+          "lane_note": "Laravel counterpart: none. Laravel has no repository layer (MD-006 and ORCH-006 put finders on the model, ARCH-001 bans `app/Repositories` as a dumping ground), so this rule never requires one. Symfony counterpart: SYM-083.",
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "heading": "Input and authorization",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PHP-038",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Authorization **MUST** derive from the authenticated principal, never from request input; a handler that trusts a user id, team id or role from the request body is broken.",
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class CancelReservation\n{\n    public function handle(array $input): void\n    {\n        $guest = $this->guests->get($input['guest_id']);\n        $this->reservations->get($input['reservation_id'])->cancelBy($guest);\n    }\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class CancelReservation\n{\n    public function handle(CancelReservationCommand $command): void\n    {\n        // $command->actor was taken from the authenticated principal by the controller.\n        $this->reservations->get($command->reservationId)->cancelBy($command->actor);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: AUTH-001. Symfony counterpart: SYM-058.",
+          "status": "candidate"
+        },
+        {
+          "id": "PHP-039",
+          "family": "php-core",
+          "scope": "php-core",
+          "keyword": "MUST",
+          "rule": "Input validation (is the request well-formed) **MUST** stay at the request boundary and invariant validation (is the domain state consistent) **MUST** stay in value objects and entities, with each invariant owned by one domain class; the input layer **MAY** carry an early copy of the same check for field-level errors, but **MUST NOT** re-implement it differently.",
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation"
+          ],
+          "examples": {
+            "bad": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class RegisterGuest\n{\n    public function handle(array $input): void\n    {\n        if (!preg_match('/^\\S+@\\S+$/', $input['email'])) {\n            throw new InvalidArgumentException('bad email');\n        }\n        $guest = Guest::register(new EmailAddress($input['email']));\n    }\n}\n\nfinal readonly class EmailAddress\n{\n    public function __construct(public string $value)\n    {\n        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {\n            throw new InvalidArgumentException('bad email');\n        }\n    }\n}",
+            "good": "<?php\n\ndeclare(strict_types=1);\n\nfinal readonly class RegisterGuest\n{\n    public function handle(RegisterGuestCommand $command): void\n    {\n        // Shape was validated at the boundary; the value object owns what a valid email is.\n        $guest = Guest::register(new EmailAddress($command->email));\n    }\n}\n\nfinal readonly class EmailAddress\n{\n    public function __construct(public string $value)\n    {\n        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {\n            throw new InvalidArgumentException('Invalid email');\n        }\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: none (ORCH-025 and HTTP-014 are the Laravel forms). Symfony counterpart: SYM-039 and SYM-045. The \"MAY carry an early copy\" clause keeps this consistent with HTTP-014 and SYM-045, which require the field rule to stay in the request class.",
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "heading": "Time and caching",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-040",
+          "keyword": "MUST",
+          "rule": "Cached payloads **MUST** stay user-agnostic: per-user data (access verdicts, ownership flags, personalization) resolves after the cache lookup, never baked into a shared cached entry.",
+          "detect": {
+            "signals": [
+              "cache key without a user id",
+              "cached value holding a per-user flag"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class RoomAvailabilityReader\n{\n    public function __construct(private AvailabilityCache $cache, private Rooms $rooms) {}\n\n    /** @return array{rooms: list<Room>, canBook: bool} */\n    public function for(Guest $guest, Stay $stay): array\n    {\n        $key = 'availability.'.$stay->id;\n        $entry = $this->cache->get($key);\n\n        if ($entry === null) {\n            // one shared entry per stay, but it holds a per-guest flag\n            $entry = ['rooms' => $this->rooms->availableFor($stay), 'canBook' => $guest->isVerified()];\n            $this->cache->set($key, $entry, 300);\n        }\n\n        return $entry;\n    }\n}",
+            "good": "final readonly class RoomAvailabilityReader\n{\n    public function __construct(private AvailabilityCache $cache, private Rooms $rooms) {}\n\n    /** @return array{rooms: list<Room>, canBook: bool} */\n    public function for(Guest $guest, Stay $stay): array\n    {\n        $key = 'availability.'.$stay->id;\n        $rooms = $this->cache->get($key);\n\n        if ($rooms === null) {\n            $rooms = $this->rooms->availableFor($stay);\n            $this->cache->set($key, $rooms, 300);\n        }\n\n        // Resolved after the lookup: the verdict differs per guest, and a shared entry would leak it.\n        return ['rooms' => $rooms, 'canBook' => $guest->isVerified()];\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-035. Symfony counterpart: SYM-007. Kept in the framework entries: ORCH-035's \"in the controller\" placement, the Laravel `Cached{Handler}` decorator (ORCH-033) and the Symfony `query.bus` middleware (SYM-007)."
+        },
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-041",
+          "keyword": "MUST",
+          "rule": "A class whose behavior depends on the current time **MUST** receive a clock, or use the clock call its framework overlay sanctions, and **MUST NOT** construct the current time ad hoc (`new DateTimeImmutable()`, `new DateTimeImmutable('now')`, `time()`, `date()`).",
+          "detect": {
+            "signals": [
+              "new DateTimeImmutable()",
+              "new DateTimeImmutable('now')",
+              "time()",
+              "date("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags `new DateTimeImmutable()` and `new DateTimeImmutable('now')` with no explicit time argument, and calls to `time()` and `date()` without a timestamp, in production classes. Allow-list a clock adapter.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class ReservationExpiry\n{\n    public function isExpired(Reservation $reservation): bool\n    {\n        return $reservation->holdUntil < new DateTimeImmutable('now');\n    }\n}",
+            "good": "use Psr\\Clock\\ClockInterface;\n\nfinal readonly class ReservationExpiry\n{\n    public function __construct(private ClockInterface $clock) {}\n\n    public function isExpired(Reservation $reservation): bool\n    {\n        return $reservation->holdUntil < $this->clock->now();\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location"
+          ],
+          "lane_note": "Laravel counterpart: none. Related: ORCH-008 allows a static clock call, \"`now()` -> `CarbonImmutable::now()` (explicit import)\"; the clause \"or use the clock call its framework overlay sanctions\" keeps that valid, and a static `CarbonImmutable::now()` call is not on the banned list. Symfony counterpart: SYM-003 (inject `ClockInterface`). Pure value construction from an explicit timestamp or string (`new DateTimeImmutable('2026-03-01')`) is not \"the current time\" and stays allowed."
+        }
+      ]
+    },
+    {
+      "heading": "Events",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-042",
+          "keyword": "MUST",
+          "rule": "Event listeners **MUST** stay thin: they call a handler or dispatch a command, or perform one reaction such as recording a history row or sending a message, and hold no business rules beyond deciding whether to react; a reaction that runs asynchronously **MUST** be safe to run twice (idempotent).",
+          "detect": {
+            "signals": [
+              "listener with conditionals on business state",
+              "queued listener without a duplicate guard"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class ReservationConfirmedListener\n{\n    public function __construct(private Invoices $invoices, private Mailer $mailer) {}\n\n    public function __invoke(ReservationConfirmed $event): void\n    {\n        // business rule inside the listener, and a retry sends a second invoice\n        $total = $event->nights * $event->nightlyRate;\n        if ($event->guestIsMember) {\n            $total = (int) ($total * 0.9);\n        }\n        $this->invoices->save(new Invoice($event->reservationId, $total));\n        $this->mailer->send($event->guestEmail, 'Your invoice');\n    }\n}",
+            "good": "final readonly class ReservationConfirmedListener\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(ReservationConfirmed $event): void\n    {\n        // the handler holds the pricing rule and skips an invoice that already exists\n        $this->commands->dispatch(new IssueInvoice($event->reservationId));\n    }\n}\n\nfinal readonly class IssueInvoiceHandler\n{\n    public function __construct(private Invoices $invoices) {}\n\n    public function __invoke(IssueInvoice $command): void\n    {\n        if ($this->invoices->existsFor($command->reservationId)) {\n            return;\n        }\n        $this->invoices->issueFor($command->reservationId);\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/event-bus"
+          ],
+          "lane_note": "Laravel counterpart: none. Related, not contradicted: ORCH-027 (\"a dedicated `final readonly` listener records it\") and ORCH-028 (\"sent from a listener via an injected `Mailer`\"); the one-reaction clause keeps a listener that records an audit row or sends a mail valid. Symfony counterparts: SYM-022 and SYM-025 (event bus placement and one handler per listener). MD-023 (\"Decisions about an event belong in its listener.\") is why the rule allows the decision to react."
+        }
+      ]
+    },
+    {
+      "heading": "Testing",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-043",
+          "keyword": "MUST",
+          "rule": "Test method names **MUST** state the behavior with the `it_` prefix (`it_cancels_a_stay_before_check_in`), never a generic name (`test_cancel`).",
+          "detect": {
+            "signals": [
+              "it_cancels_a_stay_before_check_in",
+              "test_cancel"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a #[Test] method whose name does not start with it_.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "use PHPUnit\\Framework\\Attributes\\Test;\n\nfinal class CancelStayTest extends TestCase\n{\n    #[Test]\n    public function test_cancel(): void {}\n}",
+            "good": "use PHPUnit\\Framework\\Attributes\\Test;\n\nfinal class CancelStayTest extends TestCase\n{\n    #[Test]\n    public function it_cancels_a_stay_before_check_in(): void {}\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-003. Symfony counterpart: SYM-108 (PHPUnit with `#[Test]`, Pest forbidden). SYM-108 has no naming rule and its own example already uses `it_places_an_order`, so this php-core rule newly binds Symfony tests and SYM-108 does not forbid it."
+        },
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-044",
+          "keyword": "MUST",
+          "rule": "Every behavioral change **MUST** ship with tests covering the happy path, the failure paths and the edge cases; an untested behavior is incomplete work, not a follow-up.",
+          "examples": {
+            "bad": "// change: a guest can no longer cancel within 24 hours of check-in\npublic function cancel(DateTimeImmutable $now): void\n{\n    if ($this->checkIn->modify('-24 hours') <= $now) {\n        throw new CancellationWindowClosed($this->id);\n    }\n    $this->status = StayStatus::CANCELLED;\n}\n// no test was added or changed",
+            "good": "final class CancelStayTest extends TestCase\n{\n    #[Test]\n    public function it_cancels_a_stay_before_the_window_closes(): void {}\n\n    #[Test]\n    public function it_rejects_a_cancellation_inside_the_24_hour_window(): void {}\n\n    #[Test]\n    public function it_allows_a_cancellation_exactly_24_hours_before_check_in(): void {}\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-007."
+        },
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-045",
+          "keyword": "MUST",
+          "rule": "State transitions **MUST** be tested from every relevant source state, not just the happy one.",
+          "examples": {
+            "bad": "#[Test]\npublic function it_cancels_a_reservation(): void\n{\n    $reservation = Reservation::confirmed();\n    $reservation->cancel();\n    self::assertSame(ReservationStatus::CANCELLED, $reservation->status);\n}",
+            "good": "#[Test]\n#[DataProvider('cancellable')]\npublic function it_cancels_from_a_cancellable_state(Reservation $reservation): void\n{\n    $reservation->cancel();\n    self::assertSame(ReservationStatus::CANCELLED, $reservation->status);\n}\n\n#[Test]\n#[DataProvider('notCancellable')]\npublic function it_rejects_cancelling_from_a_final_state(Reservation $reservation): void\n{\n    $this->expectException(InvalidTransition::class);\n    $reservation->cancel();\n}\n\npublic static function cancellable(): iterable\n{\n    yield 'pending' => [Reservation::pending()];\n    yield 'confirmed' => [Reservation::confirmed()];\n}\n\npublic static function notCancellable(): iterable\n{\n    yield 'cancelled' => [Reservation::cancelled()];\n    yield 'checked out' => [Reservation::checkedOut()];\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-015."
+        },
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-046",
+          "keyword": "MUST",
+          "rule": "History and audit tests **MUST** assert the actual recorded content and metadata, not merely that a row or entry exists.",
+          "examples": {
+            "bad": "#[Test]\npublic function it_records_a_cancellation(): void\n{\n    $this->cancelStay($stayId);\n    self::assertCount(1, $this->history->forStay($stayId));\n}",
+            "good": "#[Test]\npublic function it_records_a_cancellation(): void\n{\n    $this->cancelStay($stayId, by: $staffId);\n\n    $entry = $this->history->forStay($stayId)[0];\n    self::assertSame('stay.cancelled', $entry->type);\n    self::assertSame($staffId, $entry->actorId);\n    self::assertSame('confirmed', $entry->fromStatus);\n    self::assertSame('cancelled', $entry->toStatus);\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-016."
+        },
+        {
+          "family": "php-core",
+          "scope": "php-core",
+          "status": "candidate",
+          "id": "PHP-047",
+          "keyword": "SHOULD",
+          "rule": "Where commands go through a bus, a test that checks a command was dispatched **SHOULD** assert it on a recording or in-memory bus (the framework's own fake counts) instead of running the handler, and a hand-written fake of a port **MUST** be kept honest by a contract test shared with the real adapter.",
+          "detect": {
+            "signals": [
+              "InMemoryCommandBus",
+              "recording bus",
+              "contract test shared by fake and adapter"
+            ]
+          },
+          "examples": {
+            "bad": "#[Test]\npublic function it_confirms_a_reservation(): void\n{\n    $controller = new ConfirmReservationController($this->realConfirmHandler());\n\n    $response = $controller($id);\n\n    self::assertSame(202, $response->status);\n    // the real handler ran, with its database writes and its payment call\n}",
+            "good": "#[Test]\npublic function it_dispatches_the_confirm_command(): void\n{\n    $bus = new InMemoryCommandBus();\n    $controller = new ConfirmReservationController($bus);\n\n    $response = $controller($id);\n\n    self::assertSame(202, $response->status);\n    self::assertEquals(new ConfirmReservation($id), $bus->dispatched()[0]);\n}\n\n// one contract test, run against the fake and the real adapter\nabstract class RoomsContractTest extends TestCase\n{\n    abstract protected function rooms(): Rooms;\n\n    #[Test]\n    public function it_returns_null_for_an_unknown_room(): void\n    {\n        self::assertNull($this->rooms()->find(new RoomId('missing')));\n    }\n}\n\nfinal class InMemoryRoomsTest extends RoomsContractTest\n{\n    protected function rooms(): Rooms { return new InMemoryRooms(); }\n}\n\nfinal class DatabaseRoomsTest extends RoomsContractTest\n{\n    protected function rooms(): Rooms { return new DatabaseRooms(/* test connection */); }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
+          ],
+          "lane_note": "Laravel counterpart: none. Related, not contradicted: TEST-011 (`Event::fake()` plus `assertDispatched(...)`), TEST-012 (`Bus::assertDispatched`) and TEST-006 (\"Tests MAY use facades and helpers freely\"); the framework fake counts as a recording bus, so Laravel tests do not hand-build one. TEST-011 and TEST-012 are MUST and stay stricter for Laravel. Symfony counterpart: SYM-121 (\"Controller tests SHOULD assert the dispatched command against an in-memory bus\"). The HTTP-client fake is SYM-122 and is not named here."
         }
       ]
     }
