@@ -55,6 +55,7 @@ A rule cites another rule by its pack id, never by its source id.
 
 ```
 - **DATA-012. <title>** <rule text> **MUST.**
+  - Condition: <the stack setting the rule assumes> (only where the rule depends on one)
   - Why: <reason, with a neutral example>
   - Check: <the guard-test row or lint rule the pack ships, or the sheet's check idea> (only where one exists)
   - Source: <title> https://codyssey.dev/... | vault: Content/<path>.md
@@ -62,6 +63,7 @@ A rule cites another rule by its pack id, never by its source id.
 ```
 
 - `From:` is `D12` for a whole rule, `D12 (core part)` for the core part of a split row, `D12 (Cloudflare clause)` or `D12 (Sentry clause)` for a clause, and `NX-04` for a new rule.
+- `Condition:` names a setting of the fixed stack that the rule assumes, such as "Cache Components is off" or "the React Compiler is on". It covers the whole rule unless it names the part it covers.
 - A clause is its own entry in its add-on or overlay file. It states what it adds to the core rule and cites that rule by its pack id. A clause that is only an example is a one-line entry.
 - The one access core line written fresh from its layer decision carries `From: Layer calls tab (written fresh)` and no source id.
 - Overlay entries add `- Tags: OpenNext` or `- Tags: Workers`, except I9 and the I10 core part (CF-007 and CF-008). Those two hold on any host and carry no `Tags:` line.
