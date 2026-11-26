@@ -53,6 +53,7 @@ const baseFiles = (v) => [
   ['kanon/catalog/families.json', `families ${v}\n`],
   ['kanon/laravel-kanon/references/php-core.md', `php-core ${v}\n`],
   ['kanon/symfony-kanon/references/symfony.md', `symfony ${v}\n`],
+  ['kanon/nextjs-kanon/references/data-and-rendering.md', `data-and-rendering ${v}\n`],
   ['kanon/laravel-kanon/SKILL.md', 'not listed\n'],
   ['factory/event-model/scripts/check.py', `check ${v}\n`],
   ['factory/not-listed/SKILL.md', 'not listed\n'],
@@ -129,7 +130,7 @@ const nothingWritten = (f) => {
   assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
 };
 
-test('installs playbooks, the five factory skills and standards-discovery from the ref and records the sha', () => {
+test('installs playbooks, the five factory skills, standards-discovery and the Next.js Kanon pair from the ref and records the sha', () => {
   const f = fixture();
   const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
   assert.equal(code, 0);
@@ -142,6 +143,9 @@ test('installs playbooks, the five factory skills and standards-discovery from t
   assert.equal(read(f.skillsDir, 'standards-discovery/kanon/catalog/families.json'), 'families v1\n');
   assert.equal(read(f.skillsDir, 'standards-discovery/kanon/laravel-kanon/references/php-core.md'), 'php-core v1\n');
   assert.equal(read(f.skillsDir, 'standards-discovery/kanon/symfony-kanon/references/symfony.md'), 'symfony v1\n');
+  assert.equal(read(f.skillsDir, 'nextjs-kanon/SKILL.md'), 'nextjs-kanon v1\n');
+  assert.equal(read(f.skillsDir, 'nextjs-kanon/references/data-and-rendering.md'), 'data-and-rendering v1\n');
+  assert.equal(read(f.skillsDir, 'nextjs-kanon-audit/SKILL.md'), 'nextjs-kanon-audit v1\n');
   assert.equal(read(f.skillsDir, 'event-model/scripts/check.py'), 'check v1\n');
   assert.equal(read(f.agentsDir, 'playbooks/.installed-sha'), `${f.sha1}\n`);
   assert.ok(statSync(join(f.agentsDir, 'playbooks/scripts/run.sh')).mode & 0o100, 'executable bit kept');
