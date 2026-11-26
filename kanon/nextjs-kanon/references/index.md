@@ -67,6 +67,7 @@ A rule cites another rule by its pack id, never by its source id.
 - A clause is its own entry in its add-on or overlay file. It states what it adds to the core rule and cites that rule by its pack id. A clause that is only an example is a one-line entry.
 - The one access core line written fresh from its layer decision carries `From: Layer calls tab (written fresh)` and no source id.
 - Overlay entries add `- Tags: OpenNext` or `- Tags: Workers`, except I9 and the I10 core part (CF-007 and CF-008). Those two hold on any host and carry no `Tags:` line.
+- A URL in prose that punctuation follows is written `<URL>` or as a Markdown link, so the punctuation stays out of the link. A `Source:` line ends with its bare URL.
 
 ## Notes policy
 
@@ -74,7 +75,7 @@ Strip and generalize:
 
 - Drop every Observed, Not migrated, Audit and incident note.
 - Keep each Why, with a neutral example.
-- Keep a Source line only when it cites a public doc or a lesson, insight or quick tip URL on https://codyssey.dev/.
+- Keep a Source line only when it cites a public doc or a lesson, insight or quick tip URL on <https://codyssey.dev/>.
 - Rename the source project's names to the generic names below.
 - The design-principles lesson quotes stay as Source lines with their https://codyssey.dev/ URLs. Unpublished lessons and schedule dates are dropped.
 

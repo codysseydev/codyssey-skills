@@ -34,7 +34,7 @@ rule, or the sheet's check idea for a rule, where one exists.
 - **DATA-001. A page with API content is prerendered.** It exports
   `dynamic = 'force-static'` and a `revalidate` value the project picks, and it fetches only
   through `serverFetchJson` or `contentService` (DATA-011). **MUST.**
-  - Condition: Cache Components is off. Next.js 16 removes the `dynamic` and `revalidate` exports when it is on (https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config).
+  - Condition: Cache Components is off. Next.js 16 removes the `dynamic` and `revalidate` exports when it is on (<https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config>).
   - Why: a prerendered page is rendered once and served from the cache, while a page that renders per request pays a full render and an API call on every visit.
   - Source: Why Not Inertia or Livewire vault: Content/Courses/Building Codyssey/08 - The Decoupled Frontend/37 - Why Not Inertia or Livewire.md
   - From: D1 (core part)
@@ -650,7 +650,7 @@ implementation.
   dependency array. This rule wins over Vercel
   [`rerender-memo`](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/rerender-memo.md).
   **SHOULD.**
-  - Condition: the React Compiler is on (https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler), which the fixed stack does.
+  - Condition: the React Compiler is on (<https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler>), which the fixed stack does.
   - Why: the compiler memoizes for render speed, so hand-written memoization in new code adds code without adding speed.
   - Source: React Compiler https://react.dev/learn/react-compiler
   - Source: reactCompiler https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler
