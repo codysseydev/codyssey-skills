@@ -164,6 +164,9 @@
               "status": "draft"
             }
           ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-save-the-row-from-its-own-observer"
+          ],
           "status": "active"
         },
         {
@@ -183,6 +186,9 @@
               "coverage": "Custom rule: report a query builder or relationship query call inside an accessor or a cast class.",
               "status": "draft"
             }
+          ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/never-run-a-query-inside-an-accessor"
           ],
           "status": "active"
         },
@@ -234,6 +240,9 @@
               "coverage": "Custom rule: report a trait declared in application code.",
               "status": "draft"
             }
+          ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-put-business-rules-in-traits"
           ],
           "status": "active"
         },
@@ -471,6 +480,9 @@
           "scope": "laravel",
           "keyword": "SHOULD",
           "rule": "Values with format rules (email, money, date ranges) **SHOULD** be value objects validated once in their constructor, not strings re-checked in each method.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/a-string-is-not-an-email"
+          ],
           "status": "active"
         },
         {
@@ -493,6 +505,9 @@
           "rule": "Domain objects **SHOULD** be created through a named constructor that returns a valid object, not `new` plus setters. This extends the read-model static-factory rule to all domain objects.",
           "applies_to": [
             "domain objects"
+          ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/named-constructors-over-new-plus-setters"
           ],
           "status": "active"
         },
@@ -591,6 +606,9 @@
               "coverage": "Custom rule: report a thrown framework or generic exception (`NotFoundHttpException`, `RuntimeException`) in handler and model classes; `ModelNotFoundException` from `findOrFail()` stays allowed.",
               "status": "draft"
             }
+          ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one"
           ],
           "lane_note": "exception types and the not-found carve-out are owned here; `orchestration-di.md` owns the lookup-method rule (`findByXOrFail()` / `findOrFail()`), so do not re-audit it here.",
           "status": "active"

@@ -32,6 +32,9 @@
               "status": "draft"
             }
           ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/service-location-is-a-hidden-dependency"
+          ],
           "lane_note": "file shape (`strict_types`, `final readonly`, constructor promotion) and the Laravel calls (`app()`, `resolve()`, facades, helpers) are owned by `orchestration-di.md`; do not re-audit them here. Laravel overlay: ORCH-008 (its `app()`, `resolve()`, `collect()` item).",
           "status": "active"
         },
@@ -62,6 +65,9 @@
           "scope": "php-core",
           "keyword": "SHOULD NOT",
           "rule": "A class **SHOULD NOT** extend another class only to reuse one of its methods; inject the collaborator instead.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/composition-over-inheritance"
+          ],
           "status": "active"
         },
         {
@@ -70,6 +76,9 @@
           "scope": "php-core",
           "keyword": "MAY",
           "rule": "An optional collaborator **MAY** be replaced with a Null Object implementing the same interface instead of null checks in every method.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/replace-null-checks-with-a-null-object"
+          ],
           "status": "active"
         }
       ]
@@ -85,6 +94,9 @@
           "scope": "php-core",
           "keyword": "SHOULD",
           "rule": "Preconditions **SHOULD** be handled with early-return guard clauses instead of nested ifs.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/guard-clauses-beat-nested-ifs"
+          ],
           "status": "active"
         },
         {
@@ -119,6 +131,9 @@
               "readonly"
             ]
           },
+          "sources": [
+            "https://codyssey.dev/quick-tips/readonly-is-not-immutability"
+          ],
           "status": "active"
         }
       ]
@@ -134,6 +149,9 @@
           "scope": "php-core",
           "keyword": "SHOULD NOT",
           "rule": "A method **SHOULD NOT** both change state and return data for display. A command **MAY** return the id it created or the outcome or decision of the change (see the handler Result DTO rule in `orchestration-di.md` and the command/query slices in `architecture.md`).",
+          "sources": [
+            "https://codyssey.dev/quick-tips/commands-change-state-queries-return-it"
+          ],
           "status": "active"
         }
       ]

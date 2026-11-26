@@ -24,6 +24,9 @@
               "get()->where()"
             ]
           },
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-filter-in-php-what-the-database-can-filter"
+          ],
           "status": "active"
         },
         {
@@ -38,6 +41,9 @@
               "withCount()"
             ]
           },
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-fix-a-lazy-loading-exception-with-with"
+          ],
           "lane_note": "starting queries from `Model::query()` (not `DB::`) and eager-loading what you iterate are owned by `models-domain.md`; this file adds query-shape rules on top of them. Profiling and hunting slow paths that no written rule names stays with `/code-review`.",
           "status": "active"
         }
@@ -67,6 +73,9 @@
               "status": "draft"
             }
           ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/stop-eager-loading-on-the-model"
+          ],
           "status": "active"
         }
       ]
@@ -89,6 +98,9 @@
               "relation:columns"
             ]
           },
+          "sources": [
+            "https://codyssey.dev/quick-tips/keep-the-foreign-keys-in-your-select"
+          ],
           "status": "active"
         },
         {
@@ -106,6 +118,9 @@
               "SELECT *"
             ]
           },
+          "sources": [
+            "https://codyssey.dev/quick-tips/stop-selecting-every-column"
+          ],
           "status": "active"
         }
       ]

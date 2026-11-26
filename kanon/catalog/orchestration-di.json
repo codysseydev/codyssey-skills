@@ -62,6 +62,9 @@
           "scope": "laravel",
           "keyword": "MUST",
           "rule": "Condition-plus-action **MUST** live on the model: `$sub->recoverIfPastDue()`, never `if ($sub->isPastDue()) { $sub->activate(); }` in a handler.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/tell-dont-ask"
+          ],
           "status": "active"
         },
         {
@@ -103,6 +106,10 @@
             "`Cache::` -> `Illuminate\\Contracts\\Cache\\Repository` (decorators only, see below)",
             "`response()->json()` -> `new JsonResponse(...)`",
             "`app()`, `resolve()`, `collect()`: production classes **MUST NOT** call them. `app()` and `resolve()` are the Laravel form of the no-service-location rule in `php-core.md`."
+          ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/service-location-is-a-hidden-dependency",
+            "https://codyssey.dev/quick-tips/a-facade-is-service-location-too"
           ],
           "status": "active"
         },
@@ -225,6 +232,9 @@
           "keyword": "MUST",
           "rule": "A handler **MUST** receive the acting user as a parameter on its command; it **MUST NOT** read the authenticated user itself. Queued jobs and console commands have no logged-in user. The controller takes the actor from the authenticated principal, never from request input (see `authorization.md`).",
           "why": "Queued jobs and console commands have no logged-in user",
+          "sources": [
+            "https://codyssey.dev/quick-tips/dont-read-auth-user-inside-a-use-case"
+          ],
           "status": "active"
         },
         {
@@ -233,6 +243,9 @@
           "scope": "laravel",
           "keyword": "MUST NOT",
           "rule": "A controller **MUST NOT** call or inject another controller; shared work **MUST** move into a handler both call.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/never-inject-a-controller-into-another-controller"
+          ],
           "status": "active"
         },
         {
@@ -289,6 +302,9 @@
           "scope": "laravel",
           "keyword": "MUST",
           "rule": "Mailables **MUST** implement `ShouldQueue` and **MUST** be sent from a listener via an injected `Mailer`, never the `Mail` facade and never inline from a command handler. Email is a side effect of a domain event.",
+          "sources": [
+            "https://codyssey.dev/quick-tips/a-facade-is-service-location-too"
+          ],
           "status": "active"
         }
       ]
