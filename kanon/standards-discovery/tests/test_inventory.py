@@ -137,6 +137,40 @@ class RuleFilesAreInstructions(Inventory):
         self.assertIsNone(checker.check_citation(repo, sha, item, set(), listed))
 
 
+class SiblingKinds(Inventory):
+    def test_blade_templates_are_not_siblings(self):
+        repo = self.plain_repo({"resources/views/404.blade.php": "<div></div>\n", "app/Http/AController.php": "<?php\n"})
+        _, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual(out["siblings"], {"Controller": ["app/Http/AController.php"]})
+
+    def thirty_kinds(self):
+        files = {}
+        for number in range(1, 31):
+            copies = 4 if number <= 10 else 2
+            for copy in range(copies):
+                files[f"app/K{number:02d}/{copy}K{number:02d}.php"] = "<?php\n"
+        return self.plain_repo(files)
+
+    def test_sibling_kinds_are_capped(self):
+        repo = self.thirty_kinds()
+        _, out = self.run_inventory(repo, self.fake_policy())
+        # K01 to K10 hold 4 files each. K11 to K30 hold 2, so ties by name keep K11 to K25.
+        self.assertEqual(sorted(out["siblings"]), [f"K{n:02d}" for n in range(1, 26)])
+        self.assertEqual(max(len(paths) for paths in out["siblings"].values()), 3)
+        self.assertEqual(len(out["siblings"]["K01"]), 3)
+        self.assertEqual(len(out["siblings"]["K11"]), 2)
+
+    def test_a_citation_of_a_file_in_a_dropped_kind_fails(self):
+        repo = self.thirty_kinds()
+        sha = git(repo, "rev-parse", "HEAD")
+        listed = inv().listed_paths(inv().listing(repo, sha, set()))
+        checker = load_script("check-overlay.py")
+        item = {"kind": "file", "path": "app/K26/0K26.php", "start": 1, "end": None, "quote": None}
+        self.assertIn("not a path the inventory lists", checker.check_citation(repo, sha, item, set(), listed))
+        kept = {"kind": "file", "path": "app/K25/0K25.php", "start": 1, "end": None, "quote": None}
+        self.assertIsNone(checker.check_citation(repo, sha, kept, set(), listed))
+
+
 class InventoryNeedsAContinue(Inventory):
     def test_a_stop_policy_exits_1_and_runs_no_git_command(self):
         stop = self.fake_policy(result="stop")
