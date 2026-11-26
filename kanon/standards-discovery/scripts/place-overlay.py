@@ -27,7 +27,6 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -52,14 +51,11 @@ def _sibling(name):
 
 
 inventory = _sibling("inventory.py")
-GIT_CONFIG = inventory.GIT_CONFIG
 
 
-def git(cwd, *args, check=True, env=None, input=None):
-    """Run git in cwd with hooks, fsmonitor and the split index off. Raises GitError on a failed command unless check is False."""
-    done = subprocess.run(
-        ["git", "--no-optional-locks", *GIT_CONFIG, "-C", cwd, *args], capture_output=True, env=env, input=input,
-    )
+def git(cwd, *args, check=True, index=None, input=None):
+    """inventory.git, raising GitError on a failed command unless check is False."""
+    done = inventory.git(cwd, *args, index=index, input=input)
     if check and done.returncode != 0:
         raise GitError(f"git {args[0]} failed: " + done.stderr.decode("utf-8", "replace").strip())
     return done
@@ -146,12 +142,16 @@ def place_on_branch(repo, work, branch, subject, read_at):
     if blocked:
         return stop(reason=blocked)
     with tempfile.TemporaryDirectory(prefix="standards-discovery-") as scratch:
-        index = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
-        git(repo, "read-tree", read_at, env=index)
+        index = os.path.join(scratch, "index")
+        git(repo, "read-tree", read_at, index=index)
         for rel, src in files:
             blob = text_of(git(repo, "hash-object", "-w", "--no-filters", "--stdin", input=read_bytes(src)))
-            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}", env=index)
-        tree = text_of(git(repo, "write-tree", env=index))
+            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}", index=index)
+        tree = text_of(git(repo, "write-tree", index=index))
+        listed = git(repo, "diff-tree", "-r", "-z", "--no-renames", "--name-only", read_at, tree, index=index)
+    changed = {p for p in listed.stdout.decode("utf-8", "replace").split("\0") if p}
+    if changed != {rel for rel, _ in files}:
+        return stop(reason="the new tree differs from Read at in other paths than the placed files: " + ", ".join(sorted(changed ^ {rel for rel, _ in files})))
     sha = text_of(git(repo, "commit-tree", "--no-gpg-sign", tree, "-p", read_at, "-m", subject))
     git(repo, "update-ref", f"refs/heads/{branch}", sha, "")
     return emit(
@@ -231,7 +231,7 @@ def main(argv=None):
     branch = None
     if args.command == "place":
         branch = args.branch or "standards-discovery/" + datetime.date.today().isoformat()
-        if subprocess.run(["git", "check-ref-format", f"refs/heads/{branch}"], capture_output=True).returncode != 0:
+        if inventory.git(args.repo, "check-ref-format", f"refs/heads/{branch}").returncode != 0:
             parser.error(f"--branch is not a valid branch name: {branch}")
 
     try:

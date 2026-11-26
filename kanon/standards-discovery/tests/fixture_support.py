@@ -102,6 +102,9 @@ def build_client(dest):
     shutil.copytree(CLIENT, dest)
     os.rename(os.path.join(dest, "CLAUDE.fixture.md"), os.path.join(dest, "CLAUDE.md"))
     git(dest, "init", "-q", "-b", "main")
+    # The scripts drop every GIT_* variable, so the identity for place's commit-tree lives in the repo.
+    git(dest, "config", "user.name", "t")
+    git(dest, "config", "user.email", "t@example.com")
     setup = ["CLAUDE.md", ".php-cs-fixer.dist.php", "composer.json", ".aiignore", "app/Legacy/OldBilling.php"]
     handlers = ["app/Orders/CreateOrderHandler.php", "app/Orders/CancelOrderHandler.php"]
     rest = ["app/Http/Controllers/OrderController.php", "tests/Orders/CreateOrderHandlerTest.php"]

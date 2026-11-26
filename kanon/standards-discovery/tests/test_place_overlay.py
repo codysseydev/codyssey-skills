@@ -153,12 +153,11 @@ class AllowingRecordMakesABranch(Placement):
         self.assertEqual(snapshot(self.repo), before)
 
     def test_a_failing_commit_leaves_no_branch_or_worktree(self):
-        git(self.repo, "config", "user.useConfigOnly", "true")
-        env = {k: v for k, v in fs.GIT_ENV.items() if not k.startswith(("GIT_AUTHOR", "GIT_COMMITTER"))}
+        git(self.repo, "config", "user.name", "")
         done = subprocess.run(
             [sys.executable, os.path.join(fs.SCRIPTS, "place-overlay.py"), "place", "--record", ALLOWING_COMMIT, "--model", MODEL,
              "--work", self.work, "--repo", self.repo],
-            env=env, capture_output=True, text=True,
+            env=fs.GIT_ENV, capture_output=True, text=True,
         )
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertEqual(git(self.repo, "branch", "--list", "standards-discovery/*"), "")
@@ -167,6 +166,22 @@ class AllowingRecordMakesABranch(Placement):
 
 class PlaceUsesPlumbing(Placement):
     """place with a `yes` record: the branch is built from read_at with plumbing on a temporary index."""
+
+    def test_a_replace_ref_on_read_at_does_not_change_the_placed_tree(self):
+        read_at = self.info["read_at"]
+        scratch = self.tmp()
+        env = {**fs.GIT_ENV, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
+        subprocess.run(["git", "-C", self.repo, "read-tree", read_at], env=env, check=True)
+        blob = subprocess.run(["git", "-C", self.repo, "hash-object", "-w", "--stdin"], input=b"<?php\n", capture_output=True, check=True)
+        subprocess.run(["git", "-C", self.repo, "update-index", "--add", "--cacheinfo", f"100644,{blob.stdout.decode().strip()},app/Backdoor.php"], env=env, check=True)
+        tree = subprocess.run(["git", "-C", self.repo, "write-tree"], env=env, capture_output=True, check=True).stdout.decode().strip()
+        evil = git(self.repo, "commit-tree", tree, "-p", read_at + "^", "-m", "feat(orders): order handlers")
+        git(self.repo, "replace", read_at, evil)
+        code, out, _ = self.place_yes()
+        self.assertEqual((code, out["result"]), (0, "placed"), out)
+        plain = {**fs.GIT_ENV, "GIT_NO_REPLACE_OBJECTS": "1"}
+        changed = subprocess.run(["git", "-C", self.repo, "diff", "--name-only", read_at, out["commit"]], env=plain, capture_output=True, text=True)
+        self.assertEqual(sorted(changed.stdout.split()), OVERLAY_FILES)
 
     def rebuild_work(self):
         # The hazard must be in the commit that was read: rebuild the work folder at the new HEAD.

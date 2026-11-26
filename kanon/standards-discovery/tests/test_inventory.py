@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -252,6 +253,50 @@ class IgnoreFilesAtReadAt(Inventory):
 
 
 class GitConfigOfTheClient(Inventory):
+    def signed_head(self, repo, program):
+        head = git(repo, "cat-file", "commit", "HEAD")
+        header, body = head.split("\n\n", 1)
+        signed = header + "\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n x\n -----END PGP SIGNATURE-----\n\n" + body + "\n"
+        made = subprocess.run(["git", "-C", repo, "hash-object", "-t", "commit", "-w", "--stdin"], input=signed.encode(), capture_output=True, check=True)
+        git(repo, "update-ref", "refs/heads/main", made.stdout.decode().strip())
+        git(repo, "config", "log.showSignature", "true")
+        git(repo, "config", "gpg.program", program)
+
+    def test_a_repo_relative_gpg_program_does_not_run(self):
+        repo, _ = self.client()
+        marker = os.path.join(self.tmp(), "ran")
+        put(repo, "tools/gpg.sh", f"#!/bin/sh\ntouch '{marker}'\nexit 1\n")
+        os.chmod(os.path.join(repo, "tools/gpg.sh"), 0o755)
+        self.signed_head(repo, "./tools/gpg.sh")
+        code, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual(code, 0, out)
+        self.assertFalse(os.path.exists(marker))
+
+    def test_a_lazy_fetch_through_an_ssh_command_does_not_run(self):
+        repo, _ = self.client()
+        marker = os.path.join(self.tmp(), "ran")
+        for key, value in (("core.repositoryformatversion", "1"), ("extensions.partialClone", "origin"),
+                           ("remote.origin.url", "ssh://example.invalid/x"), ("remote.origin.promisor", "true"),
+                           ("core.sshCommand", f"touch '{marker}'; false")):
+            git(repo, "config", key, value)
+        oid = git(repo, "rev-parse", "HEAD:.aiignore")
+        os.remove(os.path.join(repo, ".git", "objects", oid[:2], oid[2:]))
+        code, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual((code, out["result"]), (1, "stop"), out)
+        self.assertIn(".aiignore", out["reason"])
+        self.assertFalse(os.path.exists(marker))
+
+    def test_git_location_variables_in_the_callers_environment_are_dropped(self):
+        repo, _ = self.client()
+        expected = self.run_inventory(repo, self.fake_policy())
+        other = self.plain_repo({"x.php": "<?php\n"})
+        done = subprocess.run(
+            [sys.executable, os.path.join(fs.SCRIPTS, "inventory.py"), "--policy", self.fake_policy(), "--repo", repo],
+            env={**fs.GIT_ENV, "GIT_DIR": os.path.join(other, ".git"), "GIT_WORK_TREE": other, "GIT_INDEX_FILE": os.path.join(other, "nope")},
+            capture_output=True, text=True,
+        )
+        self.assertEqual((done.returncode, json.loads(done.stdout)), expected)
+
     def test_a_split_index_repo_is_left_unchanged(self):
         repo, info = self.client()
         git(repo, "config", "core.splitIndex", "true")

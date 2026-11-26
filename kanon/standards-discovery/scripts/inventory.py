@@ -31,7 +31,10 @@ DROPPED_FOLDERS = ("vendor", "node_modules")
 SYMLINK, GITLINK = "120000", "160000"
 REGULAR = ("100644", "100755")
 NOT_A_FILE = {SYMLINK: "symlink", GITLINK: "gitlink", "040000": "folder"}
-GIT_CONFIG = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.splitIndex=false")
+GIT_CONFIG = (
+    "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.splitIndex=false",
+    "-c", "log.showSignature=false",
+)
 
 _DOCS_TEXT = r"(\.(md|markdown|rst|txt))?"
 SOURCE_KINDS = {
@@ -61,9 +64,19 @@ class Stop(Exception):
     pass
 
 
-def git(repo, *args, env=None):
-    """Run a git command in repo that writes nothing there. Returns the CompletedProcess."""
-    return subprocess.run(["git", "--no-optional-locks", *GIT_CONFIG, "-C", repo, *args], capture_output=True, env=env)
+def git(repo, *args, index=None, input=None):
+    """The one git runner of the three scripts. Returns the CompletedProcess.
+
+    It drops every GIT_* variable of the caller, so no outside GIT_DIR, GIT_INDEX_FILE or config
+    reaches git, and sets GIT_INDEX_FILE only when index is given. Replace refs and lazy fetches
+    from a promisor remote are off, and the client's hooks, fsmonitor, split index and signature
+    checks (which run gpg.program) never run.
+    """
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env.update(GIT_NO_REPLACE_OBJECTS="1", GIT_NO_LAZY_FETCH="1")
+    if index:
+        env["GIT_INDEX_FILE"] = index
+    return subprocess.run(["git", "--no-optional-locks", *GIT_CONFIG, "-C", repo, *args], capture_output=True, env=env, input=input)
 
 
 def require_top_level(repo):
@@ -150,10 +163,10 @@ def ignored_by(repo, blob, sha):
         patterns = os.path.join(scratch, "patterns")
         with open(patterns, "wb") as handle:
             handle.write(blob)
-        env = {**os.environ, "GIT_INDEX_FILE": os.path.join(scratch, "index")}
-        if git(repo, "read-tree", sha, env=env).returncode != 0:
+        index = os.path.join(scratch, "index")
+        if git(repo, "read-tree", sha, index=index).returncode != 0:
             raise Stop(f"cannot read the tree of {sha}")
-        proc = git(repo, "ls-files", "-z", "-c", "-i", f"--exclude-from={patterns}", env=env)
+        proc = git(repo, "ls-files", "-z", "-c", "-i", f"--exclude-from={patterns}", index=index)
     if proc.returncode != 0:
         raise Stop(f"git ls-files failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
     return set(_names(proc))
