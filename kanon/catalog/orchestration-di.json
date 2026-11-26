@@ -249,6 +249,7 @@
           "scope": "laravel",
           "keyword": "MUST NOT",
           "rule": "Controllers **MUST NOT** try/catch domain exceptions; domain exceptions render themselves (see `models-domain.md`).",
+          "duplicate_of": "MD-029",
           "status": "active"
         },
         {

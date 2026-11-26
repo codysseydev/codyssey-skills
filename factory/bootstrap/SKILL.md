@@ -13,7 +13,7 @@ Order in the factory: brief (`brief-writer`), domain design (bounded contexts, e
 
 - Name, slug (lowercase kebab-case), one-line pitch. Take them from the approved brief.
 - Modules: the bounded contexts, as StudlyCase names. They come from `Architecture/Bounded Contexts.md` in the brain after domain design. Without a brain yet, ask the user for the list and record it there afterwards.
-- Stack: `laravel`.
+- Stack: `laravel` or `symfony`.
 - Root folder that will hold `<slug>-docs` and `<slug>`.
 
 ## Run it
@@ -21,11 +21,11 @@ Order in the factory: brief (`brief-writer`), domain design (bounded contexts, e
 ```
 python3 ~/.claude/skills/bootstrap/scripts/bootstrap.py \
   --name "Sample Product" --slug sample-product --pitch "One line." \
-  --modules Billing,Catalog --stack laravel --root ~/Code \
+  --modules Billing,Catalog --stack laravel|symfony --root ~/Code \
   [--brain-template PATH_OR_URL] [--pack PATH_OR_URL] [--date YYYY-MM-DD] [--dry-run]
 ```
 
-Templates default to the `FACTORY_BRAIN_TEMPLATE` and `FACTORY_LARAVEL_PACK` environment variables, then to the template repositories on GitHub (both private, so cloning needs your `gh` login). A GitHub URL is cloned to a temp dir. A local path is used as is.
+Templates default to the `FACTORY_BRAIN_TEMPLATE`, `FACTORY_LARAVEL_PACK` and `FACTORY_SYMFONY_PACK` environment variables, then to the template repositories on GitHub (`brain-template` is private, so cloning it needs your `gh` login; `laravel-template` and `symfony-template` are public). A GitHub URL is cloned to a temp dir. A local path is used as is.
 
 The script refuses if `<root>/<slug>-docs` or `<root>/<slug>` exists and is not empty. It prints a JSON report and exits 0 only when every step passed.
 
@@ -33,9 +33,9 @@ The script refuses if `<root>/<slug>-docs` or `<root>/<slug>` exists and is not 
 
 1. Brain: runs the brain template's `scripts/new-brain.py` into `<root>/<slug>-docs`. The brain has its own `CLAUDE.md`, structure checker and skills.
 2. Event model setup: copies `product.py` and `wb_state.json` from the `event-model` skill's `examples/sample-product/` into `Architecture/event-model-generator/` in the brain and sets the product name. It writes an empty `j01.py` named after the product (`lanes=[]`, `slices=[]`, no hot spots). It adds `.wb/` to the brain's `.gitignore`, runs `wb.py --product <dir> check` and `plan` (both must pass; `plan` skips boards that have no URL yet), reruns the brain's own checker, and commits in the brain.
-3. Code repo: runs the pack's `scripts/new-repo.py --name --slug --pitch --target [--modules] [--date]` into `<root>/<slug>`. Packs are pluggable: a Symfony pack is planned with the same `new-repo.py` contract.
+3. Code repo: runs the pack's `scripts/new-repo.py --name --slug --pitch --target [--modules] [--date]` into `<root>/<slug>`. Packs are pluggable: the Laravel and Symfony packs keep the same `new-repo.py` contract.
 4. Playbook: runs `factory-onboard`'s `write-playbook.py` on the new repo, then again with `--check`, which fails unless `.factory/playbook.md` has all seven sections. It commits the file as "Add the factory project file". The sections the repo gives nothing for read `None yet.`, and `## Post-merge` reads `none` for the deploy check and for Sentry.
-5. Recipe: runs `factory-onboard`'s `prove-recipe.py` on the new repo, from a clean clone. The Laravel pack writes `.factory/recipe.yml`, and this step proves it.
+5. Recipe: runs `factory-onboard`'s `prove-recipe.py` on the new repo, from a clean clone. The pack writes `.factory/recipe.yml`, and this step proves it.
 
 The report lists these as `steps` and carries the playbook script's JSON under `playbook`. The playbook is a starter. Refine it with `factory-onboard`.
 
@@ -48,7 +48,7 @@ The journey is empty on purpose. Domain design adds the product's lanes, slices 
 ## After the script
 
 - Creating `<slug>-docs` and `<slug>` on GitHub (private) is a separate step. The session does it with `gh`, and only after the user says yes. Push both after that.
-- The Laravel pack's `.ai/rules/` come from the Kanon references for now. Catalog-generated rules come later.
+- Each pack's `.ai/rules/` (except `index.md`) are copies of the Kanon references under `kanon/` in codyssey-skills, kept in sync by the pack's `scripts/sync-rules.py` (per the `laravel-template` and `symfony-template` READMEs).
 - Boards are not created here. Create them later, per the `event-model` skill, once the journeys exist.
 - Write the next steps into the brain's `Ideas/Build Log.md` and commit.
 

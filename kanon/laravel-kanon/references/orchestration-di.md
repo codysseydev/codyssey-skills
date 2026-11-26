@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/orchestration-di.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Orchestration & Dependency Injection
 
 Applies to: controllers, command/query handlers, console commands, event listeners, jobs, application services, middleware.

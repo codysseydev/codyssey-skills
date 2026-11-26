@@ -101,15 +101,18 @@ host project's own conventions, CLAUDE.md, and sibling files are irrelevant: a
 project convention that contradicts a rule does not excuse a finding.
 
 Report ONLY genuine, concrete violations of the included rules. For each:
-  `path:line` - <rule, quoted with its MUST/SHOULD keyword> - one sentence on why
-  it violates - concrete suggested fix - severity (high | med | low)
+  `path:line` - <ID> <rule, quoted with its MUST/SHOULD keyword> - one sentence on
+  why it violates - concrete suggested fix - severity (high | med | low)
 
 Severity: violated MUST/MUST NOT = high; SHOULD/SHOULD NOT deviation without
 stated justification = med (with a quoted written justification = low); MAY-level
 guidance = low.
 
 Rules of engagement:
-- Cite a specific rule for every finding. No rule, no finding.
+- Cite a specific rule, by its ID, for every finding. No rule ID, no finding.
+- The ID is the code span at the start of the rule's bullet or numbered item in
+  the rule file (for example `HTTP-001`). A violation of a nested item cites its
+  parent's ID. A finding with no catalog ID is dropped.
 - If you cannot point to the exact rule and the exact line, do not report it.
 - Do NOT drop a real violation because it is low-severity or "only structural";
   those are the point of this review.
@@ -129,8 +132,9 @@ Return a concise prioritized list, nothing else.
 ### 4. Synthesize
 
 Collect all findings into one report. Deduplicate (one line may be flagged by two
-families; keep the better-cited one), order by severity, group by file. No
-confidence filter: if an auditor cited a real rule, the finding stays. If you
+families; keep the better-cited one; do not merge findings by ID), order by severity,
+group by file. Drop any finding whose ID does not appear in the reference files you
+inlined. No confidence filter: if an auditor cited a real rule, the finding stays. If you
 genuinely doubt one, keep it marked "(verify)" with one line on the doubt.
 
 ```
@@ -139,13 +143,13 @@ genuinely doubt one, keep it marked "(verify)" with one line on the doubt.
 Canon-only review: the project's own conventions were deliberately ignored.
 
 ### High (MUST violations)
-- `path:line` - <rule> - <why>. Fix: <fix>.
+- `path:line` - <ID> <rule> - <why>. Fix: <fix>.
 
 ### Med (SHOULD deviations)
-- `path:line` - <rule> - <why>. Fix: <fix>.
+- `path:line` - <ID> <rule> - <why>. Fix: <fix>.
 
 ### Low (advisory / justified deviations)
-- `path:line` - <rule> - <note>.
+- `path:line` - <ID> <rule> - <note>.
 
 ### Clean
 <families with no findings>
@@ -163,5 +167,6 @@ If asked to post it on a PR, write the report to a file and use
 - Symfony code is not audited yet; `symfony-kanon` has no audit.
 - Pairs: `/code-review` for bugs, `laravel-standards-review` for house-style,
   this skill for the canon.
-- The rules live in the `laravel-kanon` skill's `references/` folder; edit them
-  there and both skills stay in sync.
+- The reference files are generated from the rule catalog (`kanon/catalog/`) in
+  codysseydev/codyssey-skills, so a rule is changed in the catalog there, not in the
+  copied `references/`. Both skills read the same generated files.

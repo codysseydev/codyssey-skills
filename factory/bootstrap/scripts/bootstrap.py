@@ -2,7 +2,7 @@
 """Bootstrap a factory product: its brain vault, its event model journey setup, its code repo.
 
 Usage: python3 bootstrap.py --name "Sample Product" --slug sample-product --pitch "One line." \\
-           --modules Billing,Catalog --stack laravel --root ~/Code [--brain-template PATH_OR_URL] \\
+           --modules Billing,Catalog --stack laravel|symfony --root ~/Code [--brain-template PATH_OR_URL] \\
            [--pack PATH_OR_URL] [--date YYYY-MM-DD] [--dry-run]
 
 Creates <root>/<slug>-docs and <root>/<slug>, writes and commits the repo's .factory/playbook.md,
@@ -14,7 +14,9 @@ import argparse, datetime, json, os, re, shutil, subprocess, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILLS = os.path.abspath(os.path.join(HERE, "..", ".."))
 DEFAULT_BRAIN = os.environ.get("FACTORY_BRAIN_TEMPLATE", "https://github.com/codysseydev/brain-template")
-DEFAULT_PACKS = {"laravel": os.environ.get("FACTORY_LARAVEL_PACK", "https://github.com/codysseydev/laravel-template")}
+PACK_ENV = {"laravel": "FACTORY_LARAVEL_PACK", "symfony": "FACTORY_SYMFONY_PACK"}
+DEFAULT_PACKS = {stack: os.environ.get(env, f"https://github.com/codysseydev/{stack}-template")
+                 for stack, env in PACK_ENV.items()}
 SLUG_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 MODULE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 JOURNEY_DIR = os.path.join("Architecture", "event-model-generator")
@@ -121,7 +123,7 @@ def main(argv=None):
     ap.add_argument("--stack", default="laravel", choices=sorted(DEFAULT_PACKS))
     ap.add_argument("--root", required=True, help="folder that will hold <slug>-docs and <slug>")
     ap.add_argument("--brain-template", default=DEFAULT_BRAIN, help="path or git URL (env FACTORY_BRAIN_TEMPLATE)")
-    ap.add_argument("--pack", help="path or git URL of the stack pack (env FACTORY_LARAVEL_PACK for laravel)")
+    ap.add_argument("--pack", help="path or git URL of the stack pack (env " + ", ".join(f"{e} for {s}" for s, e in PACK_ENV.items()) + ")")
     ap.add_argument("--date", default=datetime.date.today().isoformat())
     ap.add_argument("--dry-run", action="store_true",
                     help="local git only; the recipe is committed instead of proposed in a PR")

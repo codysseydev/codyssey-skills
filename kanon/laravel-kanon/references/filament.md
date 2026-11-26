@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/filament.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Filament Admin Panels
 
 Applies to: Filament `Resource` classes, pages, actions, widgets, panel policies, panel service providers, and their tests. Only relevant when the codebase uses Filament; skip this family entirely otherwise.

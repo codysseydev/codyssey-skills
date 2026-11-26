@@ -35,7 +35,7 @@ teardown:
 - `setup` and `teardown` may be `[]`. `checks` needs at least one step.
 - Setup steps run in order and the first failure stops the run. Checks run in order. Teardown always runs.
 
-The Laravel pack writes this file for a fresh repo. For any other repo, write it from what the repo already says.
+A stack pack from `bootstrap` (Laravel or Symfony) writes this file for a fresh repo. For any other repo, write it from what the repo already says.
 
 ## The project file
 
@@ -77,7 +77,7 @@ Options: `--keep-going`, `--timeout SECONDS` per step (default 1800), `--keep-co
 
 ## Trusted commands
 
-The gates depend on the recipe, so the recipe is trusted input. A PR that edits `.factory/recipe.yml`, `.factory/playbook.md`, the phpstan, phparkitect, phpunit or rector configs, composer scripts, `.ai/rules/` or workflow files, which list gate commands, can switch off a gate, so a human reads it carefully before merge. Say so in the PR description when your change touches any of them.
+The gates depend on the recipe, so the recipe is trusted input. A PR that edits `.factory/recipe.yml`, `.factory/playbook.md`, the phpstan, phparkitect, phpunit, rector or PHP CS Fixer (`.php-cs-fixer.dist.php`) configs, composer scripts, `.ai/rules/` or workflow files, which list gate commands, can switch off a gate, so a human reads it carefully before merge. Say so in the PR description when your change touches any of them.
 
 ## Return
 

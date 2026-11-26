@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/symfony.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Symfony
 
 Applies to: Symfony controllers, services, Messenger message handlers, console commands.

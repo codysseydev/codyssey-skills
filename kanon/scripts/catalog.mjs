@@ -141,9 +141,13 @@ export function validate(schema, value) {
 
 const isRule = (e) => typeof e === 'object' && e !== null && 'id' in e;
 
+// Line 1 of every generated reference. It is followed by a blank line, then the title.
+export const headerLine = (family) =>
+  `<!-- Generated from ${CATALOG_DIR}/${family}.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->`;
+
 // Returns { text, ids } where ids[i] is the entry that line i belongs to (null before the first entry).
 export function render(catalog) {
-  const blocks = [[{ line: `# ${catalog.title}`, id: null }]];
+  const blocks = [[{ line: headerLine(catalog.family), id: null }], [{ line: `# ${catalog.title}`, id: null }]];
   const paragraph = (text) => blocks.push([{ line: text, id: null }]);
   catalog.intro.forEach(paragraph);
   for (const section of catalog.sections) {
@@ -364,6 +368,17 @@ export function collectProblems(root, { base, skipReferences = false } = {}) {
       }
     }
     catalogs.push({ file, catalog, row });
+  }
+
+  // Every duplicate_of names another entry that exists, in any family and with any status.
+  for (const { file, catalog } of catalogs) {
+    for (const { where, entry } of eachRule(catalog)) {
+      const target = entry.duplicate_of;
+      if (target === undefined) continue;
+      const label = `${file}: ${where} (${entry.id})`;
+      if (target === entry.id) problems.push(`${label}: duplicate_of ${target} is the entry's own ID`);
+      else if (!seenIds.has(target)) problems.push(`${label}: duplicate_of ${target} is not an ID in the catalog`);
+    }
   }
 
   if (!skipReferences) {

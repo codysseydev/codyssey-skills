@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/testing.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Testing
 
 Applies to: all tests, and to any behavioral change (which is incomplete without them).
