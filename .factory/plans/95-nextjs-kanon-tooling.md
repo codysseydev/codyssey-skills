@@ -153,7 +153,7 @@ Check 1 passed, so the fixed core stack gains one bullet after "Oxfmt, with a do
 
 - Vite+: `vp check` runs Oxfmt and then Oxlint with type checks, `vp staged` runs them on staged files from the git hook that `vp config` installs, and `vp test` runs Vitest.
 
-The bullet adds a line only. "Cache Components off" waits for the single follow-up PR after #89 to #96, as the owner decided.
+The bullet adds a line only. The follow-up PR #133 already added "Next.js App Router, with Cache Components off." to the stack, and this bullet leaves that line as it is.
 
 ## Readings
 
@@ -161,7 +161,7 @@ These follow from the issue, `index.md` and the earlier owner decisions. The PR 
 
 1. **Notes policy.** Observed, Not migrated and incident notes go, with dated counts and guide pointers (`docs/guides/...`).
 2. **Why lines.** Every entry gets a neutral one-line `Why:`. The PR lists every Why written fresh.
-3. **Names.** The entries cite concrete generic names: `knip.json`, `pnpm-workspace.yaml`, `vite.config.ts`, `.vite-hooks/pre-commit`, `.nvmrc`, `.github/dependabot.yml`, `tsconfig.scripts.json`, `scripts/`, `.storybook/main.ts`. The PR lists them under "Names for the index.md follow-up".
+3. **Names.** The entries cite concrete generic names: `knip.json`, `pnpm-workspace.yaml`, `vite.config.ts`, `.vite-hooks/pre-commit`, `.nvmrc`, `.github/dependabot.yml`, `tsconfig.scripts.json`, `scripts/`, `.storybook/main.ts`. By owner decision this PR adds its new names to the names table of `index.md`. A name gets a row when the template picks it and a project could pick another. A name no project can change (`package.json`, `tsconfig.json`, `pnpm-workspace.yaml`, `.github/dependabot.yml`) gets none. The PR comment lists both groups.
 4. **Test file names dropped.** The PR lists them for stage 2: `scripts/tests/scriptsAreTypeScript.test.ts` (C7, named by its `index.md` checks-table row instead).
 5. **C6's "MUST once a lockfile check exists".** This follows plan 90's reading of DATA-062: `index.md` lists no lockfile check, so the clause goes and SHOULD stays. The PR's keyword table lists the cell change.
 6. **Lint rules other files deferred.** The PR reports check 2's result for each deferred rule: TYPES-002, TYPES-005, TYPES-021, TYPES-039, UI-005, UI-020, UI-021, UI-024, UI-027, UI-031, UI-051, DATA-053, DATA-058, and NX-10 as DESIGN-004. This PR does not edit those entries (Q3).
@@ -204,7 +204,22 @@ From the worktree root, at the head commit, on a clean tree:
 - Moving guard-test rows to Oxlint or dependency-cruiser: stage 1 keeps every row in the guard test. The checks only report.
 - `index.md`, the template repository and its guard test (stage 2), `bootstrap --frontend nextjs` (stage 3), the audit (#97), and any change to `codysseydev/codyssey-frontend`.
 
-## Open questions
+## Owner decisions
+
+The owner approved this plan in an interactive session on 2026-11-26 and took every recommendation:
+
+- **Q1 (a).** TYPES-036's note names the `vi.mock` factory gap and cites TYPES-022.
+- **Q2 (a).** TYPES-036 names the gates as the typecheck script, `vp check`, `vp test` and `next build`, plus `vp staged` and `vp test related`.
+- **Q3 (a).** The follow-up PR #133 already updated the lint `Check:` lines of `types-and-tests.md` and `design-principles.md`. This PR leaves them.
+- **Q4 (a).** TOOLING-007 drops the `next.config.mjs` clause.
+- **Q5 (a).** TOOLING-009 pins `<major>.x` with no number, and names no Volta.
+- **Q6 (a).** TOOLING-008's `paths-ignore` keeps `.agents/` and `.claude/`.
+- Vite+ joins the stack line of `SKILL.md` (check 1 passed), without changing the Cache Components wording.
+- TYPES-022 cites TYPES-030 for the reset config, so the three keys are named once.
+- Cache Components stays off. The owner reconfirmed it on 2026-11-26 after the `create-next-app` default check.
+- This PR adds its own new names to the names table of `index.md` (reading 3).
+
+## Open questions (answered above)
 
 - **Q1. Which commit-time note does TYPES-036 carry for `vp test related`?**
   - Context: the source says it follows static imports only. Check 4 found that it also follows string-literal dynamic imports, but not a module a test replaces with `vi.mock` and a factory, the style TYPES-022 asks for.
@@ -240,7 +255,7 @@ From the worktree root, at the head commit, on a clean tree:
 
 The PR lists these for the owner. None changes a decided rule.
 
-- `create-next-app` 16.4.6 writes `cacheComponents: true` into `next.config.ts`. The owner decided Cache Components stays off. The template has to turn it off, and the follow-up PR adds it to the stack line.
+- `create-next-app` 16.4.6 writes `cacheComponents: true` into `next.config.ts`. The owner decided Cache Components stays off. The template has to turn it off, and #133 already put that on the stack line.
 - Storybook 10.6.9's `vite-plus` peer range (`^0.1.15 || ^0.2.0`) does not include Vite+ 1.x. It warns only.
 - T19's note against check 4 (Q1).
 - C7's `next.config.mjs` against `create-next-app`'s `next.config.ts` (Q4).
