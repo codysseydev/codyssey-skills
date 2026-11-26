@@ -1369,7 +1369,7 @@
           },
           "examples": {
             "bad": "// camelCase keys, no data envelope\nreturn new JsonResponse(['orderId' => $id, 'createdAt' => $createdAt]);\n\n// custom error shape instead of RFC 7807\nreturn new JsonResponse(['error' => 'Order not found'], 404);",
-            "good": "// success: a *Resource builds the body, snake_case keys inside the data envelope\nreturn new JsonResponse(new OrderResource($order)); // {\"data\": {\"order_id\": \"...\", \"created_at\": \"...\"}}\n\n// collection: the resource adds meta and links\nreturn new JsonResponse(new OrderCollectionResource($orders, $total, $nextPage));\n\n// error: throw a product exception marked #[WithHttpStatus(404)] and let the\n// serializer's ProblemNormalizer render the RFC 7807 body (default context, production)\nthrow new OrderNotFoundException($id);\n// {\"type\": \"https://tools.ietf.org/html/rfc2616#section-10\", \"title\": \"An error occurred\", \"status\": 404, \"detail\": \"Not Found\"}"
+            "good": "// success: a *Resource builds the body, snake_case keys inside the data envelope\nreturn new JsonResponse(new OrderResource($orderResult), Response::HTTP_OK); // {\"data\": {\"order_id\": \"...\", \"created_at\": \"...\"}}\n\n// collection: the resource adds meta and links\nreturn new JsonResponse(new OrderCollectionResource($orderResults, $total, $nextPage), Response::HTTP_OK);\n\n// error: throw a product exception marked #[WithHttpStatus(404)] and let the\n// serializer's ProblemNormalizer render the RFC 7807 body (default context, production)\nthrow new OrderNotFoundException($id);\n// {\"type\": \"https://tools.ietf.org/html/rfc2616#section-10\", \"title\": \"An error occurred\", \"status\": 404, \"detail\": \"Not Found\"}"
           },
           "lane_note": "Laravel counterpart: HTTP-021 (response envelope and keys).",
           "status": "active"
@@ -2752,7 +2752,7 @@
           },
           "examples": {
             "bad": "namespace Billing\\Invoice;\n\nfinal readonly class InvoiceRenderer\n{\n    public function render(Invoice $invoice): string\n    {\n        $name = $this->members->nameOf($invoice->memberId); // cross-module call on every render\n    }\n}",
-            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SyncBillingContactOnContactRenamed\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    public function __invoke(ContactRenamed $event): void // Billing-owned message\n    {\n        // event.bus has no doctrine_transaction: the command updates Billing's own table\n        $this->commandBus->dispatch(new RenameBillingContactCommand($event->memberId, $event->name));\n    }\n}"
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SyncBillingContactOnContactRenamedListener\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    public function __invoke(ContactRenamed $event): void // the Contacts module's published event (SYM-101)\n    {\n        // event.bus has no doctrine_transaction: the command updates Billing's own table\n        $this->commandBus->dispatch(new RenameBillingContactCommand($event->memberId, $event->name));\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ISO-008 (materialize data you need from another module).",
           "status": "active"
