@@ -633,6 +633,25 @@ class KanonRoot(Golden):
         code, result = run_json("check-overlay.py", "--work", self.work, "--repo", self.repo, "--kanon-root", root)
         self.assertEqual((code, result["result"]), (0, "ok"))
 
+    def test_a_root_inside_the_work_folder_or_the_repo_is_refused(self):
+        for parent in (self.work, self.repo):
+            with self.subTest(parent=parent):
+                root = os.path.join(parent, "kanon-copy")
+                shutil.rmtree(root, ignore_errors=True)
+                shutil.copytree(self.installed_layout(), root)
+                code, out, err = run_script("check-overlay.py", "--work", self.work, "--repo", self.repo, "--kanon-root", root)
+                self.assertEqual(code, 2, out)
+                self.assertIn("inside", err)
+                shutil.rmtree(root)
+
+    def test_a_symlink_to_a_root_inside_the_work_folder_is_refused(self):
+        root = os.path.join(self.work, "kanon-copy")
+        shutil.copytree(self.installed_layout(), root)
+        link = os.path.join(self.tmp(), "root")
+        os.symlink(root, link)
+        code, out, err = run_script("check-overlay.py", "--work", self.work, "--repo", self.repo, "--kanon-root", link)
+        self.assertEqual(code, 2, out)
+
     def test_a_root_without_families_json_exits_2(self):
         code, out, err = run_script("check-overlay.py", "--work", self.work, "--repo", self.repo, "--kanon-root", self.tmp())
         self.assertEqual(code, 2)

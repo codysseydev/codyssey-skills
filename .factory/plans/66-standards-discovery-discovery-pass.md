@@ -82,7 +82,7 @@ Every entry names its rule by ID, and the ID must be in `kanon/catalog/<family>.
 
 ### The Kanon root
 
-`check-overlay.py --kanon-root <dir>` names a folder that holds `kanon/catalog/families.json` and the reference paths it lists. The default is the first of two folders that has that file: the skill folder (installed copy, open decision e) and the repo root two levels up (this repo). Tests pass the repo root. A root without `families.json` exits 2.
+`check-overlay.py --kanon-root <dir>` names a folder that holds `kanon/catalog/families.json` and the reference paths it lists. The default is the first of two folders that has that file: the skill folder (installed copy, open decision e) and the repo root two levels up (this repo). Tests pass the repo root. A root without `families.json` exits 2. A `--kanon-root` that resolves (`realpath`) inside `--work` or `--repo` exits 2 in `check-overlay.py` and `place-overlay.py`, because the model or the client could then write the rules they are checked against (2026-11-26).
 
 ### The work folder
 
@@ -280,7 +280,7 @@ At base every row fails, because none of the three scripts, the fixtures or the 
 | `report and overlay agree` | A row with no entry, an entry with no row, a row whose effect differs from its entry | fails |
 | `silent on` | A family missing from the list, an extra family, `symfony` listed for `Framework: laravel`, an `ORCH` entry under `Framework: symfony` | fails |
 | `check-policy reads the overlay's mode` | The golden `.ai/kanon.yml` committed at `refs/remotes/origin/main` of a temp repo. `client_record({}, ...)` gives `project-first` and stops on `record` | fails |
-| `kanon root` | A copy laid out as the installed skill folder resolves. A root without `families.json` exits 2 | fails |
+| `kanon root` | A copy laid out as the installed skill folder resolves. A root without `families.json` exits 2. A root inside the work folder or the repo, or a symlink to one, exits 2, in the check and in `place` | fails |
 | `inventory of the fixture` (`test_inventory.py`) | The JSON above: sources by kind, siblings, `ignored`, `read_at` equals `HEAD`, subjects, branches | fails |
 | `inventory needs a continue` | A `stop` policy JSON: exit 1, and no git command runs in the repo | fails |
 | `ignore patterns use git's matcher` | `secrets` matches `a/secrets/k.php`, `**/secret*` matches `secrets/k.php`, a negated child of an ignored folder stays ignored. A file with a BOM, a comment line, an escaped trailing space, `\#` and unescaped trailing spaces reads as git reads it, and a committed `.aiignore` with a BOM keeps its first pattern | fails |

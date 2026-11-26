@@ -332,6 +332,19 @@ class PlaceRefuses(Placement):
         self.assertEqual([b["field"] for b in out["blocking"]], ["ai_allowed", "code_leaves_machine"])
         self.assertEqual(snapshot(self.repo), before)
 
+    def test_a_kanon_root_inside_the_work_folder_is_refused(self):
+        root = os.path.join(self.work, "kanon-copy")
+        for rel in ("kanon/catalog", "kanon/laravel-kanon/references", "kanon/symfony-kanon/references"):
+            shutil.copytree(os.path.join(REPO_ROOT, rel), os.path.join(root, rel))
+        before = snapshot(self.repo)
+        code, out, err = run_script(
+            "place-overlay.py", "place", "--record", ALLOWING_COMMIT, "--model", MODEL, "--work", self.work, "--repo", self.repo,
+            "--kanon-root", root,
+        )
+        self.assertEqual(code, 2, out)
+        self.assertIn("inside", err)
+        self.assertEqual(snapshot(self.repo), before)
+
     def test_a_missing_record_stops(self):
         code, out = self.place(os.path.join(self.tmp(), "none.md"))
         self.assertEqual((code, out["result"]), (1, "stop"))

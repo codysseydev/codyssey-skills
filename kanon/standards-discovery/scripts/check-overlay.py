@@ -235,6 +235,19 @@ def default_kanon_root(skill_dir):
     return None
 
 
+def root_problem(root, work, repo):
+    """Why a --kanon-root cannot be used, or None. A root inside the work folder or the repo is text
+    the model or the client wrote, so it would let them define the rules they are checked against."""
+    if not os.path.isfile(os.path.join(root, FAMILIES)):
+        return f"no {FAMILIES} under {root}: pass --kanon-root"
+    real = os.path.realpath(root)
+    for name, folder in (("--work", work), ("--repo", repo)):
+        inside = os.path.realpath(folder)
+        if os.path.commonpath([real, inside]) == inside:
+            return f"--kanon-root {root} is inside {name} {folder}; use the installed skill folder or a codyssey-skills checkout"
+    return None
+
+
 def load_kanon(root):
     with open(os.path.join(root, FAMILIES), encoding="utf-8") as handle:
         families = json.load(handle)
@@ -756,8 +769,12 @@ def main(argv=None):
         if not os.path.isdir(getattr(args, flag)):
             parser.error(f"--{flag} is not a directory: {getattr(args, flag)}")
     root = args.kanon_root or default_kanon_root(SKILL)
-    if root is None or not os.path.isfile(os.path.join(root, FAMILIES)):
-        print(f"no {FAMILIES} under {root or 'the skill folder or the repo root'}: pass --kanon-root", file=sys.stderr)
+    if root is None:
+        print(f"no {FAMILIES} under the skill folder or the repo root: pass --kanon-root", file=sys.stderr)
+        return 2
+    problem = root_problem(root, args.work, args.repo) if args.kanon_root else None
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     problems, _ = check_work(args.work, args.repo, root)
     print(json.dumps({"result": "invalid" if problems else "ok", "problems": problems}, indent=2))

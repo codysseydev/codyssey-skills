@@ -258,8 +258,12 @@ def run(args, branch):
     commit_ai_files = policy.FIELDS["commit_ai_files"][0](raw["commit_ai_files"])
 
     root = args.kanon_root or overlay.default_kanon_root(SKILL)
-    if root is None or not os.path.isfile(os.path.join(root, overlay.FAMILIES)):
+    if root is None:
         print("no kanon/catalog/families.json found: pass --kanon-root", file=sys.stderr)
+        return 2
+    problem = overlay.root_problem(root, args.work, args.repo) if args.kanon_root else None
+    if problem:
+        print(problem, file=sys.stderr)
         return 2
     try:
         inventory.require_top_level(args.repo)
