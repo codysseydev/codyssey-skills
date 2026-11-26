@@ -60,6 +60,8 @@ The core rules assume this stack, as the Laravel Kanon assumes PHPUnit:
 - Vitest with Testing Library.
 - Oxlint.
 - Oxfmt, with a documented swap to Prettier.
+- Vite+: `vp check` runs Oxfmt and then Oxlint with type checks, `vp staged` runs them on
+  staged files from the git hook that `vp config` installs, and `vp test` runs Vitest.
 - Storybook.
 - knip.
 - pnpm.
