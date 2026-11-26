@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": ".ai/kanon.yml",
+  "description": "The project overlay that standards-discovery writes. Read as the JSON value of the file. A missing file, or a file with no mode key, means canon-first. Rules the schema cannot say are checked by check-overlay.py: change needs rule, adopt and off take no rule.",
+  "type": "object",
+  "required": ["mode"],
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "description": "canon-first applies the Kanon as written. project-first treats the project's own conventions as the standard. standards-discovery writes only project-first.",
+      "enum": ["canon-first", "project-first"]
+    },
+    "overlay": {
+      "description": "One entry per Kanon rule the project adopts, changes or switches off. A bare overlay: key is null to YAML readers, so the list has at least one item.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "effect": {
+      "description": "adopt: the project already follows the rule. change: the project follows a different rule, written in the file named by rule. off: the project does not follow the rule.",
+      "enum": ["adopt", "change", "off"]
+    },
+    "rule": {
+      "description": "A prose rule file for a change entry, relative to the repo root.",
+      "type": "string",
+      "pattern": "^\\.ai/rules/project/[A-Za-z0-9_.-]+\\.md$"
+    },
+    "evidence": {
+      "description": "Where the repo shows the convention: path:line or path:line-line, relative to the repo root. A path holds no colon and no backtick.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[^:`]+:[1-9][0-9]*(-[1-9][0-9]*)?$" }
+    },
+    "entry": {
+      "description": "One Kanon rule, named by its catalog ID.",
+      "type": "object",
+      "required": ["id", "effect", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
+        "effect": { "$ref": "#/$defs/effect" },
+        "rule": { "$ref": "#/$defs/rule" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    }
+  }
+}
