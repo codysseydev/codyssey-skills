@@ -81,3 +81,15 @@ From the worktree root at the head commit, clean tree: every check in `.factory/
 - php-core entries for the 49 questions.
 - A Symfony audit skill (`kanon-pr-audit`, #44).
 - Any change to a Laravel or php-core entry's wording or keyword.
+
+## Owner decisions (2026-11-26, PR comment)
+
+Posted decisions: https://github.com/codysseydev/codyssey-skills/pull/131#issuecomment-7185815574
+
+- SYM-071 and SYM-084 rejected; their IDs are not reused.
+- SYM-024 and SYM-025 are MUST.
+- Ten rules reworded: SYM-003, SYM-007, SYM-026, SYM-051, SYM-059, SYM-068, SYM-070, SYM-074, SYM-101, SYM-102.
+- Two contradictions resolved: read models may be a DTO or a readOnly entity (SYM-068 against SYM-075); SYM-101 exempts published events and consumer-owned contracts (against SYM-102).
+- The six defaults are kept, with authorization as Voters checked in the handler.
+- Event listeners that change state dispatch a command onto `command.bus`.
+- php-core rows: 39 add to php-core later, 2 keep in Laravel only (P-20, P-49), 8 drop.
