@@ -48,7 +48,8 @@ Rules use RFC-2119 keywords, and they mean it:
 
 The core rules assume this stack, as the Laravel Kanon assumes PHPUnit:
 
-- Next.js App Router.
+- Next.js App Router, with Cache Components off. The template sets `cacheComponents: false`
+  in `next.config`, because current `create-next-app` (16.4) turns it on by default.
 - React with the React Compiler on.
 - Tailwind 4 with tailwind-merge.
 - TanStack Query.
@@ -59,6 +60,8 @@ The core rules assume this stack, as the Laravel Kanon assumes PHPUnit:
 - Vitest with Testing Library.
 - Oxlint.
 - Oxfmt, with a documented swap to Prettier.
+- Vite+: `vp check` runs Oxfmt and then Oxlint with type checks, `vp staged` runs them on
+  staged files from the git hook that `vp config` installs, and `vp test` runs Vitest.
 - Storybook.
 - knip.
 - pnpm.

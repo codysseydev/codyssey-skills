@@ -3,11 +3,11 @@ name: symfony-kanon
 description: >-
   The Kanon's Symfony overlay. Load this BEFORE writing or editing PHP in a Symfony
   app when the user invokes /symfony-kanon, says "symfony kanon", or asks for the
-  canon in a Symfony project of their own. It is an early overlay: two Symfony rules
-  on top of the framework-agnostic `php-core.md` and `reliability.md` in the
-  `laravel-kanon` skill, which must be installed next to it. Do NOT auto-apply this
-  in a codebase with established team standards unless the user explicitly asks for
-  the canon there. There is no Symfony audit yet: laravel-kanon-audit is Laravel-only.
+  canon in a Symfony project of their own. It adds Symfony rules on top of the
+  framework-agnostic `php-core.md` and `reliability.md` in the `laravel-kanon`
+  skill, which must be installed next to it. Do NOT auto-apply this in a codebase
+  with established team standards unless the user explicitly asks for the canon
+  there. There is no Symfony audit yet: laravel-kanon-audit is Laravel-only.
 ---
 
 # Symfony Kanon
@@ -47,14 +47,24 @@ Each rule in the reference files starts with its ID, a stable code such as `SYM-
 |---|---|
 | Any Symfony change | `php-core.md` (from the `laravel-kanon` skill's `references/`) |
 | Batch imports, bulk jobs | `reliability.md` (from the `laravel-kanon` skill's `references/`) |
-| Controllers, services, message handlers | this skill's `references/symfony.md` |
+| Services and their wiring | this skill's `references/symfony.md`, section Dependency injection |
+| Commands, queries, handlers, events | this skill's `references/symfony.md`, sections Writes and Messenger slices |
+| Controllers | this skill's `references/symfony.md`, section Controllers |
+| Request and response DTOs, API endpoints | this skill's `references/symfony.md`, section HTTP API |
+| Voters and access checks | this skill's `references/symfony.md`, section Authorization |
+| Entities, value objects, domain exceptions | this skill's `references/symfony.md`, section Domain model |
+| Repositories, mappings, migrations | this skill's `references/symfony.md`, section Doctrine persistence |
+| HTTP clients, mail, webhooks, outside services | this skill's `references/symfony.md`, section Integrations |
+| Console commands, schedules, workers | this skill's `references/symfony.md`, section Console and scheduling |
+| Large reads and batch queries | this skill's `references/symfony.md`, section Performance |
+| Module boundaries | this skill's `references/symfony.md`, section Module isolation |
+| Tests | this skill's `references/symfony.md`, section Testing |
 
 The Laravel-specific reference files in `laravel-kanon` (Eloquent, Filament, Form
 Requests, and so on) do not apply to a Symfony app.
 
 ## Status
 
-- Early overlay with two rules. More Symfony rules come with the rule catalog.
 - There is no Symfony audit yet; `laravel-kanon-audit` is Laravel-only.
 - The canon covers standards, not correctness: keep using normal judgment (and
   /code-review) for bugs, security, and performance.
