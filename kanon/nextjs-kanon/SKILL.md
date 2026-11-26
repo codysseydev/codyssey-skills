@@ -98,7 +98,7 @@ tag, not a package, so they are detected by the script origin in the code.
 
 | File | Loads when |
 |---|---|
-| `references/add-ons/untrusted-content.md` | `react-markdown`, `rehype-sanitize` or another HTML sanitizer is in `package.json` |
+| `references/add-ons/untrusted-content.md` | `react-markdown`, `rehype-sanitize`, `dompurify`, `isomorphic-dompurify` or `sanitize-html` is in `package.json` |
 | `references/add-ons/syntax-highlighting.md` | `react-syntax-highlighter` is in `package.json` |
 | `references/add-ons/sentry.md` | `@sentry/nextjs` is in `package.json` |
 | `references/add-ons/turnstile.md` | `grep -rlE 'challenges\.cloudflare\.com/turnstile' src app` finds a file |
@@ -144,6 +144,6 @@ Pack rules win over every vendored skill. The clash list names each known clash.
 ## Companions
 
 - `nextjs-kanon-audit` audits a branch, PR, or diff against these same references.
-  It is not built yet; #97 builds it.
+  Install it next to this skill; it reads this `references/` folder.
 - The canon covers standards, not correctness: keep using normal judgment (and
   /code-review) for bugs and security.
