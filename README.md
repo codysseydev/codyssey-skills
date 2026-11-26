@@ -23,10 +23,9 @@ Five folders, five different jobs:
 - `laravel-kanon-audit`: the audit, run after writing. It checks a branch or diff
   against the same reference files, one subagent per rule family, and takes each
   finding's severity from the rule's keyword. Every finding cites the rule's ID.
-- `symfony-kanon`: a minimal Symfony overlay of the Kanon with two rules (no
-  `$container->get()`, writes go through a Messenger command to one handler). It reads
-  `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
-  install it next to `laravel-kanon`. It has no audit yet.
+- `symfony-kanon`: the Kanon's Symfony rules, on top of the
+  `php-core.md` and `reliability.md` files it reads from `laravel-kanon`'s `references/`
+  folder, so install it next to `laravel-kanon`. It has no audit yet.
 - `nextjs-kanon`: the Kanon for the Next.js frontend of a product with its own API. Its
   `SKILL.md` holds the fixed core stack, how each add-on and the Cloudflare overlay is
   detected, and the known clashes with upstream skills. `references/index.md` holds the id

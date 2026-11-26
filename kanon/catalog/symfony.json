@@ -28,7 +28,186 @@
               "status": "draft"
             }
           ],
+          "sources": [
+            "https://codyssey.dev/quick-tips/inject-symfony-services-dont-fetch-them",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location"
+          ],
           "lane_note": "Symfony overlay of PHP-001 (`php-core.md`).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-003",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Product modules **MUST NOT** depend on a `ContainerInterface` (a closed locator under SYM-005 excepted), and production classes **MUST** inject contracts (`LoggerInterface`, `ClockInterface`, `Security` in controllers only) instead of globals; `Framework\\` is exempt.",
+          "applies_to": [
+            "Product module classes"
+          ],
+          "allowed_in": [
+            "Framework\\"
+          ],
+          "detect": {
+            "signals": [
+              "ContainerInterface",
+              "Psr\\Container\\ContainerInterface"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a class outside `Framework\\` that depends on `Psr\\Container\\ContainerInterface` or `Symfony\\Component\\DependencyInjection\\ContainerInterface`. It over-flags a closed locator under SYM-005, so allow-list those classes.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Billing\\IssueInvoice;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(private ContainerInterface $container) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->container->get(LoggerInterface::class)->info('Issuing invoice');\n    }\n}",
+            "good": "namespace Billing\\IssueInvoice;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(\n        private LoggerInterface $logger,\n        private ClockInterface $clock,\n    ) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->logger->info('Issuing invoice', ['at' => $this->clock->now()->format('c')]);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-008, ORCH-010 (no facades or global helpers, where facades are allowed).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-004",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Credentials and config values **MUST** come from `%env(...)%` parameters or the secrets vault, and production classes **MUST NOT** call `getenv()` or read `$_ENV` or `$_SERVER` outside `Framework\\`.",
+          "applies_to": [
+            "Product module classes"
+          ],
+          "allowed_in": [
+            "Framework\\"
+          ],
+          "detect": {
+            "signals": [
+              "getenv(",
+              "$_ENV",
+              "$_SERVER"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags `getenv()`, `$_ENV` and `$_SERVER` reads outside `Framework\\`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Billing\\Gateway;\n\nfinal readonly class StripeGateway\n{\n    public function charge(int $amount): void\n    {\n        $client = new PaymentClient(getenv('STRIPE_API_KEY'));\n        $client->charge($amount);\n    }\n}",
+            "good": "namespace Billing\\Gateway;\n\nfinal readonly class StripeGateway\n{\n    public function __construct(private PaymentClient $client) {}\n\n    public function charge(int $amount): void\n    {\n        $this->client->charge($amount);\n    }\n}\n\n// Billing/billing-services.php\n$services->set(PaymentClient::class)->arg('$apiKey', '%env(STRIPE_API_KEY)%');"
+          },
+          "lane_note": "Laravel counterpart: INT-011, PERS-007, ORCH-008 (env half).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-005",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MAY",
+          "rule": "A service locator with a closed, declared service list (`#[AutowireLocator]`, `getSubscribedServices()`) **MAY** be used for runtime selection such as a keyed strategy map; `->get()` on such a closed locator is not the container fetch SYM-001 bans.",
+          "applies_to": [
+            "Strategy selectors"
+          ],
+          "detect": {
+            "signals": [
+              "#[AutowireLocator",
+              "getSubscribedServices("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Narrow the SYM-001 detector so `->get()` on a `ServiceLocator` built by `#[AutowireLocator]` is not flagged.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class PaymentMethodSelector\n{\n    public function __construct(private ContainerInterface $container) {}\n\n    public function for(string $method): PaymentMethod\n    {\n        return $this->container->get($method);\n    }\n}",
+            "good": "final readonly class PaymentMethodSelector\n{\n    public function __construct(\n        #[AutowireLocator(['card' => CardPayment::class, 'bank' => BankTransfer::class])]\n        private ServiceLocator $methods,\n    ) {}\n\n    public function for(string $method): PaymentMethod\n    {\n        return $this->methods->get($method);\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/dependency-injection-vs-service-location",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-strategy-pattern"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-006",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "CI **SHOULD** run `bin/console lint:container` so an unautowirable service fails at compile time, not on first request.",
+          "applies_to": [
+            "CI pipeline"
+          ],
+          "detect": {
+            "signals": [
+              "lint:container"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(\n        // billing.pdf_writer is a PdfWriter, not an InvoiceRenderer\n        #[Autowire(service: 'billing.pdf_writer')]\n        private InvoiceRenderer $renderer,\n    ) {}\n}\n// the TypeError appears on the first request that builds this handler",
+            "good": "final readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(\n        #[Autowire(service: 'billing.invoice_renderer')]\n        private InvoiceRenderer $renderer,\n    ) {}\n}\n// CI runs bin/console lint:container: the bad wiring above fails the build"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/inject-symfony-services-dont-fetch-them"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-007",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A query handler **MUST** stay pure (no cache reads or writes); caching **MUST** live in a middleware on `query.bus`, and logging around the handler **SHOULD** live there too.",
+          "applies_to": [
+            "Query handlers"
+          ],
+          "detect": {
+            "signals": [
+              "CacheInterface",
+              "#[AsMessageHandler(bus: 'query.bus')]",
+              "MiddlewareInterface"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes with `#[AsMessageHandler(bus: 'query.bus')]` must not depend on `Symfony\\Contracts\\Cache\\CacheInterface`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'query.bus')]\nfinal readonly class GetInvoiceSummaryQueryHandler\n{\n    public function __construct(private CacheInterface $cache, private InvoiceSummaries $summaries) {}\n\n    public function __invoke(GetInvoiceSummaryQuery $query): InvoiceSummaryResult\n    {\n        return $this->cache->get('invoice_summary_'.$query->invoiceId, fn () => $this->summaries->for($query->invoiceId));\n    }\n}",
+            "good": "final readonly class CacheQueryMiddleware implements MiddlewareInterface\n{\n    public function __construct(private CacheInterface $cache) {}\n    public function handle(Envelope $envelope, StackInterface $stack): Envelope\n    {\n        $query = $envelope->getMessage();\n        if (!$query instanceof CacheableQuery) { return $stack->next()->handle($envelope, $stack); }\n        $result = $this->cache->get(CacheKeys::forQuery($query), function (ItemInterface $item) use ($envelope, $stack) {\n            $item->expiresAfter(CacheTtl::Query->value);\n            return $stack->next()->handle($envelope, $stack)->last(HandledStamp::class)?->getResult();\n        });\n        return $envelope->with(new HandledStamp($result, self::class));\n    }\n}\n// messenger.yaml: query.bus middleware: [Framework\\Bus\\CacheQueryMiddleware]"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/query-bus"
+          ],
+          "lane_note": "Laravel counterpart: ORCH-033, ORCH-036 (pure query handlers, logging in a decorator).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-008",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Cache keys, tags and TTLs **MUST** come from centralized enum or key classes, never raw strings or hardcoded integers.",
+          "applies_to": [
+            "Cache callers"
+          ],
+          "detect": {
+            "signals": [
+              "->get('",
+              "expiresAfter("
+            ]
+          },
+          "examples": {
+            "bad": "public function summary(Uuid $invoiceId): InvoiceSummaryResult\n{\n    return $this->cache->get('invoice_summary_'.$invoiceId, function (ItemInterface $item) use ($invoiceId) {\n        $item->expiresAfter(3600);\n\n        return $this->summaries->for($invoiceId);\n    });\n}",
+            "good": "enum InvoiceCache: string\n{\n    case Summary = 'invoice_summary_%s';\n\n    public function key(Uuid $id): string { return sprintf($this->value, $id); }\n    public function ttl(): int { return 300; }\n}\n\n$this->cache->get(InvoiceCache::Summary->key($id), function (ItemInterface $item) {\n    $item->expiresAfter(InvoiceCache::Summary->ttl());\n    // ...\n});"
+          },
+          "lane_note": "Laravel counterpart: ORCH-034 (centralized cache keys).",
           "status": "active"
         }
       ]
@@ -45,7 +224,2947 @@
           "keyword": "MUST",
           "rule": "Writes **MUST** go through a Symfony Messenger command dispatched to one handler, so every write shares one transaction and validation path. This is the Symfony counterpart of the Laravel command/handler slice (`architecture.md` in the `laravel-kanon` skill).",
           "why": "every write shares one transaction and validation path",
+          "sources": [
+            "https://codyssey.dev/quick-tips/use-messenger-for-commands-not-just-async-jobs",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
+          ],
           "lane_note": "Laravel counterpart: ARCH-005 (command/handler write slice) and ARCH-009 (explicit handler wiring) in `architecture.md`.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Messenger slices",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-009",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A read-only context (reporting projection, query layer) **MUST NOT** contain a message dispatched on `command.bus`, its handler, or a domain event it emits; it reacts to events with listeners and answers queries.",
+          "applies_to": [
+            "Read-only contexts"
+          ],
+          "detect": {
+            "signals": [
+              "#[AsMessageHandler(bus: 'command.bus')]",
+              "*Command.php"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a `*Command` class or a `command.bus` handler inside a namespace on a read-only list (the list is configuration; event dispatch is not visible to the check).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Reporting\\Revenue\\RecalculateRevenue;\n\nfinal readonly class RecalculateRevenueCommand\n{\n    public function __construct(public Uuid $accountId) {}\n}\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RecalculateRevenueCommandHandler { /* ... */ }",
+            "good": "namespace Reporting\\Revenue\\GetRevenue;\n\nfinal readonly class GetRevenueQuery\n{\n    public function __construct(public Uuid $accountId) {}\n}\n\n#[AsMessageHandler(bus: 'query.bus')]\nfinal readonly class GetRevenueQueryHandler { /* ... */ }"
+          },
+          "lane_note": "Laravel counterpart: ARCH-003, ARCH-012 (read-only contexts, no write command in reporting).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-010",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every capability **MUST** ship as a vertical slice (message, handler, `*Controller`, `*Request`, `*Resource` in one folder), and a module **SHOULD NOT** group slices under domain folders (`Lifecycle/`, `Queries/`) before about ten slices; names carry the suffix `{Action}Command`, `{Action}Query`, `{Action}CommandHandler`, `{Action}QueryHandler`, `{Action}Controller`, `{Action}Request`, `{Action}Resource` or `{Action}ConsoleCommand`, with no `*Job`.",
+          "applies_to": [
+            "Modules"
+          ],
+          "detect": {
+            "paths": [
+              "**/*Command.php",
+              "**/*Query.php",
+              "**/*Handler.php",
+              "**/*Controller.php",
+              "**/*Request.php",
+              "**/*Resource.php"
+            ]
+          },
+          "examples": {
+            "bad": "// Billing/Controller/IssueInvoiceController.php\n// Billing/Request/IssueInvoiceRequest.php\n// Billing/Message/IssueInvoiceCommand.php\n// Billing/Handler/IssueInvoiceCommandHandler.php\n// Billing/Resource/IssueInvoiceResource.php",
+            "good": "// Billing/IssueInvoice/IssueInvoiceController.php\n// Billing/IssueInvoice/IssueInvoiceRequest.php\n// Billing/IssueInvoice/IssueInvoiceCommand.php\n// Billing/IssueInvoice/IssueInvoiceCommandHandler.php\n// Billing/IssueInvoice/IssueInvoiceResource.php"
+          },
+          "lane_note": "Laravel counterpart: ARCH-005, ARCH-010 (vertical slice, no premature grouping), plus the suffix note.",
+          "status": "active"
+        },
+        {
+          "id": "SYM-011",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Slice pieces **MUST** be co-located in that slice's folder, and code **MUST NOT** be scattered across type-named folders (`Controller/`, `Request/`, `Resource/`, `Enum/`, `Event/`, `Entity/`, `Repository/`, `Message/`, `Dto/`) inside a module.",
+          "applies_to": [
+            "Modules"
+          ],
+          "detect": {
+            "paths": [
+              "**/Controller/**",
+              "**/Request/**",
+              "**/Resource/**",
+              "**/Enum/**",
+              "**/Event/**",
+              "**/Entity/**",
+              "**/Repository/**",
+              "**/Message/**",
+              "**/Dto/**"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a class whose namespace has one of those segments inside a module outside `Framework\\`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "// Billing/Controller/IssueInvoiceController.php\n// Billing/Enum/InvoiceStatus.php\n// Billing/Event/InvoiceIssued.php\n// Billing/Entity/Invoice.php\n// Billing/Repository/InvoiceRepository.php",
+            "good": "// Billing/IssueInvoice/IssueInvoiceController.php\n// Billing/IssueInvoice/InvoiceStatus.php\n// Billing/IssueInvoice/InvoiceIssued.php\n// Billing/IssueInvoice/Invoice.php\n// Billing/IssueInvoice/InvoiceRepository.php"
+          },
+          "lane_note": "Laravel counterpart: ARCH-006, ARCH-007 (folder half) (co-location, entity concept folders).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-012",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every command and query **MUST** have exactly one handler, bound to its bus explicitly with `#[AsMessageHandler(bus: 'command.bus')]` or `#[AsMessageHandler(bus: 'query.bus')]`; Messenger has no option enforcing one handler, so a check fails a message handled twice.",
+          "applies_to": [
+            "Commands and queries"
+          ],
+          "detect": {
+            "signals": [
+              "#[AsMessageHandler",
+              "command.bus",
+              "query.bus"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: a handler class without `#[AsMessageHandler(bus: ...)]`, or one message class handled by two handlers, fails. Messenger has no bus option for this.",
+              "status": "draft"
+            },
+            {
+              "tool": "PHPArkitect",
+              "coverage": "A class with `#[AsMessageHandler]` must name a bus (HaveAttribute exists; the one-handler count needs a custom expression).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}\n\n// a second handler for the same command\n#[AsMessageHandler]\nfinal readonly class AuditInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}",
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}\n\n// one handler per command; the audit runs as a listener on event.bus"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus",
+            "https://codyssey.dev/quick-tips/use-messenger-for-commands-not-just-async-jobs"
+          ],
+          "lane_note": "Laravel counterpart: ARCH-009, PERS-009 (explicit handler wiring, no auto-discovery).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-013",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A message handler **MUST NOT** be a pass-through whose body only dispatches an event with no preceding mutation.",
+          "applies_to": [
+            "Message handlers"
+          ],
+          "detect": {
+            "signals": [
+              "->dispatch(new"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule on the `__invoke()` body (does not exist yet): body is one `dispatch()` call with no write before it.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CancelSubscriptionCommandHandler\n{\n    public function __construct(#[Target('event.bus')] private MessageBusInterface $eventBus) {}\n\n    public function __invoke(CancelSubscriptionCommand $command): void\n    {\n        $this->eventBus->dispatch(new SubscriptionCancelled($command->subscriptionId));\n    }\n}",
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CancelSubscriptionCommandHandler\n{\n    public function __construct(\n        private SubscriptionRepository $subscriptions,\n        #[Target('event.bus')] private MessageBusInterface $eventBus,\n    ) {}\n\n    public function __invoke(CancelSubscriptionCommand $command): void\n    {\n        $this->subscriptions->get($command->subscriptionId)->cancel();\n        $this->eventBus->dispatch(new SubscriptionCancelled($command->subscriptionId), [new DispatchAfterCurrentBusStamp()]);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-013 (no pass-through handler).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-014",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Application-layer classes (handlers, listeners, console commands) **MUST** be orchestrators that resolve dependencies, delegate to an entity or domain-service method, and dispatch; they **MUST NOT** hold business logic, mutate entity state directly, create related rows inline, or call an external system directly; guard clauses and payload parsing **MAY** stay.",
+          "applies_to": [
+            "Message handlers",
+            "Listeners",
+            "Console commands"
+          ],
+          "examples": {
+            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    if ($subscription->status === SubscriptionStatus::Cancelled) {\n        throw new SubscriptionAlreadyCancelled(sprintf('Subscription %s is already cancelled.', $subscription->id->toRfc4122()));\n    }\n    $subscription->status = SubscriptionStatus::Cancelled;\n    $subscription->cancelledAt = $this->clock->now();\n}",
+            "good": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n\n    $subscription->cancel($this->clock->now());\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-001 to ORCH-004 (orchestrator pattern).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-015",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Controllers, handlers, listeners, messages (`*Command`, `*Query`), events, `*Request` and `*Resource` DTOs **MUST** be `final readonly class`; entities and console commands extending a non-readonly base **MAY** drop `readonly`.",
+          "applies_to": [
+            "Controllers",
+            "Handlers",
+            "Listeners",
+            "Messages",
+            "Events",
+            "DTOs"
+          ],
+          "allowed_in": [
+            "`#[ORM\\Entity]` classes",
+            "Console commands extending a non-readonly base"
+          ],
+          "detect": {
+            "signals": [
+              "final readonly class"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes with these suffixes must be final and readonly; skip classes with `#[ORM\\Entity]`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "class IssueInvoiceCommand\n{\n    public function __construct(public Uuid $invoiceId) {}\n}\n\nclass IssueInvoiceCommandHandler\n{\n    public function __invoke(IssueInvoiceCommand $command): void { /* ... */ }\n}",
+            "good": "final readonly class IssueInvoiceCommand\n{\n    public function __construct(public Uuid $invoiceId) {}\n}\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __invoke(IssueInvoiceCommand $command): void { /* ... */ }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-012 (final readonly classes).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-016",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A message handler **MUST** be named `{Action}CommandHandler` or `{Action}QueryHandler` and expose exactly one public method, `__invoke(Message)`.",
+          "applies_to": [
+            "Message handlers"
+          ],
+          "detect": {
+            "signals": [
+              "#[AsMessageHandler",
+              "__invoke"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Handler classes match `*CommandHandler` or `*QueryHandler` (HaveNameMatching); the single public method needs a custom expression.",
+              "status": "draft"
+            },
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: exactly one public method, named `__invoke`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus', method: 'handle')]\nfinal readonly class CreateInvoiceHandler\n{\n    public function handle(CreateInvoiceCommand $command): void { /* ... */ }\n\n    public function rollback(Uuid $invoiceId): void { /* ... */ }\n}",
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-019 (one public handler method).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-017",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A query handler **MUST** return a typed `*Result` DTO, never an array, and a command handler **MUST** return nothing (`void`), so the caller creates the id and puts it in the command.",
+          "applies_to": [
+            "Query handlers",
+            "Command handlers"
+          ],
+          "detect": {
+            "signals": [
+              "__invoke(",
+              ": array",
+              ": void"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Return type of `__invoke` on `query.bus` handlers is a class, not `array`; on `command.bus` handlers it is `void`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'query.bus')]\nfinal readonly class GetInvoiceSummaryQueryHandler\n{\n    public function __invoke(GetInvoiceSummaryQuery $query): array { /* ... */ }\n}\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): int { /* ... */ }\n}",
+            "good": "#[AsMessageHandler(bus: 'query.bus')]\nfinal readonly class GetInvoiceSummaryQueryHandler\n{\n    public function __invoke(GetInvoiceSummaryQuery $query): InvoiceSummaryResult { /* ... */ }\n}\n\n// the caller creates the id: new CreateInvoiceCommand(Uuid::v7(), ...)\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-020 (typed Result DTOs).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-018",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Domain events **MUST** be dispatched from the application layer on `event.bus`, and an entity **MUST NOT** dispatch events or receive an `EventDispatcherInterface` or a message bus.",
+          "applies_to": [
+            "Entities",
+            "Domain events"
+          ],
+          "detect": {
+            "signals": [
+              "EventDispatcherInterface",
+              "MessageBusInterface",
+              "#[ORM\\Entity]"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes with `#[ORM\\Entity]` must not depend on `EventDispatcherInterface`, `MessageBusInterface`, `CommandBus` or `QueryBus`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[ORM\\Entity]\nclass Subscription\n{\n    public function cancel(MessageBusInterface $eventBus): void\n    {\n        $this->status = SubscriptionStatus::Cancelled;\n        $eventBus->dispatch(new SubscriptionCancelled($this->id));\n    }\n}",
+            "good": "#[ORM\\Entity]\nclass Subscription\n{\n    public function cancel(): void\n    {\n        $this->status = SubscriptionStatus::Cancelled;\n    }\n}\n\n// the handler dispatches SubscriptionCancelled on event.bus after calling cancel()"
+          },
+          "lane_note": "Laravel counterpart: ORCH-026 (events from the application layer).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-019",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Audit and history records **MUST NOT** be written inline in handlers or entity methods; a state change **MUST** dispatch a domain event and a dedicated `final readonly` listener on `event.bus` **MUST** record it.",
+          "applies_to": [
+            "Message handlers",
+            "Entities",
+            "Listeners"
+          ],
+          "examples": {
+            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    $subscription->cancel();\n    $this->auditEntries->add(new AuditEntry($subscription->id, 'cancelled'));\n}",
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SubscriptionCancelledAuditListener\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    // event.bus has no doctrine_transaction, so a command on command.bus persists and flushes\n    public function __invoke(SubscriptionCancelled $event): void\n    {\n        $this->commandBus->dispatch(new RecordAuditEntryCommand(Uuid::v7(), $event->subscriptionId, 'cancelled'));\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-027 (audit through a listener).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-020",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Mail **MUST** be sent from a listener through `MailerInterface`, with `SendEmailMessage` routed to the async transport, never inline from a handler.",
+          "applies_to": [
+            "Listeners",
+            "Mail"
+          ],
+          "detect": {
+            "signals": [
+              "MailerInterface",
+              "SendEmailMessage"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes depending on `MailerInterface` must be listeners.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class IssueInvoiceCommandHandler\n{\n    public function __construct(private MailerInterface $mailer) {}\n\n    public function __invoke(IssueInvoiceCommand $command): void\n    {\n        $this->mailer->send((new Email())->to($command->customerEmail)->subject('Invoice')->text('...'));\n    }\n}",
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __construct(private MailerInterface $mailer) {}\n\n    public function __invoke(InvoiceIssued $event): void\n    {\n        $this->mailer->send((new Email())->to($event->customerEmail)->subject('Invoice')->text('...'));\n    }\n}\n// messenger.yaml routing: 'Symfony\\Component\\Mailer\\Messenger\\SendEmailMessage': async"
+          },
+          "lane_note": "Laravel counterpart: ORCH-028 (mail through a queued listener).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-021",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Messages and events **MUST NOT** hold Doctrine entities; they **MUST** carry ids, scalars, value objects or a small DTO.",
+          "applies_to": [
+            "Commands",
+            "Queries",
+            "Events"
+          ],
+          "detect": {
+            "signals": [
+              "#[ORM\\Entity]"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Message and event classes must not depend on classes with `#[ORM\\Entity]` (PHPStan custom rule is the alternative for constructor types).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class SubscriptionCancelled\n{\n    public function __construct(public Subscription $subscription) {}\n}",
+            "good": "final readonly class SubscriptionCancelled\n{\n    public function __construct(public Uuid $subscriptionId) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-032, MD-022 (jobs and events carry ids, not models).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-022",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Events **MUST** be past-tense facts dispatched on `event.bus` with `DispatchAfterCurrentBusStamp`, so listeners run after the command's transaction commits and never run if the handler throws.",
+          "why": "so listeners run after the command's transaction commits and never run if the handler throws",
+          "applies_to": [
+            "Domain events"
+          ],
+          "detect": {
+            "signals": [
+              "DispatchAfterCurrentBusStamp"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Event naming per the owner's call (D22); the stamp itself is not visible to PHPArkitect.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$subscription->cancel();\n\n// no stamp: listeners run inside the command's transaction, before commit\n$this->eventBus->dispatch(new SubscriptionCancelled($command->subscriptionId));",
+            "good": "$subscription->cancel();\n\n// listeners run after the command's transaction commits\n$this->eventBus->dispatch(\n    new SubscriptionCancelled($command->subscriptionId),\n    [new DispatchAfterCurrentBusStamp()],\n);"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/event-bus"
+          ],
+          "lane_note": "Laravel counterpart: MD-021 (past-tense events, after the state change).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-023",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Events **MUST** be `final readonly`, constructor only, with no query or business helper methods.",
+          "applies_to": [
+            "Domain events"
+          ],
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: an event class declares no method besides the constructor.",
+              "status": "draft"
+            },
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Event classes are final and readonly; skip `#[ORM\\Entity]`.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "class InvoiceIssued\n{\n    public function __construct(public Uuid $invoiceId, public int $totalInCents) {}\n\n    public function isLarge(): bool\n    {\n        return $this->totalInCents > 100_000;\n    }\n}",
+            "good": "final readonly class InvoiceIssued\n{\n    public function __construct(public Uuid $invoiceId, public int $totalInCents) {}\n}\n\n// the listener decides whether the total is large"
+          },
+          "lane_note": "Laravel counterpart: MD-023 (events are pure data).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-024",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Commands, queries and events **MUST** use separate Messenger buses (`command.bus`, `query.bus`, `event.bus`), each with its own middleware.",
+          "applies_to": [
+            "Messenger configuration"
+          ],
+          "detect": {
+            "signals": [
+              "command.bus",
+              "query.bus",
+              "event.bus"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class IssueInvoiceController\n{\n    public function __construct(private MessageBusInterface $bus) {}\n\n    public function __invoke(IssueInvoiceRequest $request): Response\n    {\n        $this->bus->dispatch(new IssueInvoiceCommand(/* ... */));\n        $summary = $this->bus->dispatch(new GetInvoiceSummaryQuery(/* ... */));\n    }\n}",
+            "good": "#[Route('/invoices', name: 'billing.invoice.issue', methods: ['POST'])]\nfinal readonly class IssueInvoiceController\n{\n    public function __construct(private CommandBus $commandBus, private QueryBus $queryBus) {}\n\n    public function __invoke(#[MapRequestPayload] IssueInvoiceRequest $request): Response\n    {\n        $this->commandBus->dispatch(new IssueInvoiceCommand(/* ... */));\n        $summary = $this->queryBus->ask(new GetInvoiceSummaryQuery(/* ... */));\n\n        return new JsonResponse(IssueInvoiceResource::from($summary), Response::HTTP_CREATED);\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/query-bus",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/event-bus"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-025",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "The event bus **MUST** set `allow_no_handlers: true` and register one `#[AsMessageHandler(bus: 'event.bus')]` handler per listener.",
+          "applies_to": [
+            "Event listeners",
+            "Messenger configuration"
+          ],
+          "detect": {
+            "signals": [
+              "allow_no_handlers",
+              "#[AsMessageHandler(bus: 'event.bus')]"
+            ]
+          },
+          "examples": {
+            "bad": "// messenger.yaml: event.bus has no allow_no_handlers, so dispatching an event nobody handles throws NoHandlerForMessageException\n// no bus named: this listener is also registered on command.bus and query.bus\n#[AsMessageHandler]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __invoke(InvoiceIssued $event): void { /* ... */ }\n}",
+            "good": "// messenger.yaml: framework.messenger.buses.event.bus.default_middleware.allow_no_handlers: true\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class InvoiceIssuedMailListener\n{\n    public function __invoke(InvoiceIssued $event): void { /* ... */ }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/event-bus"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-026",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "The command bus **SHOULD** include the `validation` middleware, with `Assert` constraints on command classes that no `*Request` validates (console, scheduler, consumers), so a constraint is declared once and invalid input never reaches a handler.",
+          "applies_to": [
+            "Commands",
+            "Messenger configuration"
+          ],
+          "detect": {
+            "signals": [
+              "validation",
+              "#[Assert\\"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class ImportInvoicesCommand // dispatched by a console command, no *Request validates it\n{\n    public function __construct(public Uuid $batchId, public int $limit) {}\n}\n\n// handler: if ($command->limit <= 0) { throw new InvalidArgumentException(); }",
+            "good": "final readonly class ImportInvoicesCommand // dispatched by a console command, no *Request validates it\n{\n    public function __construct(\n        public Uuid $batchId,\n        #[Assert\\Positive]\n        public int $limit,\n    ) {}\n}\n// messenger.yaml: command.bus middleware: [validation, doctrine_transaction]"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation",
+            "https://codyssey.dev/quick-tips/use-messenger-for-commands-not-just-async-jobs"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-027",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every write **MUST** run in one transaction opened by the `doctrine_transaction` middleware on `command.bus`; handlers, controllers, aggregates and domain services **MUST NOT** open, commit or flush a transaction themselves.",
+          "applies_to": [
+            "Command handlers",
+            "Controllers",
+            "Aggregates",
+            "Domain services"
+          ],
+          "detect": {
+            "signals": [
+              "wrapInTransaction(",
+              "->flush()",
+              "beginTransaction("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags `flush()`, `wrapInTransaction()`, `beginTransaction()` and `commit()` calls in handlers, controllers, entities and domain services.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(IssueInvoiceCommand $command): void\n{\n    $this->entityManager->wrapInTransaction(function () use ($command): void {\n        $this->invoices->add(Invoice::issue($command->invoiceId, $command->totalInCents));\n    });\n}",
+            "good": "public function __invoke(IssueInvoiceCommand $command): void\n{\n    // command.bus runs doctrine_transaction: it flushes and commits after this returns\n    $this->invoices->add(Invoice::issue($command->invoiceId, $command->totalInCents));\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/use-messenger-for-commands-not-just-async-jobs"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-028",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A `catch (DomainException)` around `dispatch()` **MUST NOT** be used, because Messenger wraps handler exceptions in `HandlerFailedException`; code dispatching on a synchronous bus **MUST** unwrap it so the domain exception reaches the exception listener.",
+          "why": "so the domain exception reaches the exception listener",
+          "applies_to": [
+            "Synchronous buses",
+            "Dispatch callers"
+          ],
+          "detect": {
+            "signals": [
+              "HandlerFailedException",
+              "getWrappedExceptions("
+            ]
+          },
+          "examples": {
+            "bad": "try {\n    $this->commandBus->dispatch($command);\n} catch (SubscriptionAlreadyCancelled $e) {\n    // never runs: the exception arrives as a HandlerFailedException\n}",
+            "good": "public function dispatch(object $command): void\n{\n    try {\n        $this->bus->dispatch($command);\n    } catch (HandlerFailedException $e) {\n        throw $e->getPrevious() ?? $e;\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions"
+          ],
+          "lane_note": "Laravel counterpart: ORCH-024 (second sentence only).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-029",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A handler **MUST NOT** populate an entity from a command or request DTO wholesale (serializer `OBJECT_TO_POPULATE`, ObjectMapper, array hydration); it **MUST** list the fields it writes.",
+          "applies_to": [
+            "Message handlers"
+          ],
+          "detect": {
+            "signals": [
+              "OBJECT_TO_POPULATE",
+              "ObjectMapper",
+              "->map("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: flag `OBJECT_TO_POPULATE`, `ObjectMapperInterface::map()` and array hydration inside handler classes.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(UpdateInvoiceCommand $command): void\n{\n    $invoice = $this->invoices->get($command->invoiceId);\n    $this->objectMapper->map($command, $invoice);\n}",
+            "good": "public function __invoke(UpdateInvoiceCommand $command): void\n{\n    $invoice = $this->invoices->get($command->invoiceId);\n    $invoice->changeDueDate($command->dueDate);\n    $invoice->rename($command->reference);\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-015 (no validated() spread into create or update).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Controllers",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-030",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Controllers **MUST NOT** extend `AbstractController`; a `readonly` class cannot extend the non-readonly `AbstractController`, so a controller injects any service it needs explicitly.",
+          "why": "a `readonly` class cannot extend the non-readonly `AbstractController`",
+          "detect": {
+            "paths": [
+              "**/*Controller.php"
+            ],
+            "signals": [
+              "extends AbstractController"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a class named *Controller that extends Symfony\\Bundle\\FrameworkBundle\\Controller\\AbstractController.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\nfinal class ShowOrderController extends AbstractController\n{\n    public function __invoke(string $id): JsonResponse\n    {\n        return $this->json(['id' => $id]);\n    }\n}",
+            "good": "#[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\nfinal readonly class ShowOrderController\n{\n    public function __construct(private QueryBus $queries) {}\n\n    public function __invoke(string $id): JsonResponse\n    {\n        $result = $this->queries->ask(new GetOrderQuery($id));\n\n        return new JsonResponse(OrderResource::fromResult($result), Response::HTTP_OK);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-013 (no framework base controller).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-031",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Controllers **MUST** be single-action (`__invoke()` only) with `#[Route]` on the class, never multi-action controllers.",
+          "detect": {
+            "paths": [
+              "**/*Controller.php"
+            ],
+            "signals": [
+              "#[Route",
+              "__invoke"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "A custom expression fails a *Controller class with a public method other than __invoke; no built-in method-count expression exists.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final class OrderController\n{\n    #[Route('/api/orders', name: 'commerce.orders.create', methods: ['POST'])]\n    public function create(): Response {}\n\n    #[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\n    public function show(string $id): Response {}\n}",
+            "good": "#[Route('/api/orders', name: 'commerce.orders.create', methods: ['POST'])]\nfinal readonly class CreateOrderController\n{\n    public function __invoke(): Response {}\n}\n\n#[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\nfinal readonly class ShowOrderController\n{\n    public function __invoke(string $id): Response {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-018 (single-action controllers).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-032",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A controller **MUST NOT** call or inject another controller, including through `forward()`; shared work moves into a handler that both controllers call through a bus.",
+          "detect": {
+            "paths": [
+              "**/*Controller.php"
+            ],
+            "signals": [
+              "forward("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a *Controller class that depends on another *Controller class.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class ReorderController\n{\n    public function __construct(private CreateOrderController $create) {}\n\n    public function __invoke(Request $request): Response\n    {\n        return ($this->create)($request);\n    }\n}",
+            "good": "final readonly class ReorderController\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(#[MapRequestPayload] ReorderRequest $request): Response\n    {\n        $this->commands->dispatch(new CreateOrderCommand(Uuid::v7()->toRfc4122(), $request->customerId, $request->quantity));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-022 (controller does not call controller).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-033",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Each user intent **MUST** have its own route, and an endpoint **MUST NOT** pick its action from the request body.",
+          "detect": {
+            "signals": [
+              "#[Route",
+              "match ($request->action)"
+            ]
+          },
+          "examples": {
+            "bad": "#[Route('/api/orders/{id}', name: 'commerce.orders.update', methods: ['POST'])]\nfinal readonly class UpdateOrderController\n{\n    public function __invoke(string $id, #[MapRequestPayload] UpdateOrderRequest $request): Response\n    {\n        match ($request->action) {\n            'cancel' => $this->commands->dispatch(new CancelOrderCommand($id)),\n            'ship' => $this->commands->dispatch(new ShipOrderCommand($id)),\n        };\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}",
+            "good": "#[Route('/api/orders/{id}/cancel', name: 'commerce.orders.cancel', methods: ['POST'])]\nfinal readonly class CancelOrderController\n{\n    public function __invoke(string $id): Response\n    {\n        $this->commands->dispatch(new CancelOrderCommand($id));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}\n\n#[Route('/api/orders/{id}/ship', name: 'commerce.orders.ship', methods: ['POST'])]\nfinal readonly class ShipOrderController {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-002 (one route per intent).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-034",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every route **MUST** be named `{module}.{resource}.{action}` through `#[Route(name:)]`; thin public one-off routes **MAY** use a single-segment name.",
+          "allowed_in": [
+            "thin public one-off routes (single-segment name)"
+          ],
+          "detect": {
+            "signals": [
+              "#[Route(",
+              "name:"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule reads the #[Route] attribute and fails a missing or non-matching name argument.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/orders', methods: ['POST'])]\nfinal readonly class CreateOrderController {}",
+            "good": "#[Route('/api/orders', name: 'commerce.orders.create', methods: ['POST'])]\nfinal readonly class CreateOrderController {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-003 (route naming).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-035",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Route parameters **MUST** be plain ids resolved inside the handler, and `#[MapEntity]` or an entity-typed controller argument **MUST NOT** be used.",
+          "detect": {
+            "signals": [
+              "#[MapEntity]",
+              "#[ORM\\Entity]"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a *Controller class that depends on a class carrying #[ORM\\Entity]; whether attribute arguments count as dependencies was not checked.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/orders/{id}/cancel', name: 'commerce.orders.cancel', methods: ['POST'])]\nfinal readonly class CancelOrderController\n{\n    public function __invoke(#[MapEntity] Order $order): Response {}\n}",
+            "good": "#[Route('/api/orders/{id}/cancel', name: 'commerce.orders.cancel', methods: ['POST'])]\nfinal readonly class CancelOrderController\n{\n    public function __invoke(string $id): Response\n    {\n        $this->commands->dispatch(new CancelOrderCommand($id));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-004 (no route-model binding).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-036",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Controllers **MUST NOT** call `persist()` or `flush()` and **SHOULD NOT** hold business rules; they turn the request into a command, dispatch it, and build the response.",
+          "detect": {
+            "paths": [
+              "**/*Controller.php"
+            ],
+            "signals": [
+              "->persist(",
+              "->flush("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a *Controller class that depends on Doctrine\\ORM\\EntityManagerInterface. It does not see business rules in the controller.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class CreateOrderController\n{\n    public function __construct(private EntityManagerInterface $em) {}\n\n    public function __invoke(#[MapRequestPayload] CreateOrderRequest $request): Response\n    {\n        $this->em->persist(new Order($request->customerId, $request->quantity));\n        $this->em->flush();\n\n        return new Response(null, Response::HTTP_CREATED);\n    }\n}",
+            "good": "final readonly class CreateOrderController\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(#[MapRequestPayload] CreateOrderRequest $request): Response\n    {\n        $this->commands->dispatch(new CreateOrderCommand(Uuid::v7()->toRfc4122(), $request->customerId, $request->quantity));\n\n        return new Response(null, Response::HTTP_CREATED);\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/use-messenger-for-commands-not-just-async-jobs"
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "HTTP API",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-037",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Each module **MUST** own its route file (`<module>-routes.php`), imported from `modules.php` with its `/api` prefix declared there.",
+          "detect": {
+            "paths": [
+              "**/*-routes.php",
+              "**/modules.php"
+            ],
+            "signals": [
+              "->import(",
+              "->prefix('/api')"
+            ]
+          },
+          "examples": {
+            "bad": "// config/routes/modules.php\nreturn static function (RoutingConfigurator $routes): void {\n    $routes->import(__DIR__.'/../../src/', 'attribute');\n};",
+            "good": "// config/routes/modules.php\nreturn static function (RoutingConfigurator $routes): void {\n    $routes->import(__DIR__.'/../../src/Billing/billing-routes.php')->prefix('/api');\n    $routes->import(__DIR__.'/../../src/Commerce/commerce-routes.php')->prefix('/api');\n};"
+          },
+          "lane_note": "Laravel counterpart: HTTP-001 (route file per module).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-038",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Abuse-prone endpoints (login, signup, email resend, password reset) **MUST** be rate limited: `login_throttling` on the login firewall, `#[RateLimit]` on the others.",
+          "applies_to": [
+            "login, signup, email resend and password reset endpoints"
+          ],
+          "detect": {
+            "signals": [
+              "#[RateLimit",
+              "login_throttling",
+              "framework.rate_limiter"
+            ]
+          },
+          "examples": {
+            "bad": "#[Route('/api/password-resets', name: 'identity.password_resets.create', methods: ['POST'])]\nfinal readonly class RequestPasswordResetController {}",
+            "good": "#[Route('/api/password-resets', name: 'identity.password_resets.create', methods: ['POST'])]\n#[RateLimit('password_reset')]\nfinal readonly class RequestPasswordResetController {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-007 (throttle on abuse-prone endpoints).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-039",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "HTTP input **MUST** be a `*Request` DTO bound with `#[MapRequestPayload]` or `#[MapQueryString]` and validated with `#[Assert\\...]` constraints, never an inline `$validator->validate()` call; `#[MapQueryString]` **MUST** set `validationFailedStatusCode: 422` because it defaults to 404, and authorization **MUST NOT** live in the DTO.",
+          "detect": {
+            "signals": [
+              "#[MapRequestPayload]",
+              "#[MapQueryString]",
+              "$validator->validate("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags ValidatorInterface injected into a *Controller class; it does not check which constraints a *Request carries.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(Request $request): JsonResponse\n{\n    $violations = $this->validator->validate($request->toArray(), new Assert\\Collection([\n        'customerId' => new Assert\\NotBlank(),\n        'quantity' => new Assert\\Positive(),\n    ]));\n}",
+            "good": "final readonly class CreateOrderRequest\n{\n    public function __construct(\n        #[Assert\\Uuid] public string $customerId,\n        #[Assert\\Positive] public int $quantity,\n    ) {}\n}\n\npublic function __invoke(#[MapRequestPayload] CreateOrderRequest $request): JsonResponse {}\n// a GET controller reading the query string:\npublic function __invoke(#[MapQueryString(validationFailedStatusCode: 422)] ListOrdersRequest $request): JsonResponse {}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation"
+          ],
+          "lane_note": "Laravel counterpart: ORCH-025 (validation in request classes).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-040",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Each write action **MUST** have its own `*Request` DTO, and a `*Request` **MUST NOT** serve several actions.",
+          "detect": {
+            "paths": [
+              "**/*Request.php"
+            ],
+            "signals": [
+              "#[MapRequestPayload]"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class OrderRequest\n{\n    public function __construct(public ?string $customerId = null, public ?string $reason = null) {}\n}\n// used by both CreateOrderController and CancelOrderController",
+            "good": "final readonly class CreateOrderRequest\n{\n    public function __construct(public string $customerId) {}\n}\n\nfinal readonly class CancelOrderRequest\n{\n    public function __construct(public string $reason) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-009 (one request class per write action).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-041",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every field the handler reads **MUST** be a required constructor parameter of the `*Request`, or optional with a default written in the constructor signature; a handler-read field **MUST NOT** be optional by accident (an uninitialized property).",
+          "detect": {
+            "signals": [
+              "#[MapRequestPayload]",
+              "= null"
+            ]
+          },
+          "examples": {
+            "bad": "final class CreateOrderRequest\n{\n    public string $customerId;\n    public ?string $note;\n}",
+            "good": "final readonly class CreateOrderRequest\n{\n    public function __construct(\n        public string $customerId,\n        public ?string $note = null,\n    ) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-010 (fields required or explicit default).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-042",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Fields an endpoint ignores **SHOULD** be rejected with `AbstractNormalizer::ALLOW_EXTRA_ATTRIBUTES => false` in the payload `serializationContext`, so clients get a 422 instead of a silent success.",
+          "detect": {
+            "signals": [
+              "ALLOW_EXTRA_ATTRIBUTES",
+              "#[MapRequestPayload"
+            ]
+          },
+          "examples": {
+            "bad": "public function __invoke(#[MapRequestPayload] CreateOrderRequest $request): Response\n{\n    // an unknown \"coupn\" field is ignored and the call succeeds\n}",
+            "good": "public function __invoke(\n    #[MapRequestPayload(serializationContext: [AbstractNormalizer::ALLOW_EXTRA_ATTRIBUTES => false])]\n    CreateOrderRequest $request,\n): Response {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-011 (ignored fields prohibited).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-043",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Date inputs **MUST** use an explicit format, `#[Assert\\Date]` on a `Y-m-d` string or `DateTimeNormalizer::FORMAT_KEY` in the payload `serializationContext`, never the loose default parser.",
+          "detect": {
+            "signals": [
+              "FORMAT_KEY",
+              "#[Assert\\Date]"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class ListOrdersRequest\n{\n    public function __construct(public \\DateTimeImmutable $from) {}\n}\n\npublic function __invoke(#[MapQueryString] ListOrdersRequest $request): Response {}",
+            "good": "final readonly class ListOrdersRequest\n{\n    public function __construct(public \\DateTimeImmutable $from) {}\n}\n\npublic function __invoke(\n    #[MapQueryString(\n        serializationContext: [DateTimeNormalizer::FORMAT_KEY => '!Y-m-d'],\n        validationFailedStatusCode: 422,\n    )]\n    ListOrdersRequest $request,\n): Response {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-012 (explicit date format).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-044",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Client-chosen sort and filter fields **MUST** arrive as backed-enum `*Request` properties mapped to columns you chose to expose; raw input **MUST NOT** reach `orderBy()`, `addOrderBy()` or `where()` as a field name.",
+          "detect": {
+            "signals": [
+              "#[MapQueryString]",
+              "addOrderBy(",
+              "orderBy("
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class ListOrdersRequest\n{\n    public function __construct(public string $sort = 'createdAt') {}\n}\n\n$qb->addOrderBy('o.'.$query->sort);",
+            "good": "enum OrderSort: string\n{\n    case CreatedAt = 'created_at';\n    case Total = 'total';\n\n    public function column(): string\n    {\n        return match ($this) {\n            self::CreatedAt => 'o.createdAt',\n            self::Total => 'o.totalCents',\n        };\n    }\n}\n\n$qb->addOrderBy($query->sort->column());"
+          },
+          "lane_note": "Laravel counterpart: HTTP-013 (sort and filter columns via enum).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-045",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A `#[Assert\\...]` constraint **MUST** stay on the `*Request` property even when a value object also enforces it, so form users get a field-level 422 instead of a 500.",
+          "detect": {
+            "signals": [
+              "#[Assert\\"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class RegisterRequest\n{\n    public function __construct(public string $email) {}\n}\n// new Email($request->email) throws a domain exception, the client sees a 500",
+            "good": "final readonly class RegisterRequest\n{\n    public function __construct(#[Assert\\Email] public string $email) {}\n}\n// the Email value object still enforces the invariant"
+          },
+          "lane_note": "Laravel counterpart: HTTP-014 (field rule stays when a value object enforces it).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-046",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Create **MUST** return 201 (`Response::HTTP_CREATED`); a create that returns 200 is a violation.",
+          "detect": {
+            "signals": [
+              "HTTP_CREATED",
+              "201"
+            ]
+          },
+          "examples": {
+            "bad": "$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId, $request->quantity));\n\nreturn new JsonResponse(new OrderCreatedResource($id));",
+            "good": "$id = Uuid::v7()->toRfc4122();\n$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId, $request->quantity));\n\nreturn new JsonResponse(new OrderCreatedResource($id), Response::HTTP_CREATED);"
+          },
+          "lane_note": "Laravel counterpart: HTTP-016 (create returns 201).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-047",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "State changes and deletes **MUST** return 204 with no body; reads return 200.",
+          "detect": {
+            "signals": [
+              "HTTP_NO_CONTENT"
+            ]
+          },
+          "examples": {
+            "bad": "$this->commands->dispatch(new CancelOrderCommand($id));\n\nreturn new JsonResponse(['status' => 'cancelled']);",
+            "good": "$this->commands->dispatch(new CancelOrderCommand($id));\n\nreturn new Response(null, Response::HTTP_NO_CONTENT);"
+          },
+          "lane_note": "Laravel counterpart: HTTP-017 (state changes and deletes return 204).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-048",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Controllers **MUST** return a `*Resource` in a `JsonResponse` or `Response` with an explicit status, and **MUST NOT** hand-assemble arrays; dedicated `*Resource` classes build the body.",
+          "detect": {
+            "signals": [
+              "new JsonResponse([",
+              "Resource"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule flags an array literal passed to JsonResponse in a *Controller class and a __invoke return type other than Response.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$result = $this->queries->ask(new GetOrderQuery($id));\n\nreturn new JsonResponse(['id' => $result->id, 'total' => $result->totalCents]);",
+            "good": "$result = $this->queries->ask(new GetOrderQuery($id));\n\nreturn new JsonResponse(OrderResource::fromResult($result), Response::HTTP_OK);"
+          },
+          "lane_note": "Laravel counterpart: ORCH-023, HTTP-018 (typed resource with explicit status).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-049",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A `*Resource` **MUST NOT** map a nested collection inline; nested relations **MUST** get their own `*Resource` class.",
+          "detect": {
+            "signals": [
+              "array_map(",
+              "->map("
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class OrderResource\n{\n    public static function fromResult(OrderResult $r): self\n    {\n        return new self($r->id, array_map(fn (ItemResult $i) => ['sku' => $i->sku], $r->items));\n    }\n}",
+            "good": "final readonly class OrderItemResource\n{\n    public function __construct(public string $sku) {}\n\n    /** @param list<ItemResult> $items @return list<self> */\n    public static function fromList(array $items): array\n    {\n        return array_map(fn (ItemResult $i) => new self($i->sku), $items);\n    }\n}\n\n// in OrderResource::fromResult(): OrderItemResource::fromList($r->items)"
+          },
+          "lane_note": "Laravel counterpart: HTTP-019 (no manual collection map in a resource).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-050",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A `*Resource` **MUST** be built from the typed Result DTO the handler returns through `QueryBus::ask()`, never from array keys.",
+          "detect": {
+            "signals": [
+              "QueryBus::ask",
+              "$result['"
+            ]
+          },
+          "examples": {
+            "bad": "$data = $this->queries->ask(new GetOrderQuery($id));\n\nreturn new JsonResponse(new OrderResource($data['id'], $data['total']), Response::HTTP_OK);",
+            "good": "/** @var OrderResult $result */\n$result = $this->queries->ask(new GetOrderQuery($id));\n\nreturn new JsonResponse(OrderResource::fromResult($result), Response::HTTP_OK);"
+          },
+          "lane_note": "Laravel counterpart: HTTP-020 (resource reads typed properties).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-051",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Response keys **MUST** be snake_case, a single object **MUST** be wrapped in `data`, collections **MUST** add `meta` and `links`, and errors **MUST** use the RFC 7807 problem details shape Symfony emits (`type`, `title`, `status`, `detail`).",
+          "detect": {
+            "signals": [
+              "data",
+              "meta",
+              "links",
+              "application/problem+json"
+            ]
+          },
+          "examples": {
+            "bad": "// camelCase keys, no data envelope\nreturn new JsonResponse(['orderId' => $id, 'createdAt' => $createdAt]);\n\n// custom error shape instead of RFC 7807\nreturn new JsonResponse(['error' => 'Order not found'], 404);",
+            "good": "// success: a *Resource builds the body, snake_case keys inside the data envelope\nreturn new JsonResponse(new OrderResource($orderResult), Response::HTTP_OK); // {\"data\": {\"order_id\": \"...\", \"created_at\": \"...\"}}\n\n// collection: the resource adds meta and links\nreturn new JsonResponse(new OrderCollectionResource($orderResults, $total, $nextPage), Response::HTTP_OK);\n\n// error: throw a product exception marked #[WithHttpStatus(404)] and let the\n// serializer's ProblemNormalizer render the RFC 7807 body (default context, production)\nthrow new OrderNotFoundException($id);\n// {\"type\": \"https://tools.ietf.org/html/rfc2616#section-10\", \"title\": \"An error occurred\", \"status\": 404, \"detail\": \"Not Found\"}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-021 (response envelope and keys).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-052",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Dates **MUST** serialize as ISO 8601 with `format(\\DATE_ATOM)` or the default `DateTimeNormalizer`.",
+          "detect": {
+            "signals": [
+              "DATE_ATOM",
+              "DateTimeNormalizer"
+            ]
+          },
+          "examples": {
+            "bad": "return ['data' => ['created_at' => $this->createdAt->format('d/m/Y H:i')]];",
+            "good": "return ['data' => ['created_at' => $this->createdAt->format(\\DATE_ATOM)]];"
+          },
+          "lane_note": "Laravel counterpart: HTTP-022 (ISO 8601 dates).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-053",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every API controller **MUST** carry attribute-driven OpenAPI documentation (`#[OA\\Response]` and the like), with a matching `#[OA\\Parameter]` for every route parameter.",
+          "applies_to": [
+            "API controllers"
+          ],
+          "detect": {
+            "signals": [
+              "#[OA\\",
+              "nelmio/api-doc-bundle"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule fails a #[Route] controller with no #[OA\\...] attribute and a route parameter with no #[OA\\Parameter].",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\nfinal readonly class ShowOrderController {}",
+            "good": "#[Route('/api/orders/{id}', name: 'commerce.orders.show', methods: ['GET'])]\n#[OA\\Parameter(name: 'id', in: 'path', required: true, schema: new OA\\Schema(type: 'string'))]\n#[OA\\Response(response: 200, description: 'The order', content: new OA\\JsonContent(ref: new Model(type: OrderResource::class)))]\nfinal readonly class ShowOrderController {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-024, HTTP-026 (documented endpoints, route parameters).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-054",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "The documented response example **MUST** match the `*Resource` output shape, with realistic data.",
+          "detect": {
+            "signals": [
+              "#[OA\\Response"
+            ]
+          },
+          "examples": {
+            "bad": "// OrderResource emits data.order_id and data.total_cents\n#[OA\\Response(response: 200, content: new OA\\JsonContent(example: ['id' => 'string', 'total' => 0]))]",
+            "good": "// OrderResource emits data.order_id and data.total_cents\n#[OA\\Response(response: 200, content: new OA\\JsonContent(example: [\n    'data' => ['order_id' => '0192f3a0-7b1e-7c3a-9d52-1c2f4a6b8e10', 'total_cents' => 1250],\n]))]"
+          },
+          "lane_note": "Laravel counterpart: HTTP-025 (documented example matches the resource).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-055",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Webhook routes **MUST** live in their own route file (or be mounted by the Webhook component), behind signature verification, on an entry open to the provider (`PUBLIC_ACCESS`), and **MUST NOT** sit behind user authentication.",
+          "applies_to": [
+            "webhook routes"
+          ],
+          "detect": {
+            "paths": [
+              "**/webhook-routes.php"
+            ],
+            "signals": [
+              "RequestParserInterface",
+              "PUBLIC_ACCESS"
+            ]
+          },
+          "examples": {
+            "bad": "#[Route('/webhooks/payments', name: 'payments.webhook.receive', methods: ['POST'])]\n#[IsGranted('IS_AUTHENTICATED_FULLY')]\nfinal readonly class ReceivePaymentWebhookController {}",
+            "good": "#[Route('/webhooks/payments', name: 'payments.webhook.receive', methods: ['POST'])]\nfinal readonly class ReceivePaymentWebhookController\n{\n    public function __invoke(Request $request): Response\n    {\n        if (!$this->signatures->isValid($request->getContent(), (string) $request->headers->get('X-Signature'))) {\n            return new Response(null, Response::HTTP_UNAUTHORIZED);\n        }\n\n        $this->commands->dispatch(new ProcessPaymentWebhookCommand($request->getContent()));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-027 (webhook routes).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-056",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Webhook processing **MUST** be dispatched to an async transport and **MUST** be idempotent: check an idempotency key against a tracking record first, no-op on repeats, and record the outcome so the tracking record always settles.",
+          "applies_to": [
+            "webhook handlers"
+          ],
+          "detect": {
+            "signals": [
+              "markProcessed()",
+              "markFailed(",
+              "#[AsMessage("
+            ]
+          },
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class ProcessPaymentWebhookCommandHandler\n{\n    public function __invoke(ProcessPaymentWebhookCommand $command): void\n    {\n        $this->payments->applyEvent($command->payload);\n    }\n}",
+            "good": "// ProcessPaymentWebhookCommand carries #[AsMessage('async')]\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class ProcessPaymentWebhookCommandHandler\n{\n    public function __invoke(ProcessPaymentWebhookCommand $command): void\n    {\n        $event = $this->webhookEvents->getByKey($command->eventId);\n        if ($event->isProcessed()) {\n            return;\n        }\n        $this->payments->applyEvent($command->payload);\n        $event->markProcessed();\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-028 (webhook processing queued and idempotent).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-057",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Controllers **MUST NOT** try/catch domain exceptions; each module **MUST** have a base `*Exception`, and its concrete domain exceptions extend it and carry `#[WithHttpStatus]` so they render themselves.",
+          "detect": {
+            "signals": [
+              "#[WithHttpStatus",
+              "HttpExceptionInterface",
+              "catch ("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a product *Exception class that is not a RuntimeException and carries neither #[WithHttpStatus] nor HttpExceptionInterface.",
+              "status": "draft"
+            },
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule flags a try/catch block inside a *Controller class.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "try {\n    $this->commands->dispatch(new CancelOrderCommand($id));\n} catch (OrderNotFoundException) {\n    return new JsonResponse(['message' => 'Not found'], Response::HTTP_NOT_FOUND);\n}",
+            "good": "#[WithHttpStatus(Response::HTTP_UNPROCESSABLE_ENTITY)]\nabstract class CommerceException extends \\DomainException {}\n\n#[WithHttpStatus(Response::HTTP_NOT_FOUND)]\nfinal class OrderNotFoundException extends CommerceException {}\n\n// the controller dispatches the command and does not catch"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions"
+          ],
+          "lane_note": "Laravel counterpart: ORCH-024, MD-029, AUTH-004 (controllers do not catch, module base exception).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Authorization",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-058",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A message handler **MUST** receive the acting user as a field of its command and **MUST NOT** read `Security` or `TokenStorageInterface`; the controller takes the actor from the authenticated principal, never from the request body.",
+          "detect": {
+            "signals": [
+              "Security",
+              "TokenStorageInterface",
+              "#[CurrentUser]"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a class named *Handler that depends on Symfony\\Bundle\\SecurityBundle\\Security or TokenStorageInterface.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final readonly class CancelOrderCommandHandler\n{\n    public function __construct(private Security $security, private OrderRepository $orders) {}\n\n    public function __invoke(CancelOrderCommand $command): void\n    {\n        $actorId = $this->security->getUser()?->getUserIdentifier();\n    }\n}",
+            "good": "public function __invoke(string $id, #[CurrentUser] User $user): Response\n{\n    $this->commands->dispatch(new CancelOrderCommand($id, $user->id));\n\n    return new Response(null, Response::HTTP_NO_CONTENT);\n}\n// CancelOrderCommand carries string $actorId"
+          },
+          "lane_note": "Laravel counterpart: ORCH-021 (actor passed on the command).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-059",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every endpoint touching owned data **MUST** authorize the actor against the loaded entity with a Voter, checked in the handler through `AuthorizationCheckerInterface`; the controller **MUST** build the command's actor from the same authenticated token the Voter reads, which is why the handler runs on the synchronous bus, and a handler **MUST NOT** use `find()` plus a hand-written ownership check.",
+          "applies_to": [
+            "endpoints and handlers that touch owned data"
+          ],
+          "detect": {
+            "signals": [
+              "Voter",
+              "isGranted(",
+              "AuthorizationCheckerInterface",
+              "->find("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule flags EntityRepository::find() called inside a *Handler class. It over-flags handlers that read ownerless data.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(CancelOrderCommand $command): void\n{\n    $order = $this->orders->find($command->orderId);\n    if ($order->ownerId !== $command->actorId) {\n        throw new OrderAccessDeniedException();\n    }\n    $order->cancel();\n}",
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CancelOrderCommandHandler\n{\n    public function __construct(private OrderRepository $orders, private AuthorizationCheckerInterface $authorization) {}\n\n    public function __invoke(CancelOrderCommand $command): void\n    {\n        // the controller built $command->actorId from the same token the Voter reads\n        $order = $this->orders->get($command->orderId);\n        if (!$this->authorization->isGranted(OrderVoter::CANCEL, $order)) {\n            throw new OrderAccessDeniedException(); // a product exception with #[WithHttpStatus(403)]\n        }\n        $order->cancel();\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: AUTH-002, AUTH-003 (actor-scoped lookup, ownership gate).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-060",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "The authorization gate **MUST** throw a product `*Exception` carrying `#[WithHttpStatus(403)]` (or a Voter denial raising `AccessDeniedException`), and controllers **MUST NOT** build 403 responses inline.",
+          "detect": {
+            "signals": [
+              "Response::HTTP_FORBIDDEN",
+              "403",
+              "AccessDeniedException"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule flags the 403 status passed to a Response or JsonResponse inside a *Controller class.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/orders/{id}/cancel', name: 'commerce.orders.cancel', methods: ['POST'])]\nfinal readonly class CancelOrderController\n{\n    public function __invoke(string $id, #[CurrentUser] User $user): Response\n    {\n        if (!$this->orders->isOwnedBy($id, $user->id)) {\n            return new JsonResponse(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);\n        }\n    }\n}",
+            "good": "#[WithHttpStatus(Response::HTTP_FORBIDDEN)]\nfinal class OrderAccessDeniedException extends CommerceException {}\n\n// the handler throws it, or a Voter denial raises AccessDeniedException;\n// the controller never builds a 403"
+          },
+          "lane_note": "Laravel counterpart: AUTH-004 (gate throws, renders as 403).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-061",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Capability-gated endpoints **MUST** use `#[IsGranted]` with a class constant or a backed-enum `->value`, never a string literal.",
+          "detect": {
+            "signals": [
+              "#[IsGranted("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "A custom rule flags #[IsGranted] whose first argument is a string literal.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/api/posts/{id}/publish', name: 'content.posts.publish', methods: ['POST'])]\n#[IsGranted('post.publish')]\nfinal readonly class PublishPostController {}",
+            "good": "enum PostAbility: string\n{\n    case Publish = 'post.publish';\n}\n\n#[Route('/api/posts/{id}/publish', name: 'content.posts.publish', methods: ['POST'])]\n#[IsGranted(PostAbility::Publish->value)]\nfinal readonly class PublishPostController {}"
+          },
+          "lane_note": "Laravel counterpart: AUTH-006, HTTP-008 (typed capability constant).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-062",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "State-changing and owned-data routes **MUST** require authentication through `access_control` or `#[IsGranted('IS_AUTHENTICATED_FULLY')]`; only genuinely public reads **MAY** use `PUBLIC_ACCESS`.",
+          "allowed_in": [
+            "genuinely public reads (`PUBLIC_ACCESS`)"
+          ],
+          "detect": {
+            "paths": [
+              "config/packages/security.*"
+            ],
+            "signals": [
+              "access_control",
+              "IS_AUTHENTICATED_FULLY",
+              "PUBLIC_ACCESS"
+            ]
+          },
+          "examples": {
+            "bad": "// no access_control entry covers /api/orders\n#[Route('/api/orders', name: 'commerce.orders.create', methods: ['POST'])]\nfinal readonly class CreateOrderController {}",
+            "good": "#[Route('/api/orders', name: 'commerce.orders.create', methods: ['POST'])]\n#[IsGranted('IS_AUTHENTICATED_FULLY')]\nfinal readonly class CreateOrderController {}"
+          },
+          "lane_note": "Laravel counterpart: HTTP-006 (auth group for state-changing and owned-data routes).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-063",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Once a product has a second application, each application surface **MUST** authenticate through its own firewall and user provider, and firewalls and role enums are never shared.",
+          "applies_to": [
+            "products with a second application surface"
+          ],
+          "detect": {
+            "paths": [
+              "config/packages/security.*"
+            ],
+            "signals": [
+              "firewalls",
+              "context:",
+              "access_control"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "A layer rule bars the admin layer from depending on the customer role enums. It does not see the firewall wiring.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[Route('/admin/users', name: 'admin.users.list', methods: ['GET'])]\n#[IsGranted(CustomerRole::Admin->value)]\nfinal readonly class ListUsersController {}",
+            "good": "#[Route('/admin/users', name: 'admin.users.list', methods: ['GET'])]\n#[IsGranted(AdminRole::ManageUsers->value)]\nfinal readonly class ListUsersController {}\n// the admin firewall has its own user provider and no shared context"
+          },
+          "lane_note": "Laravel counterpart: AUTH-007, ISO-014 (separate guard per application).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Domain model",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-064",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Business logic **MUST** live in entity methods (invariants and state transitions), finders **MUST NOT** live on the entity, entities **SHOULD NOT** expose public setters that skip the rules, and logic spanning several aggregates **MUST** live in a handler.",
+          "applies_to": [
+            "Doctrine entities"
+          ],
+          "detect": {
+            "signals": [
+              "#[ORM\\Entity]",
+              "public function set"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes with #[ORM\\Entity] must not depend on EntityManagerInterface or a *Repository.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[ORM\\Entity]\nclass Subscription\n{\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n\n    public function setStatus(SubscriptionStatus $status): void\n    {\n        $this->status = $status;\n    }\n}",
+            "good": "#[ORM\\Entity]\nclass Subscription\n{\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n\n    public function cancel(): void\n    {\n        if (SubscriptionStatus::Cancelled === $this->status) {\n            throw new SubscriptionAlreadyCancelled(sprintf('Subscription %s is already cancelled.', $this->id->toRfc4122()));\n        }\n\n        $this->status = SubscriptionStatus::Cancelled;\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/anemic-models-vs-rich-models"
+          ],
+          "lane_note": "Laravel counterpart: MD-006 (business logic in model methods).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-065",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "A command handler **SHOULD** save one aggregate; other aggregates **SHOULD** be updated by a listener on `event.bus` that reacts to a domain event dispatched with `DispatchAfterCurrentBusStamp`.",
+          "applies_to": [
+            "command handlers"
+          ],
+          "detect": {
+            "signals": [
+              "DispatchAfterCurrentBusStamp"
+            ]
+          },
+          "examples": {
+            "bad": "public function __invoke(PlaceOrderCommand $command): void\n{\n    $order = Order::place($command->orderId, $command->customerId);\n    $customer = $this->customers->get($command->customerId);\n    $customer->recordOrder($order->id());\n    $this->orders->add($order);\n}",
+            "good": "public function __invoke(PlaceOrderCommand $command): void\n{\n    $this->orders->add(Order::place($command->orderId, $command->customerId));\n    $this->eventBus->dispatch(\n        new OrderPlaced($command->orderId, $command->customerId),\n        [new DispatchAfterCurrentBusStamp()],\n    );\n}\n\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class RecordOrderOnCustomerListener\n{\n    public function __invoke(OrderPlaced $event): void\n    {\n        $this->commandBus->dispatch(new RecordCustomerOrderCommand($event->customerId, $event->orderId));\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-007 (one aggregate per transaction).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-066",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Collection associations **MUST** be typed `Collection` with generics (`Collection<int, OrderLine>`).",
+          "applies_to": [
+            "Doctrine entities"
+          ],
+          "detect": {
+            "signals": [
+              "#[ORM\\OneToMany",
+              "Collection<"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Level max with phpstan-doctrine reports a Collection without generics.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\nprivate Collection $lines;",
+            "good": "/** @var Collection<int, OrderLine> */\n#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\nprivate Collection $lines;"
+          },
+          "lane_note": "Laravel counterpart: MD-004 (relationship return types).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-067",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Entities and custom Doctrine types **MUST NOT** run queries or depend on `EntityManagerInterface` or a repository; derived values **MUST** be computed from data already loaded.",
+          "applies_to": [
+            "Doctrine entities",
+            "custom DBAL types"
+          ],
+          "detect": {
+            "signals": [
+              "EntityManagerInterface",
+              "#[ORM\\Entity]"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes with #[ORM\\Entity] must not depend on Doctrine\\ORM\\EntityManagerInterface or a *Repository.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[ORM\\Entity]\nclass Customer\n{\n    public function orderCount(EntityManagerInterface $entityManager): int\n    {\n        return $entityManager->getRepository(Order::class)->count(['customerId' => $this->id]);\n    }\n}",
+            "good": "#[ORM\\Entity]\nclass Customer\n{\n    /** @var Collection<int, Order> */\n    #[ORM\\OneToMany(targetEntity: Order::class, mappedBy: 'customer')]\n    private Collection $orders;\n\n    public function orderCount(): int\n    {\n        return $this->orders->count(); // the repository fetch-joined orders, so no query runs here\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-009 (accessors and casts run no queries).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-068",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A read model **MUST** be strictly read-only: a `final readonly` DTO built by a query handler, or an `#[ORM\\Entity(readOnly: true)]` over a table the module does not write; mutations belong to the write entity.",
+          "applies_to": [
+            "read models"
+          ],
+          "detect": {
+            "paths": [
+              "*/Read/*"
+            ],
+            "signals": [
+              "final readonly",
+              "readOnly: true"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Read-model classes must be `final readonly` DTOs or carry `#[ORM\\Entity(readOnly: true)]`; any other `#[ORM\\Entity]` among read models is flagged.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "class SubscriptionSummary\n{\n    public function __construct(public string $id, public string $status)\n    {\n    }\n\n    public function markCancelled(): void\n    {\n        $this->status = 'cancelled';\n    }\n}",
+            "good": "final readonly class SubscriptionSummaryResult // DTO built by a query handler\n{\n    public function __construct(public string $id, public SubscriptionStatus $status) {}\n}\n\n#[ORM\\Entity(readOnly: true)] // over a table this module does not write\n#[ORM\\Table(name: 'subscription_summary')]\n#[ORM\\Index(columns: ['status'])]\nclass SubscriptionSummaryRow\n{\n    #[ORM\\Id, ORM\\Column]\n    private string $id;\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-015 (read models read-only).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-069",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Handlers and entities **MUST NOT** throw `\\RuntimeException` or Symfony HTTP exceptions for business rules; they **MUST** throw a named product exception.",
+          "applies_to": [
+            "handlers",
+            "entities"
+          ],
+          "detect": {
+            "signals": [
+              "RuntimeException",
+              "NotFoundHttpException"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: a handler or entity throws a generic or framework exception.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n\n    if ($subscription->isCancelled()) {\n        throw new \\RuntimeException('Already cancelled.');\n    }\n}",
+            "good": "// BillingException is the module base: abstract class BillingException extends \\DomainException\n#[WithHttpStatus(409)]\nfinal class SubscriptionAlreadyCancelled extends BillingException\n{\n}\n\n// In the entity:\npublic function cancel(): void\n{\n    if (SubscriptionStatus::Cancelled === $this->status) {\n        throw new SubscriptionAlreadyCancelled('Subscription is already cancelled.');\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions"
+          ],
+          "lane_note": "Laravel counterpart: MD-032 (no framework or generic exceptions for business rules).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-070",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Domain and application classes **MUST NOT** import `HttpFoundation`, `HttpKernel` or `Doctrine\\` types, except ORM mapping attributes and `Collection` on entities, `#[WithHttpStatus]` on product exceptions and `Doctrine\\DBAL\\Connection` in read-model query classes (SYM-074, SYM-076); each vendor SDK or HTTP client **MUST** sit behind an interface with an adapter (the Doctrine repository is that adapter), while Symfony attributes, `Assert` constraints, Messenger, Uid and PSR contracts **MAY** be imported.",
+          "applies_to": [
+            "entities",
+            "handlers",
+            "domain services"
+          ],
+          "detect": {
+            "signals": [
+              "Symfony\\Component\\HttpFoundation",
+              "Symfony\\Component\\HttpKernel",
+              "Doctrine\\"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Domain and application namespaces must not depend on `Symfony\\Component\\HttpFoundation`, `Symfony\\Component\\HttpKernel` or `Doctrine\\`, except ORM mapping attributes, `Collection`, `#[WithHttpStatus]` and `Doctrine\\DBAL\\Connection` in read-model query classes; vendor SDK namespaces are allowed only in the adapter.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "use Doctrine\\ORM\\EntityManagerInterface;\nuse Symfony\\Component\\HttpFoundation\\RequestStack;\n\n#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class ApplyDiscountCommandHandler\n{\n    public function __construct(\n        private EntityManagerInterface $entityManager,\n        private RequestStack $requestStack,\n    ) {\n    }\n}",
+            "good": "use Doctrine\\Common\\Collections\\Collection; // allowed on an entity\nuse Doctrine\\ORM\\Mapping as ORM; // allowed: mapping attributes\nuse Symfony\\Component\\HttpKernel\\Attribute\\WithHttpStatus; // allowed on a product exception\n\n#[ORM\\Entity]\nclass Order\n{\n    /** @var Collection<int, OrderLine> */\n    #[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\n    private Collection $lines;\n}\n\n#[WithHttpStatus(404)]\nfinal class OrderNotFoundException extends OrderException {} // OrderException is the module base\ninterface PaymentGateway { public function charge(Order $order): void; } // the handler depends on this\n// StripePaymentGateway holds the vendor SDK and implements it; OrderRepository is a Doctrine adapter"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-foundations/framework-coupling-vs-framework-decoupling",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/domain-exceptions-vs-framework-exceptions"
+          ],
+          "status": "active",
+          "allowed_in": [
+            "read-model query classes (SYM-074, SYM-076)"
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Doctrine persistence",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-072",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A lookup by id **MUST** go through a repository method that throws a product exception when the row is missing, mapped to 404 with `#[WithHttpStatus(404)]`; callers **MUST NOT** `find()` and null-check the result.",
+          "applies_to": [
+            "repositories",
+            "handlers"
+          ],
+          "detect": {
+            "signals": [
+              "->find("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule on the result of EntityManagerInterface::find() used with a null check (does not exist yet).",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$subscription = $this->entityManager->find(Subscription::class, $command->subscriptionId);\n\nif (null === $subscription) {\n    throw new NotFoundHttpException();\n}",
+            "good": "$subscription = $this->subscriptions->get($command->subscriptionId);\n\n// In DoctrineSubscriptionRepository:\npublic function get(Uuid $id): Subscription\n{\n    return $this->entityManager->find(Subscription::class, $id)\n        ?? throw new SubscriptionNotFound(sprintf('Subscription %s not found.', $id->toRfc4122()));\n}\n\n#[WithHttpStatus(404)]\nfinal class SubscriptionNotFound extends BillingException {}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-006 (lookups throw on missing) and MD-030 (no custom not-found for a plain lookup).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-073",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A module **MUST NOT** add columns to another module's tables; it **MUST** create its own table keyed by the other module's id.",
+          "applies_to": [
+            "product modules",
+            "migrations"
+          ],
+          "detect": {
+            "paths": [
+              "*/Migrations/*.php"
+            ],
+            "signals": [
+              "ALTER TABLE"
+            ]
+          },
+          "examples": {
+            "bad": "// Reporting module migration\npublic function up(Schema $schema): void\n{\n    $this->addSql('ALTER TABLE billing_subscription ADD report_label VARCHAR(255) DEFAULT NULL');\n}",
+            "good": "// Reporting module migration\npublic function up(Schema $schema): void\n{\n    $this->addSql('CREATE TABLE reporting_subscription_label (subscription_id CHAR(36) NOT NULL, label VARCHAR(255) NOT NULL, PRIMARY KEY(subscription_id))');\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-006 (modules own their tables).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-074",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Cross-module data access that is not materialized under SYM-104 **MUST** be read-only, through an injected `Doctrine\\DBAL\\Connection` inside a repository or read-model query with id-based queries; a module **MUST NOT** insert, update or delete rows in another module's tables.",
+          "applies_to": [
+            "product modules",
+            "repositories",
+            "read-model queries"
+          ],
+          "detect": {
+            "signals": [
+              "Doctrine\\DBAL\\Connection"
+            ]
+          },
+          "examples": {
+            "bad": "// Billing module\n$this->connection->executeStatement(\n    'UPDATE customers_customer SET email = :email WHERE id = :id',\n    ['email' => $email, 'id' => $customerId->toRfc4122()],\n);",
+            "good": "// Billing module: a read-only query for a nightly export, not a per-request lookup\nfinal readonly class CustomerEmailExportQuery\n{\n    public function __construct(private Connection $connection) {}\n\n    /** @return list<string> */\n    public function emailsFor(Uuid $customerId): array\n    {\n        return $this->connection->fetchFirstColumn(\n            'SELECT email FROM customers_customer WHERE id = :id',\n            ['id' => $customerId],\n            ['id' => UuidType::NAME],\n        );\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-007 (cross-module reads are read-only).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-075",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Once a second application exists, each application **MUST** own its read models (entities mapped `#[ORM\\Entity(readOnly: true)]`), its write models and its enums.",
+          "applies_to": [
+            "products with more than one application"
+          ],
+          "detect": {
+            "signals": [
+              "#[ORM\\Entity(readOnly: true)]"
+            ]
+          },
+          "examples": {
+            "bad": "// Admin application reuses the Customer application's write entity\nuse Customer\\Customer;\n\nfinal readonly class ListCustomersQueryHandler\n{\n    public function __construct(private EntityManagerInterface $entityManager)\n    {\n    }\n}",
+            "good": "// Admin application owns a read model over the same table\nnamespace Admin\\ListCustomers;\n\n#[ORM\\Entity(readOnly: true)]\n#[ORM\\Table(name: 'customers_customer')]\nclass CustomerRow\n{\n    #[ORM\\Id]\n    #[ORM\\Column(type: UuidType::NAME)]\n    private Uuid $id;\n\n    #[ORM\\Column]\n    private string $email;\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-010 (each application owns its read and write models).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-076",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Queries **MUST** go through a repository and fetch-join what they iterate; production classes outside repositories and read-model queries **MUST NOT** depend on DBAL `Connection`.",
+          "applies_to": [
+            "repositories",
+            "query handlers"
+          ],
+          "detect": {
+            "signals": [
+              "createQueryBuilder(",
+              "leftJoin(",
+              "Connection"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Production classes outside repositories must not depend on Doctrine\\DBAL\\Connection.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "foreach ($this->entityManager->getRepository(Order::class)->findBy(['customerId' => $customerId]) as $order) {\n    $total += $order->lines()->count();\n}",
+            "good": "public function findWithLines(Uuid $customerId): array\n{\n    return $this->entityManager->createQueryBuilder()\n        ->select('o', 'l')\n        ->from(Order::class, 'o')\n        ->leftJoin('o.lines', 'l')\n        ->where('o.customerId = :customerId')\n        ->setParameter('customerId', $customerId, UuidType::NAME)\n        ->getQuery()\n        ->getResult();\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-010 (queries via the model, eager-load what you iterate).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-077",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "A query rule used by more than one handler **SHOULD** live in one Specification or one named repository method instead of being repeated.",
+          "applies_to": [
+            "repositories",
+            "handlers"
+          ],
+          "detect": {
+            "signals": [
+              "Specification",
+              "Criteria"
+            ]
+          },
+          "examples": {
+            "bad": "// In two different handlers\n$query->andWhere('s.status = :active')\n    ->andWhere('s.endsAt > :now');",
+            "good": "// In DoctrineSubscriptionRepository, used by both handlers\npublic function findActive(\\DateTimeImmutable $now): array\n{\n    return $this->entityManager->createQueryBuilder()\n        ->select('s')\n        ->from(Subscription::class, 's')\n        ->where('s.status = :active')\n        ->andWhere('s.endsAt > :now')\n        ->setParameter('active', SubscriptionStatus::Active)\n        ->setParameter('now', $now)\n        ->getQuery()\n        ->getResult();\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-011 (Specification or scope for shared query rules).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-078",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A Doctrine lifecycle callback or entity listener **MUST NOT** call `flush()` or `persist()` for the entity that triggered it; decide every field first and write once.",
+          "applies_to": [
+            "entities",
+            "entity listeners"
+          ],
+          "detect": {
+            "signals": [
+              "#[ORM\\PreUpdate]",
+              "#[ORM\\PostPersist]",
+              "#[AsEntityListener]",
+              "flush("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: flush( inside a lifecycle callback method or an entity listener class.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsEntityListener(event: Events::postPersist, entity: Invoice::class)]\nfinal readonly class StampInvoiceListener\n{\n    public function __construct(private EntityManagerInterface $entityManager)\n    {\n    }\n\n    public function postPersist(Invoice $invoice): void\n    {\n        $invoice->stamp();\n        $this->entityManager->flush();\n    }\n}",
+            "good": "#[ORM\\Entity]\n#[ORM\\HasLifecycleCallbacks]\nclass Invoice\n{\n    #[ORM\\PrePersist]\n    public function stamp(): void\n    {\n        $this->number = InvoiceNumber::fromDate($this->issuedAt);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: MD-008 (observers must not re-save the row).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-079",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Publicly exposed identifiers **MUST NOT** be enumerable auto-increment integers; ids **MUST** be ULIDs or UUIDv7 created by the caller.",
+          "applies_to": [
+            "entities",
+            "migrations"
+          ],
+          "detect": {
+            "signals": [
+              "Uuid",
+              "Ulid",
+              "GeneratedValue"
+            ]
+          },
+          "examples": {
+            "bad": "#[ORM\\Id]\n#[ORM\\GeneratedValue]\n#[ORM\\Column]\nprivate ?int $id = null;",
+            "good": "#[ORM\\Id]\n#[ORM\\Column(type: UuidType::NAME)]\nprivate Uuid $id;\n\npublic function __construct(Uuid $id)\n{\n    $this->id = $id;\n}\n\n// In the controller: new CreateOrderCommand(Uuid::v7()->toRfc4122(), ...)"
+          },
+          "lane_note": "Laravel counterpart: MD-014 (non-enumerable public ids) and PERS-005 (non-enumerable primary keys).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-080",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A Doctrine migration **MUST** implement a `down()` that reverses it, or call `throwIrreversibleMigrationException()` with a note.",
+          "applies_to": [
+            "migrations"
+          ],
+          "detect": {
+            "paths": [
+              "*/Migrations/*.php"
+            ],
+            "signals": [
+              "down(",
+              "IrreversibleMigration"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: empty down() body with no throwIrreversibleMigrationException() call.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function down(Schema $schema): void\n{\n}",
+            "good": "public function down(Schema $schema): void\n{\n    $this->addSql('DROP TABLE reporting_subscription_label');\n}\n\n// Or, for a migration that cannot be reversed:\npublic function down(Schema $schema): void\n{\n    $this->throwIrreversibleMigrationException('Merged rows cannot be split back.');\n}"
+          },
+          "lane_note": "Laravel counterpart: PERS-001 (migration down()).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-081",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "PHP FQCNs **MUST NOT** be stored in database columns (defaults, seeds, discriminator values); use plain string identifiers.",
+          "applies_to": [
+            "entities",
+            "migrations",
+            "seeds"
+          ],
+          "detect": {
+            "signals": [
+              "DiscriminatorMap",
+              "::class"
+            ]
+          },
+          "examples": {
+            "bad": "#[ORM\\Entity]\n#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap([Card::class => Card::class, BankTransfer::class => BankTransfer::class])]\nabstract class Payment\n{\n}",
+            "good": "#[ORM\\Entity]\n#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap(['card' => Card::class, 'bank_transfer' => BankTransfer::class])]\nabstract class Payment\n{\n}"
+          },
+          "lane_note": "Laravel counterpart: PERS-002 (no FQCN in columns).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-082",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Lifecycle state **MUST** be a string column mapped to a backed enum with an index, never a boolean flag.",
+          "applies_to": [
+            "entities"
+          ],
+          "detect": {
+            "signals": [
+              "enumType:",
+              "is_active"
+            ]
+          },
+          "examples": {
+            "bad": "#[ORM\\Column]\nprivate bool $isActive = true;",
+            "good": "#[ORM\\Entity]\n#[ORM\\Index(columns: ['status'])]\nclass Subscription\n{\n    #[ORM\\Column(length: 20, enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n}"
+          },
+          "lane_note": "Laravel counterpart: PERS-003 (status string column cast to a backed enum).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-083",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Doctrine-backed repositories **SHOULD** implement a domain interface by wrapping `EntityManagerInterface`, not extend `ServiceEntityRepository`, so `find*` is not public; `add()` **SHOULD** only `persist()`, because the `doctrine_transaction` middleware on `command.bus` flushes.",
+          "applies_to": [
+            "repositories"
+          ],
+          "detect": {
+            "signals": [
+              "ServiceEntityRepository",
+              "->flush("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Classes named *Repository must not extend ServiceEntityRepository.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "final class SubscriptionRepository extends ServiceEntityRepository\n{\n    public function __construct(ManagerRegistry $registry)\n    {\n        parent::__construct($registry, Subscription::class);\n    }\n\n    public function save(Subscription $subscription): void\n    {\n        $this->getEntityManager()->persist($subscription);\n        $this->getEntityManager()->flush();\n    }\n}",
+            "good": "final readonly class DoctrineSubscriptionRepository implements SubscriptionRepository\n{\n    public function __construct(private EntityManagerInterface $entityManager) {}\n\n    public function get(Uuid $id): Subscription\n    {\n        return $this->entityManager->find(Subscription::class, $id)\n            ?? throw new SubscriptionNotFound(sprintf('Subscription %s not found.', $id->toRfc4122()));\n    }\n\n    public function add(Subscription $subscription): void\n    {\n        $this->entityManager->persist($subscription); // the doctrine_transaction middleware flushes\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern"
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Integrations",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-085",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every external system **MUST** sit behind a dedicated gateway class owned by the integrating module, one per vendor, with domain-language methods and typed DTOs; handlers, listeners and controllers **MUST NOT** call a vendor SDK or `HttpClientInterface` directly.",
+          "applies_to": [
+            "handlers",
+            "listeners",
+            "controllers"
+          ],
+          "detect": {
+            "signals": [
+              "HttpClientInterface"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "*Handler, *Listener and *Controller classes must not depend on HttpClientInterface or a vendor SDK namespace.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class ChargeCustomerCommandHandler\n{\n    public function __construct(private HttpClientInterface $httpClient)\n    {\n    }\n\n    public function __invoke(ChargeCustomerCommand $command): void\n    {\n        $this->httpClient->request('POST', 'https://api.acme-pay.com/charges', ['json' => ['amount' => $command->amountInCents]]);\n    }\n}",
+            "good": "final readonly class AcmePayGateway\n{\n    public function __construct(#[Target('acme_pay.client')] private HttpClientInterface $client)\n    {\n    }\n\n    public function charge(ChargeRequest $request): ChargeResult\n    {\n        $data = $this->client->request('POST', '/charges', ['json' => ['amount' => $request->amountInCents]])->toArray();\n\n        return new ChargeResult($data['id']);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-001 (gateway per vendor).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-086",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A decoded external payload **MUST** become a typed DTO once, at the edge, before any other code reads it.",
+          "applies_to": [
+            "controllers",
+            "gateways",
+            "message handlers"
+          ],
+          "detect": {
+            "signals": [
+              "json_decode(",
+              "#[MapRequestPayload"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: json_decode( on a request body outside Framework\\.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __invoke(Request $request): Response\n{\n    $payload = json_decode($request->getContent(), true);\n    $eventId = $payload['data']['id'];\n}",
+            "good": "final readonly class AcmePayWebhookPayload\n{\n    public function __construct(#[Assert\\NotBlank] public string $eventId, #[Assert\\NotBlank] public string $type) {}\n}\n\n// a kernel.request listener rejects a bad X-Signature with 401 before the payload is mapped\npublic function __invoke(#[MapRequestPayload] AcmePayWebhookPayload $payload): Response\n{\n    return new Response(null, Response::HTTP_ACCEPTED);\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-004 (typed DTO at the edge).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-087",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "HTTP integrations **MUST** use one scoped `HttpClient` per vendor, with base URL, timeouts and retry set in config and injected with `#[Target]`.",
+          "applies_to": [
+            "gateways"
+          ],
+          "detect": {
+            "signals": [
+              "scoped_clients",
+              "#[Target("
+            ]
+          },
+          "examples": {
+            "bad": "public function __construct(private HttpClientInterface $httpClient)\n{\n}\n\npublic function charge(): void\n{\n    $this->httpClient->request('POST', 'https://api.acme-pay.com/charges');\n}",
+            "good": "// config/packages/acme_pay.php\n$container->extension('framework', [\n    'http_client' => [\n        'scoped_clients' => [\n            'acme_pay.client' => [\n                'base_uri' => '%env(ACME_PAY_BASE_URI)%',\n                'timeout' => 5,\n                'max_duration' => 15,\n                'retry_failed' => ['max_retries' => 2],\n            ],\n        ],\n    ],\n]);\n\n// In the gateway:\npublic function __construct(#[Target('acme_pay.client')] private HttpClientInterface $client)\n{\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-005 (one connector per vendor) and INT-007 (explicit timeouts and retry).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-088",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "A parameter default for a vendor host **SHOULD** point at the real production host, not a placeholder.",
+          "applies_to": [
+            "module service config"
+          ],
+          "detect": {
+            "paths": [
+              "*-services.php"
+            ]
+          },
+          "examples": {
+            "bad": "$container->parameters()->set('acme_pay.base_uri', 'https://example.com');",
+            "good": "$container->parameters()->set('acme_pay.base_uri', 'https://api.acme-pay.com');"
+          },
+          "lane_note": "Laravel counterpart: INT-012 (config default points at the real host).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-089",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "A class that needs config values **SHOULD** receive them as typed constructor parameters with `#[Autowire(param: ...)]`, not through `ParameterBagInterface`.",
+          "applies_to": [
+            "product classes"
+          ],
+          "detect": {
+            "signals": [
+              "ParameterBagInterface",
+              "#[Autowire(param:"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Product classes must not depend on ParameterBagInterface.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "public function __construct(private ParameterBagInterface $parameters)\n{\n}\n\npublic function baseUri(): string\n{\n    return $this->parameters->get('acme_pay.base_uri');\n}",
+            "good": "public function __construct(\n    #[Autowire(param: 'acme_pay.base_uri')]\n    private string $baseUri,\n) {\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-013 (typed constructor config).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-090",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Outbound effects triggered by domain changes **MUST** hang off domain events handled by listeners on `event.bus`, so the integration can be replayed, retried or removed without touching domain code.",
+          "applies_to": [
+            "handlers",
+            "listeners"
+          ],
+          "examples": {
+            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    $subscription->cancel();\n    $this->billingGateway->cancel($command->subscriptionId);\n}",
+            "good": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $this->subscriptions->get($command->subscriptionId)->cancel();\n    $this->eventBus->dispatch(\n        new SubscriptionCancelled($command->subscriptionId),\n        [new DispatchAfterCurrentBusStamp()],\n    );\n}\n\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class CancelRemoteSubscriptionListener\n{\n    public function __invoke(SubscriptionCancelled $event): void\n    {\n        $this->billingGateway->cancel($event->subscriptionId);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: INT-015 (outbound effects hang off domain events).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Console and scheduling",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-091",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Time-consuming or external work (HTTP calls, mail, heavy processing) **MUST** run in an asynchronous Messenger handler on a routed transport, never synchronously in a handler or controller.",
+          "applies_to": [
+            "Messenger handlers",
+            "controllers"
+          ],
+          "detect": {
+            "signals": [
+              "HttpClientInterface",
+              "MailerInterface"
+            ]
+          },
+          "examples": {
+            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RegisterMemberCommandHandler\n{\n    public function __invoke(RegisterMemberCommand $command): void\n    {\n        $this->members->add(new Member($command->memberId));\n        $this->crmClient->push($command->memberId); // HTTP call inside the request\n    }\n}",
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RegisterMemberCommandHandler\n{\n    public function __invoke(RegisterMemberCommand $command): void\n    {\n        $this->members->add(new Member($command->memberId));\n        // held until the transaction commits, then sent to the async transport\n        $this->commandBus->dispatch(new PushMemberToCrmCommand($command->memberId), [new DispatchAfterCurrentBusStamp()]);\n    }\n}\n#[AsMessage('async')]\nfinal readonly class PushMemberToCrmCommand\n{\n    public function __construct(public string $memberId) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-029 (slow or external work in the queue), INT-014 (external calls in queued jobs).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-092",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every asynchronous message **MUST** be routed to a named transport explicitly (`#[AsMessage('async')]` or `framework.messenger.routing`), never left to a default or a fallback.",
+          "detect": {
+            "paths": [
+              "config/packages/messenger.php"
+            ],
+            "signals": [
+              "#[AsMessage(",
+              "routing"
+            ]
+          },
+          "examples": {
+            "bad": "// config/packages/messenger.php\n'routing' => [\n    '*' => 'async', // every message, routed by a catch-all\n],",
+            "good": "#[AsMessage('async')]\nfinal readonly class PushMemberToCrmCommand\n{\n    public function __construct(public string $memberId) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ORCH-030 (explicit queue per job).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-093",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A transport carrying messages that call external systems (webhooks included) **MUST** declare an explicit `retry_strategy` and a `failure_transport`.",
+          "detect": {
+            "paths": [
+              "config/packages/messenger.php"
+            ],
+            "signals": [
+              "retry_strategy",
+              "failure_transport"
+            ]
+          },
+          "examples": {
+            "bad": "// config/packages/messenger.php\n'transports' => [\n    'async' => ['dsn' => '%env(MESSENGER_TRANSPORT_DSN)%'],\n],",
+            "good": "// config/packages/messenger.php\n'failure_transport' => 'failed',\n'transports' => [\n    'async' => [\n        'dsn' => '%env(MESSENGER_TRANSPORT_DSN)%',\n        'retry_strategy' => ['max_retries' => 3, 'delay' => 1000, 'multiplier' => 2],\n    ],\n    'failed' => ['dsn' => 'doctrine://default?queue_name=failed'],\n],"
+          },
+          "lane_note": "Laravel counterpart: ORCH-031 (tries and backoff on external jobs), HTTP-029 (explicit tries and backoff on webhook jobs).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-094",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Handlers **SHOULD** throw `UnrecoverableMessageHandlingException` for failures a retry cannot fix and `RecoverableMessageHandlingException` to force a retry.",
+          "detect": {
+            "signals": [
+              "UnrecoverableMessageHandlingException",
+              "RecoverableMessageHandlingException"
+            ]
+          },
+          "examples": {
+            "bad": "public function __invoke(ChargeCardCommand $command): void\n{\n    // a declined card is retried max_retries times, then lands in the failure transport\n    throw new \\RuntimeException('Card declined');\n}",
+            "good": "public function __invoke(ChargeCardCommand $command): void\n{\n    if ($declined) {\n        throw new UnrecoverableMessageHandlingException('Card declined');\n    }\n    if ($gatewayTimedOut) {\n        throw new RecoverableMessageHandlingException('Gateway timed out');\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/exception-handling-as-design"
+          ],
+          "status": "active"
+        },
+        {
+          "id": "SYM-095",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Handlers in a long-running Messenger worker **SHOULD** load their entities by id on every call and keep none in properties, because the worker clears the entity manager after each message (`DoctrineClearEntityManagerWorkerSubscriber` from the Doctrine bridge).",
+          "applies_to": [
+            "Messenger handlers run by messenger:consume"
+          ],
+          "detect": {
+            "signals": [
+              "DoctrineClearEntityManagerWorkerSubscriber",
+              "messenger:consume"
+            ]
+          },
+          "examples": {
+            "bad": "final class SendReminderCommandHandler\n{\n    private ?Member $member = null; // survives into the next message\n\n    public function __invoke(SendReminderCommand $command): void\n    {\n        $this->member ??= $this->members->get($command->memberId);\n    }\n}",
+            "good": "final readonly class SendReminderCommandHandler\n{\n    public function __invoke(SendReminderCommand $command): void\n    {\n        $member = $this->members->get($command->memberId); // fresh on every call\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/unit-of-work-and-identity-map"
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Performance",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-096",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A query **MUST NOT** load a whole table and filter it in PHP (`findAll()` then `array_filter()`); the condition **MUST** go into the DQL or `QueryBuilder`.",
+          "detect": {
+            "signals": [
+              "findAll()",
+              "array_filter("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: flags findAll() called on a repository in product code.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$overdue = array_filter(\n    $this->invoices->findAll(),\n    static fn (Invoice $invoice): bool => $invoice->isOverdue($now),\n);",
+            "good": "return $this->entityManager->createQueryBuilder()\n    ->select('i')->from(Invoice::class, 'i')\n    ->where('i.dueAt < :now')->andWhere('i.paidAt IS NULL')\n    ->setParameter('now', $now)\n    ->getQuery()->getResult();"
+          },
+          "lane_note": "Laravel counterpart: PERF-001 (filter in the database).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-097",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Filtering on an association **SHOULD** use a DQL join, an `EXISTS` subquery or `COUNT` so the database decides; fetching every association row to filter in PHP **SHOULD NOT** be used.",
+          "detect": {
+            "signals": [
+              "->filter(",
+              "->matching("
+            ]
+          },
+          "examples": {
+            "bad": "$shipped = $order->lines()->filter(\n    static fn (OrderLine $line): bool => $line->isShipped(),\n)->count(); // loads every line first",
+            "good": "return (int) $this->entityManager->createQuery(\n    'SELECT COUNT(l.id) FROM Billing\\Order\\OrderLine l WHERE l.orderId = :id AND l.status = :status',\n)->setParameters(['id' => $orderId, 'status' => LineStatus::Shipped])->getSingleScalarResult();"
+          },
+          "lane_note": "Laravel counterpart: PERF-002 (filter on a relation in the database).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-098",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A mapping **MUST NOT** declare `fetch: 'EAGER'` on an association; associations **MUST** be loaded per query with a fetch join (`SELECT o, l FROM Billing\\Order\\Order o JOIN o.lines l`).",
+          "detect": {
+            "signals": [
+              "fetch: 'EAGER'",
+              "EAGER"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: flags fetch: 'EAGER' in #[ORM\\OneToMany], #[ORM\\ManyToOne], #[ORM\\OneToOne] and #[ORM\\ManyToMany] arguments. PHPArkitect cannot read attribute arguments.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order', fetch: 'EAGER')]\nprivate Collection $lines; // loaded on every query, read or not",
+            "good": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\nprivate Collection $lines;\n\n// the repository joins them for the one query that reads them\n$this->entityManager->createQuery(\n    'SELECT o, l FROM Billing\\Order\\Order o JOIN o.lines l WHERE o.id = :id',\n);"
+          },
+          "lane_note": "Laravel counterpart: PERF-003 (no `$with` default).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-099",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "List and report queries **SHOULD** select only the columns they use (`SELECT NEW ResultClass(...)` or a scalar select), and an aggregate report **SHOULD** be one `GROUP BY` query, never a PHP loop over entities.",
+          "detect": {
+            "signals": [
+              "SELECT NEW",
+              "GROUP BY"
+            ]
+          },
+          "examples": {
+            "bad": "$totals = [];\nforeach ($this->orders->findAll() as $order) {\n    $totals[$order->customerId()] = ($totals[$order->customerId()] ?? 0) + $order->total();\n}",
+            "good": "return $this->entityManager->createQuery(\n    'SELECT NEW Billing\\Report\\CustomerTotal(o.customerId, SUM(o.total))\n     FROM Billing\\Order\\Order o GROUP BY o.customerId',\n)->getResult();"
+          },
+          "lane_note": "Laravel counterpart: PERF-005, PERF-006 (select needed columns, aggregate in one query).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Module isolation",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-100",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Product code **MUST** be organised into modules listed in `modules.php`, one root namespace per business capability (`Billing\\`, `Orders\\`), not into framework-type namespaces (`Service\\`, `Repository\\`, `Action\\`) at the product root.",
+          "detect": {
+            "paths": [
+              "modules.php"
+            ],
+            "signals": [
+              "namespace App\\Service",
+              "namespace App\\Repository"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails a class in a Service, Repository or Action namespace outside Framework\\, or in a root namespace missing from modules.php.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace App\\Service; // framework-type folder at the product root\n\nfinal class InvoiceService\n{\n}",
+            "good": "namespace Billing\\IssueInvoice; // one module, one slice folder\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n}"
+          },
+          "lane_note": "Laravel counterpart: ARCH-001 (modules, not type folders).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-101",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "A module **MUST NOT** import another module's classes (entities, enums, messages, handlers, services or value objects), except a published domain event and an interface the consuming module owns that the providing module implements (SYM-102); `Framework\\` is allowed from every module.",
+          "allowed_in": [
+            "pure infrastructure in the shared `Framework\\` namespace",
+            "a published domain event",
+            "an interface the consuming module owns that the providing module implements"
+          ],
+          "detect": {
+            "signals": [
+              "use Orders\\",
+              "use Billing\\"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "One rule per module, generated from modules.php: must not depend on the other module namespaces; Framework\\ is allowed; published domain event classes and consumer-owned interfaces are allow-listed.",
+              "status": "draft"
+            },
+            {
+              "tool": "Deptrac",
+              "coverage": "One layer per module with no dependency between module layers; Framework\\ allowed from every layer; published domain event classes and consumer-owned interfaces are allow-listed.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Billing\\IssueInvoice;\n\nuse Orders\\Order\\Order; // another module's entity\n\nfinal readonly class IssueInvoiceCommandHandler\n{\n}",
+            "good": "namespace Billing\\IssueInvoice;\n\nuse Orders\\PlaceOrder\\OrderPlaced; // allowed: a published domain event\n\nnamespace Orders\\Integration;\n\nuse Billing\\IssueInvoice\\OrderTotals; // allowed: interface the consuming module owns\n\nfinal readonly class BillingOrderTotals implements OrderTotals\n{\n    public function totalInCentsFor(string $orderId): int { /* ... */ }\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-001 (no cross-module imports).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-102",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Cross-module collaboration **MUST** go through a contract (interface) defined by the consuming module and implemented by the providing module, or through a published domain event, never through any other import; a module **MUST** own its copy of any value object it needs, and a slice **MUST** live in the module that owns the capability.",
+          "detect": {
+            "signals": [
+              "implements",
+              "DomainEvent"
+            ]
+          },
+          "examples": {
+            "bad": "namespace Billing\\IssueInvoice;\n\nuse Orders\\Order\\OrderRepository; // direct import across modules\nuse Orders\\PlaceOrder\\PlaceOrderCommandHandler; // another module's handler",
+            "good": "namespace Billing\\IssueInvoice;\n\ninterface OrderTotals // defined by the consumer\n{\n    public function totalInCentsFor(string $orderId): int;\n}\n\nnamespace Orders\\Integration;\n\nuse Billing\\IssueInvoice\\OrderTotals;\n\nfinal readonly class BillingOrderTotals implements OrderTotals // implemented by the provider\n{\n    public function totalInCentsFor(string $orderId): int { /* ... */ }\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-002, ISO-003, ISO-004, ARCH-011 (contract or event, consumer defines it, no shared kernel, slice in the owning context).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-103",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Cross-module references **MUST** be plain columns holding the other module's id, never a Doctrine association (`ManyToOne`, `OneToMany`, `OneToOne`, `ManyToMany`) to another module's entity and never a database foreign key across modules.",
+          "detect": {
+            "signals": [
+              "#[ORM\\ManyToOne",
+              "#[ORM\\OneToMany",
+              "#[ORM\\OneToOne",
+              "#[ORM\\ManyToMany",
+              "addForeignKeyConstraint"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "The association target is an import of another module, so the module rules catch it. A cross-module foreign key in a migration is not covered.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Billing\\Invoice;\n\nuse Members\\Member\\Member;\n\n#[ORM\\ManyToOne(targetEntity: Member::class)]\nprivate Member $member;",
+            "good": "namespace Billing\\Invoice;\n\n#[ORM\\Column(type: 'ulid')]\nprivate Ulid $memberId; // the other module's id, no association"
+          },
+          "lane_note": "Laravel counterpart: ISO-005, PERS-004 (cross-module references are plain ids).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-104",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Data another module owns but this module needs at runtime **MUST** be materialized on this module's own table and kept in sync by an event listener, not fetched across modules per request; a call through a consumer-owned contract (SYM-102) and a read-only query under SYM-074 are the two exceptions to materializing.",
+          "detect": {
+            "signals": [
+              "#[AsMessageHandler(bus: 'event.bus')]"
+            ]
+          },
+          "examples": {
+            "bad": "namespace Billing\\Invoice;\n\nfinal readonly class InvoiceRenderer\n{\n    public function render(Invoice $invoice): string\n    {\n        $name = $this->members->nameOf($invoice->memberId); // cross-module call on every render\n    }\n}",
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SyncBillingContactOnContactRenamedListener\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    public function __invoke(ContactRenamed $event): void // the Contacts module's published event (SYM-101)\n    {\n        // event.bus has no doctrine_transaction: the command updates Billing's own table\n        $this->commandBus->dispatch(new RenameBillingContactCommand($event->memberId, $event->name));\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-008 (materialize data you need from another module).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-105",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Once a second application exists, application namespaces **MUST NOT** import from each other, in either direction.",
+          "applies_to": [
+            "projects with two or more applications (for example a public site and an admin panel)"
+          ],
+          "detect": {
+            "signals": [
+              "use Admin\\",
+              "use Web\\"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "One rule per application namespace, both directions.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Admin\\Member;\n\nuse Web\\Member\\MemberRepository; // another application's class",
+            "good": "namespace Admin\\Member;\n\nuse Framework\\Bus\\CommandBus; // shared module code is reached through the bus\n\nfinal readonly class SuspendMemberController\n{\n    public function __construct(private CommandBus $commandBus) {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-009 (applications do not import each other).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-106",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST NOT",
+          "rule": "Once a second application exists, an application **MUST NOT** register a listener on another application's event (by attribute, tag or string FQCN).",
+          "applies_to": [
+            "projects with two or more applications (for example a public site and an admin panel)"
+          ],
+          "detect": {
+            "signals": [
+              "#[AsMessageHandler(bus: 'event.bus')]",
+              "#[AsEventListener(event:"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "The event class import in the listener is caught by the application-import rule. A string FQCN in a tag or attribute argument is not covered.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "namespace Admin\\Audit;\n\nuse Web\\Member\\MemberJoined; // listens to the other application's event\n\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class RecordMemberJoined\n{\n    public function __invoke(MemberJoined $event): void {}\n}",
+            "good": "namespace Admin\\Audit;\n\nuse Members\\Member\\MemberJoined; // a module event, not Web's\n\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class RecordMemberJoined\n{\n    public function __invoke(MemberJoined $event): void {}\n}"
+          },
+          "lane_note": "Laravel counterpart: ISO-011 (no cross-application event subscriptions).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-107",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Once a second application exists, every side effect of an application's action **MUST** be handled by that application's own listeners, and an application **MUST NOT** dispatch another application's domain events to reuse its cascades.",
+          "applies_to": [
+            "projects with two or more applications (for example a public site and an admin panel)"
+          ],
+          "examples": {
+            "bad": "namespace Admin\\Order;\n\nuse Web\\Order\\OrderPlaced;\n\n$this->eventBus->dispatch(new OrderPlaced($orderId)); // borrows the Web application's mail cascade",
+            "good": "namespace Admin\\Order;\n\n$this->eventBus->dispatch(new OrderPlacedByStaff($orderId)); // Admin's own event, Admin's own listeners"
+          },
+          "lane_note": "Laravel counterpart: ISO-012 (own side effects, no reuse of another application's cascades).",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Testing",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "SYM-108",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Tests **MUST** use PHPUnit with the `#[Test]` attribute; a test that boots the kernel **MUST** extend `KernelTestCase` or `WebTestCase`; Pest **MUST NOT** be used.",
+          "detect": {
+            "signals": [
+              "#[Test]",
+              "KernelTestCase",
+              "WebTestCase",
+              "it("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a Pest-style it(...) closure test and a test method that lacks #[Test].",
+              "status": "draft"
+            },
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Flags a kernel-booting test class that does not extend KernelTestCase or WebTestCase.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "it('places an order', function () {\n    $kernel = new Kernel('test', true);\n    $kernel->boot();\n    expect($kernel->getContainer())->not->toBeNull();\n});",
+            "good": "use PHPUnit\\Framework\\Attributes\\Test;\n\nfinal class PlaceOrderTest extends KernelTestCase\n{\n    #[Test]\n    public function it_places_an_order(): void\n    {\n        self::bootKernel();\n        self::assertNotNull(self::getContainer());\n    }\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/testing-pyramid",
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
+          ],
+          "lane_note": "Laravel counterpart: TEST-001 (PHPUnit, `#[Test]`, project TestCase, no Pest).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-109",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Pure domain tests **SHOULD** extend `PHPUnit\\Framework\\TestCase`, so they run without booting the kernel or the database.",
+          "why": "they run without booting the kernel or the database",
+          "applies_to": [
+            "value objects",
+            "entity methods with no query",
+            "rules on plain values"
+          ],
+          "detect": {
+            "signals": [
+              "PHPUnit\\Framework\\TestCase"
+            ]
+          },
+          "examples": {
+            "bad": "final class MoneyTest extends KernelTestCase // boots the kernel for plain arithmetic\n{\n    #[Test]\n    public function it_adds_amounts(): void\n    {\n        self::assertSame(500, (new Money(200))->add(new Money(300))->cents);\n    }\n}",
+            "good": "final class MoneyTest extends TestCase\n{\n    #[Test]\n    public function it_adds_amounts(): void\n    {\n        self::assertSame(500, (new Money(200))->add(new Money(300))->cents);\n    }\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-002 (pure domain tests extend the plain TestCase).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-110",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Tests that touch the database **MUST** isolate state with Foundry's `#[ResetDatabase]` attribute on the test class and the `FoundryExtension` PHPUnit extension registered; the `ResetDatabase` and `Factories` traits are deprecated since Foundry 2.9.",
+          "detect": {
+            "signals": [
+              "#[ResetDatabase]",
+              "FoundryExtension",
+              "ResetDatabase"
+            ]
+          },
+          "examples": {
+            "bad": "final class CancelOrderTest extends KernelTestCase\n{\n    #[Test]\n    public function it_cancels_an_order(): void\n    {\n        // rows persisted here are still there in the next test\n    }\n}",
+            "good": "// phpunit.xml.dist: <extensions><bootstrap class=\"Zenstruck\\Foundry\\PHPUnit\\FoundryExtension\"/></extensions>\nuse Zenstruck\\Foundry\\Attribute\\ResetDatabase;\n\n#[ResetDatabase]\nfinal class CancelOrderTest extends KernelTestCase\n{\n}"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/testing-pyramid"
+          ],
+          "lane_note": "Laravel counterpart: TEST-004 (database refreshed per test).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-111",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Test data **MUST** come from factories and their named states; a hand-built `new Entity(...)` followed by `persist()` where a state exists is a violation.",
+          "detect": {
+            "signals": [
+              "->persist(",
+              "->flush("
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Custom rule: flags persist( in a test class; it over-flags legitimate setup.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$order = new Order($id, 'ORD-1', OrderStatus::Shipped);\n$this->entityManager->persist($order);\n$this->entityManager->flush();",
+            "good": "$order = OrderFactory::new()->shipped()->create();"
+          },
+          "lane_note": "Laravel counterpart: TEST-005 (test data from factories).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-112",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every entity **MUST** ship a test factory: a `final` class extending `PersistentObjectFactory`, with named state methods for each lifecycle position.",
+          "detect": {
+            "paths": [
+              "*/Tests/Factory/*"
+            ],
+            "signals": [
+              "PersistentObjectFactory"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Flags a factory class that is not final.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "// no factory: every test builds the entity by hand\n$order = new Order($id, 'ORD-1', OrderStatus::Placed);",
+            "good": "final class OrderFactory extends PersistentObjectFactory\n{\n    public static function class(): string { return Order::class; }\n\n    protected function defaults(): array|callable\n    {\n        return ['id' => Uuid::v7(), 'reference' => self::faker()->uuid(), 'status' => OrderStatus::Placed];\n    }\n\n    public function shipped(): static { return $this->with(['status' => OrderStatus::Shipped]); }\n}"
+          },
+          "lane_note": "Laravel counterpart: PERS-006 (every model ships a factory).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-113",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MAY",
+          "rule": "Tests **MAY** fetch services from the test container (`static::getContainer()->get(...)`); production code still never fetches services from the container.",
+          "applies_to": [
+            "PHPUnit tests extending KernelTestCase or WebTestCase"
+          ],
+          "detect": {
+            "signals": [
+              "getContainer()"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class PlaceOrderCommandHandler\n{\n    public function __invoke(PlaceOrderCommand $command): void\n    {\n        $this->container->get(Mailer::class)->send(); // production code\n    }\n}",
+            "good": "#[Test]\npublic function it_places_an_order(): void\n{\n    self::bootKernel();\n    $handler = self::getContainer()->get(PlaceOrderCommandHandler::class); // tests only\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-006 (facades and helpers allowed in tests).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-114",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Controller happy-path tests **MUST** assert the full response structure (every key of the `*Resource`), not a spot-check.",
+          "applies_to": [
+            "controller happy-path tests"
+          ],
+          "detect": {
+            "signals": [
+              "assertResponseIsSuccessful",
+              "json_decode"
+            ]
+          },
+          "examples": {
+            "bad": "$client->request('GET', '/api/members/'.$id);\n$body = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame('Ada', $body['data']['name']); // other keys unchecked",
+            "good": "$client->request('GET', '/api/members/'.$id);\n$body = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame(['data'], array_keys($body));\nself::assertSame(['id', 'name', 'email', 'joined_at'], array_keys($body['data']));\nself::assertSame('Ada', $body['data']['name']);"
+          },
+          "lane_note": "Laravel counterpart: TEST-008 (assert the full response structure).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-115",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every `#[Assert\\...]` constraint on a `*Request` **MUST** have a `WebTestCase` test that triggers it and asserts the 422.",
+          "applies_to": [
+            "*Request classes mapped with #[MapRequestPayload]"
+          ],
+          "detect": {
+            "signals": [
+              "#[Assert\\",
+              "assertResponseStatusCodeSame(422)"
+            ]
+          },
+          "examples": {
+            "bad": "final readonly class SignUpRequest\n{\n    public function __construct(\n        #[Assert\\NotBlank]\n        #[Assert\\Email]\n        public string $email,\n    ) {}\n}\n// the only test sends a valid email: neither constraint is triggered",
+            "good": "#[Test]\npublic function it_rejects_an_invalid_email(): void\n{\n    $client = self::createClient();\n    $client->jsonRequest('POST', '/api/sign-up', ['email' => 'not-an-email']);\n    self::assertResponseStatusCodeSame(422);\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-009 (every validation rule has a test).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-116",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Any test that creates, updates or deletes data **MUST** assert the resulting database state with `assertSame`, re-reading through an `EntityManager` that was cleared first.",
+          "detect": {
+            "signals": [
+              "assertSame",
+              "->clear()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags assertEquals in a test class; it over-flags legitimate loose comparisons.",
+              "status": "draft"
+            }
+          ],
+          "examples": {
+            "bad": "$order = $this->orders->get($id);\n$this->commandBus->dispatch(new CancelOrderCommand($id));\nself::assertEquals(OrderStatus::Cancelled, $order->status()); // same in-memory object",
+            "good": "$this->commandBus->dispatch(new CancelOrderCommand($id));\n$this->entityManager->clear(); // drop the identity map\n$order = $this->entityManager->find(Order::class, $id);\nself::assertSame(OrderStatus::Cancelled, $order->status());"
+          },
+          "lane_note": "Laravel counterpart: TEST-010 (assert database state, strict comparison).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-117",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "A handler that dispatches a domain event **MUST** be tested by asserting the event class and its properties on `event.bus` (`InteractsWithMessenger` from zenstruck/messenger-test, or `InMemoryTransport::getSent()` for an event routed to a transport).",
+          "detect": {
+            "signals": [
+              "InteractsWithMessenger",
+              "getSent()",
+              "event.bus"
+            ]
+          },
+          "examples": {
+            "bad": "$this->commandBus->dispatch(new CancelOrderCommand($id));\nself::assertSame(OrderStatus::Cancelled, $this->statusOf($id)); // the event is never checked",
+            "good": "use Zenstruck\\Messenger\\Test\\InteractsWithMessenger;\n\n// in a KernelTestCase that uses InteractsWithMessenger\n$this->commandBus->dispatch(new CancelOrderCommand($id));\n$events = $this->bus('event.bus')->dispatched()->messages(OrderCancelled::class);\nself::assertCount(1, $events);\nself::assertSame($id, $events[0]->orderId);"
+          },
+          "lane_note": "Laravel counterpart: TEST-011 (event dispatch tested with a fake).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-118",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Side effects **MUST** be asserted (`assertEmailCount()`, `assertQueuedEmailCount()`, the notifier assertions, `InMemoryTransport::getSent()`).",
+          "detect": {
+            "signals": [
+              "assertEmailCount",
+              "assertQueuedEmailCount",
+              "getSent()"
+            ]
+          },
+          "examples": {
+            "bad": "$client->jsonRequest('POST', '/api/sign-up', ['email' => 'ada@example.com']);\nself::assertResponseStatusCodeSame(201); // the welcome email is never checked",
+            "good": "$client->jsonRequest('POST', '/api/sign-up', ['email' => 'ada@example.com']);\nself::assertResponseStatusCodeSame(201);\nself::assertQueuedEmailCount(1); // SendEmailMessage is routed to the async transport"
+          },
+          "lane_note": "Laravel counterpart: TEST-012 (side effects asserted).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-119",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every product `*Exception` **MUST** have a test that triggers it and asserts the HTTP status and message.",
+          "detect": {
+            "signals": [
+              "#[WithHttpStatus",
+              "expectException"
+            ]
+          },
+          "examples": {
+            "bad": "#[Test]\npublic function it_rejects_a_second_shipment(): void\n{\n    $this->expectException(OrderAlreadyShipped::class); // status and message unchecked\n    $this->commandBus->dispatch(new ShipOrderCommand($id));\n}",
+            "good": "#[Test]\npublic function it_rejects_a_second_shipment(): void\n{\n    $client = self::createClient();\n    $client->jsonRequest('POST', '/api/orders/'.$id.'/ship');\n    self::assertResponseStatusCodeSame(409);\n    self::assertStringContainsString('already shipped', $client->getResponse()->getContent());\n}"
+          },
+          "lane_note": "Laravel counterpart: TEST-013 (every business-rule exception tested).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-120",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "MUST",
+          "rule": "Every authenticated endpoint **MUST** have a test asserting the unauthenticated response, and every owned-resource endpoint a test asserting failure for a non-owner.",
+          "detect": {
+            "signals": [
+              "loginUser(",
+              "assertResponseStatusCodeSame(401)",
+              "assertResponseStatusCodeSame(403)"
+            ]
+          },
+          "examples": {
+            "bad": "$client->loginUser($owner);\n$client->request('GET', '/api/orders/'.$id);\nself::assertResponseIsSuccessful(); // no test for anonymous or for another user",
+            "good": "$client->request('GET', '/api/orders/'.$id);\nself::assertResponseStatusCodeSame(401); // anonymous\n\n$client->loginUser($otherMember);\n$client->request('GET', '/api/orders/'.$id);\nself::assertResponseStatusCodeSame(403); // not the owner"
+          },
+          "lane_note": "Laravel counterpart: TEST-014 (401 unauthenticated, failure for a non-owner).",
+          "status": "active"
+        },
+        {
+          "id": "SYM-121",
+          "family": "symfony",
+          "scope": "symfony",
+          "keyword": "SHOULD",
+          "rule": "Controller tests **SHOULD** assert the dispatched command against an in-memory bus instead of running the handler.",
+          "detect": {
+            "signals": [
+              "getContainer()->set(",
+              "InMemoryCommandBus"
+            ]
+          },
+          "examples": {
+            "bad": "$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertResponseStatusCodeSame(201); // the real handler ran, with its database writes",
+            "good": "$client = self::createClient(); // createClient() before getContainer()->set()\n$bus = new InMemoryCommandBus(); // test double implementing Framework\\Bus\\CommandBus\nself::getContainer()->set(CommandBus::class, $bus);\n$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertResponseStatusCodeSame(201);\nself::assertInstanceOf(PlaceOrderCommand::class, $bus->dispatched()[0]);"
+          },
+          "sources": [
+            "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
+          ],
           "status": "active"
         }
       ]
