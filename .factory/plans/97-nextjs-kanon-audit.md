@@ -393,3 +393,15 @@ None changes a rule. The PR lists them for the owner.
 - `proxy.ts`, `middleware.ts` and `postcss.config.mjs` match no rule file's globs, so the audit lists them as unreviewed. `src/app/` misses the `app/**` globs of data-and-rendering and access-and-security. Changing the globs is a rule-file change and out of scope here.
 - DATA-067 holds a plain-prose "MUST" inside a SHOULD rule, and DESIGN-004 keeps a "becomes MUST once" clause that plan 95 dropped from C6 (TOOLING-006). The audit uses the bold keyword for both.
 - The `grep -rlE ... src app` that `nextjs-kanon`'s table names exits 2 when `app/` is missing even when it prints a match.
+
+## Decisions (owner, 2026-11-26)
+
+The owner approved this plan in an interactive session on 2026-11-26.
+
+- Q1 (a): Turnstile and Plausible are detected with a read-only `git grep -lE '<pattern>' <head> -- src app`.
+- Q2 (a): a rule whose `- Condition:` line does not hold in the audited repo is skipped, or only its conditioned part is, and the report header lists its id with the reason (the setting found).
+- Q3 (a): a named PR that is not the checked-out commit stops the audit, and the audit tells the user to run `gh pr checkout <n>` first.
+- Q4 (a): the auditors run on the session's model. The Agent call sets no `model`, as `laravel-kanon-audit` does.
+- Q5 (b): `install.mjs` adds both `nextjs-kanon` and `nextjs-kanon-audit` to `KANON_SKILLS`, and `install.test.mjs` asserts that both install, `references/` included. README and `.factory/playbook.md` (`## Notes`, the line listing what the install copies) say so too. This replaces the "`install.mjs`: no change" line under "README and other doc changes". The PR flags the edit to `.factory/playbook.md`, a trusted file.
+- Q6 (a): "another HTML sanitizer" is a closed list of five: `react-markdown`, `rehype-sanitize`, `dompurify`, `isomorphic-dompurify`, `sanitize-html`. The audit's `SKILL.md` states the list, and the untrusted-content row of `nextjs-kanon`'s detection table names the same five, so the two never disagree.
+- Q7 (a): the README `kanon/` section and the Companions sentence of `kanon/nextjs-kanon/SKILL.md` ("It is not built yet; #97 builds it.") now point at the built audit.
