@@ -93,9 +93,9 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `src/lib/apiClient.ts` | the API client |
 | `src/constants/apiRoutes.ts` | every API path |
 | `src/constants/routes.ts` | the app's own page paths, as constants and small builders |
-| `src/lib/env.ts` | the env module |
-| `src/lib/authSession.ts` | the one module that reads and writes the browser auth flag |
-| `src/lib/metadata.ts` | the helpers that build page metadata |
+| `src/lib/env.ts` | the env module: the typed values `API_BASE_URL`, `SITE_URL` and `APP_ENVIRONMENT`, read from variables such as `NEXT_PUBLIC_API_BASE_URL` |
+| `src/lib/authSession.ts` | the one module that reads and writes the browser auth flag, and its `broadcastAuth*` and `onAuth*` helpers for other tabs |
+| `src/lib/metadata.ts` | the helpers that build page metadata: `generateContentMetadata`, `generateStaticPageMetadata`, `generateFallbackMetadata`, `CONTENT_TYPE_DESCRIPTIONS` and `CONTENT_TYPE_OG_IMAGES` |
 | `src/lib/JsonLd.tsx` | the component that writes JSON-LD into the page |
 | `src/lib/structuredData.ts` | the builders for structured data objects |
 | `src/lib/sentry/` | the Sentry setup and helpers (Sentry add-on) |
@@ -103,6 +103,96 @@ The template's file names. The template repository `codysseydev/nextjs-template`
 | `.ai/rules/` | the rule folder |
 | `src/lib/tests/architectureRules.test.ts` | the guard test |
 | `docs/reference/global-ui-components.md` | the component catalog |
+| `src/lib/` | cross-feature helpers and hooks |
+| `src/constants/` | shared constants |
+| `src/providers/` | React providers and their hooks |
+| `src/types/` | types shared across features |
+| `src/features/global-ui/icons/` | shared icon components |
+| `src/features/<name>/<FeatureName>.tsx` | a feature's entry component |
+| `src/features/<name>/components/`, `hooks/`, `services/`, `store/`, `types/`, `utils/`, `constants/`, `tests/`, `stories/` | the subfolders of a feature folder |
+| `tests/utils/`, `tests/hooks/` | test folders that mirror `utils/` and `hooks/` |
+| `types/*.types.ts` | a feature's API types |
+| `types/*.enums.ts` | a feature's enums |
+| `utils/<form>Schema.ts` | one form's schema |
+| `app/cached/<name>/[page\|variant]` | the internal rewrite folder for prerendered page variants |
+| `src/lib/serverFetch.ts` | `serverFetchJson`, the server fetch for one listing or document |
+| `src/lib/content.server.ts` | `contentService`, the server fetch that `generateMetadata` and the render share |
+| `src/lib/upstreamApiError.ts` | `UpstreamApiError`, the error the server fetches throw, and `isNotFoundError` |
+| `src/lib/pageData.ts` | `loadOrNotFound` and `assertInRange`, the shared steps of a server page |
+| `src/lib/publicPathname.ts` | `toPublicPathname`, the internal path to public path map |
+| `src/lib/archiveSeed.ts` | `seedUpdatedAt`, `perViewerSeedUpdatedAt` and `seedablePage`, the helpers that seed client queries from prerendered data |
+| `src/features/global-ui/FetchingIndicator/FetchingIndicator` | the one fetch-state indicator |
+| `urlFor<State>` | naming pattern: the helper that builds the URL for a UI state (file not named) |
+| `<thing>QueryOptions` | naming pattern: a query options factory |
+| `QueryProvider` | the provider of the query client and its defaults (file not named) |
+| `src/lib/queryRetry.ts` | `shouldRetryQuery` and `shouldRetryMutation`, the retry defaults |
+| `src/constants/queryTimings.ts` | named stale and garbage-collection times, `STALE_*` and `GC_*` |
+| `src/lib/optimisticUpdate.ts` | `runOptimisticUpdate`, the optimistic update sequence |
+| `src/lib/useFeatureMutation.ts` | `useFeatureMutation`, the mutation wrapper that owns the toast and the error report |
+| `src/lib/emailSchema.ts` | `emailField`, the shared email field schema |
+| `src/lib/passwordValidationSchema.ts` | `passwordField` and `passwordValidationSchema` |
+| `src/lib/serviceError.ts` | `toServiceError` and `RATE_LIMIT_MESSAGE`, the service error mapping |
+| `parseApiFormError`, `toUserMessage` | the form-error and user-message helpers (file not named) |
+| `showToast`, `showErrorToast` | the toast calls (file not named) |
+| `createCooldown` | the shared cooldown for resend buttons (file not named) |
+| `src/lib/withQuery.ts` | `withQuery`, the query-string builder |
+| `src/lib/routeSlug.ts` | `notFoundOnImpossibleSlug`, the early 404 for a slug that cannot exist |
+| `src/lib/browserStorage.ts` | the browser storage helpers: try/catch, key constants, a typed parse |
+| `<app>_` | placeholder prefix of every storage key, as `<app>_<snake_case>` and `<app>_auth` |
+| `AuthProvider` | the provider of the session state: `isSessionVerified`, `checkAuth`, `isAuthenticated` (file not named) |
+| `useAuth`, `useMediaQuery` | shared hooks outside feature folders (files not named) |
+| `src/lib/navigation.ts` | the navigation helpers: `beginHardNavigation`, `toSameOriginPath`, `toSameOriginParts` and `safeRedirect` |
+| `src/lib/formatDate.ts` | the shared date formatter: `formatPublishDate`, `formatDate` and `formatDateTime` |
+| `src/lib/formatPrice.ts` | `formatPrice` |
+| `src/lib/formatCount.ts` | `formatCount` and `pluralize` |
+| `src/lib/capitalizeSlug.ts` | `capitalizeSlug` |
+| `src/lib/getCookie.ts` | `getCookie` |
+| `src/lib/csrf.service.ts` | `csrfService.initializeCsrf`, the CSRF cookie request |
+| `truncateText`, `newestFirst`, `wait`, `normalizeExternalUrl`, `capitalizeFirst` | pure helpers in `src/lib` (files not named) |
+| `src/lib/exhaustiveFallback.ts` | the run-time fallback for a `never` value |
+| `src/lib/testing/at.ts` | `at()`, the checked array index for tests |
+| `src/lib/testing/createTestQueryClient.ts` | the query client for tests |
+| `tsconfig.scripts.json` | the TypeScript config for `scripts/` |
+| `scripts/` | the TypeScript build and deploy scripts |
+| `.storybook/mocks` | Storybook's mocks of `next/*` |
+| `--radius-*`, `--header-h` | role tokens in the `@theme` block of `app/globals.css` |
+| `src/constants/zIndex.ts` | the named z-index layers |
+| `src/constants/layout.ts` | `PAGE_CONTAINER`, the full-width block container |
+| `src/features/global-ui/Button/focusRing.ts` | `FOCUS_RING_CLASSES`, `HIT_AREA_CLASSES` and `HIT_AREA_Y_CLASSES` |
+| `src/lib/usePrefersReducedMotion.ts` | the reduced-motion hook |
+| `Button`, `Input`, `Select`, `Spinner`, `Skeleton`, `Badge`, `EmptyState`, `ErrorState`, `Toast` | the shared UI primitives in `src/features/global-ui/` |
+| `src/lib/openExternal.ts` | `openExternal(url)`, the one way to open a new tab |
+| `src/features/global-ui/links/HoverPrefetchLink` | the link that prefetches on hover |
+| `contentImageSizes` | the `sizes` helper for images in API content (file not named) |
+| `public/assets/`, `public/images/`, `public/icons/` | the static file folders |
+| `public/images/static-og-images/<name>-og-image.png` | a static page's Open Graph image |
+| `scripts/og-static-pages.json`, `STATIC_OG_IMAGE_BASE` | the manifest of static Open Graph images and their base path |
+| `InlineHeadScript` | the one component for an inline head script (file not named) |
+| `src/lib/safeExternalUrl.ts` | `safeExternalUrl`, the scheme check for URLs from the API |
+| `src/lib/useScrubbedSearchParams.ts` | the hook that reads a sensitive URL parameter once and removes it |
+| `src/providers/useRequireAuth.ts` | the client route guard hook |
+| `src/lib/routeAuth.ts` | `isAuthorizedPurge(request, secret)`, the caller check of a route handler that purges a cache or changes data |
+| `docs/architecture/third-party-origins.md` | the record of external script origins |
+| `skills-lock.json` | the pinned refs of the vendored skills |
+| `src/features/global-ui/RichText/richTextSanitize.ts` | the sanitizer module: `loadRichTextSanitizer()`, `sanitizeRichTextHtml()` and `EMPTY_SANITIZED_HTML` (untrusted-content add-on) |
+| `SanitizedHtmlString`, `RichTextHtml` | the branded sanitized-HTML type and the one component that renders it (untrusted-content add-on) |
+| `markdownRehypePlugins`, `markdownSanitizeSchema` | the Markdown sanitize pipeline and its schema (untrusted-content add-on, file not named) |
+| `src/lib/isExternalLink.ts` | the shared external-link predicate (untrusted-content add-on) |
+| `src/constants/site.ts` | the site's own hosts (untrusted-content add-on) |
+| `stripHtmlTags`, `decodeHtmlEntities` | the HTML text helpers in `src/lib` (untrusted-content add-on, file not named) |
+| `LazyCodeHighlighter` | the lazy code highlighter (syntax-highlighting add-on) |
+| `src/features/global-ui/CodeBlock/prismLight.ts` | the highlighter setup with explicit languages (syntax-highlighting add-on) |
+| `src/lib/sentry/dataCollection.ts` | the Sentry data-collection settings (Sentry add-on) |
+| `isExpectedRequestFailure` | the check for failures the mutation wrapper does not report (Sentry add-on) |
+| `src/features/global-ui/Captcha/Captcha.tsx`, `turnstileLoader.ts` | the Turnstile component and its script loader (Turnstile add-on) |
+| `src/lib/plausible.ts` | `trackEvent` and the event enum `AnalyticsEvent` (Plausible add-on) |
+| `ConfirmDialog` | the confirmation dialog over Radix Dialog (Radix add-on) |
+| `useReturnFocusOnClose()` | returns focus when a controlled dialog closes (Radix add-on) |
+| `EDGE_CACHED_ROUTE` | the fetch option constant for edge-cached routes (Cloudflare overlay) |
+| `scripts/size-budget.ts`, `scripts/size-budget.baseline.json` | the size budget check and its baseline (overlay entry that holds on any host) |
+| `docs/guides/performance.md` | the record of per-route first-load sizes (overlay entry that holds on any host) |
+| `scripts/lib/skewMapping.ts` | the skew mapping the deploy builds (Cloudflare overlay) |
+| `scripts/deploy-cloudflare.ts` | the deploy script (Cloudflare overlay) |
 
 A rule that needs another generic name adds it to this table.
 
