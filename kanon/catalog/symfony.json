@@ -407,7 +407,7 @@
             "Console commands"
           ],
           "examples": {
-            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    if ($subscription->status === SubscriptionStatus::Cancelled) {\n        throw new SubscriptionAlreadyCancelled($subscription->id);\n    }\n    $subscription->status = SubscriptionStatus::Cancelled;\n    $subscription->cancelledAt = $this->clock->now();\n}",
+            "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    if ($subscription->status === SubscriptionStatus::Cancelled) {\n        throw new SubscriptionAlreadyCancelled(sprintf('Subscription %s is already cancelled.', $subscription->id->toRfc4122()));\n    }\n    $subscription->status = SubscriptionStatus::Cancelled;\n    $subscription->cancelledAt = $this->clock->now();\n}",
             "good": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n\n    $subscription->cancel($this->clock->now());\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-001 to ORCH-004 (orchestrator pattern).",
@@ -478,7 +478,7 @@
             }
           ],
           "examples": {
-            "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceHandler\n{\n    public function handle(CreateInvoiceCommand $command): void { /* ... */ }\n\n    public function rollback(Uuid $invoiceId): void { /* ... */ }\n}",
+            "bad": "#[AsMessageHandler(bus: 'command.bus', method: 'handle')]\nfinal readonly class CreateInvoiceHandler\n{\n    public function handle(CreateInvoiceCommand $command): void { /* ... */ }\n\n    public function rollback(Uuid $invoiceId): void { /* ... */ }\n}",
             "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class CreateInvoiceCommandHandler\n{\n    public function __invoke(CreateInvoiceCommand $command): void { /* ... */ }\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-019 (one public handler method).",
@@ -559,7 +559,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n    $subscription->cancel();\n    $this->auditEntries->add(new AuditEntry($subscription->id, 'cancelled'));\n}",
-            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SubscriptionCancelledAuditListener\n{\n    public function __construct(private AuditEntries $auditEntries) {}\n\n    public function __invoke(SubscriptionCancelled $event): void\n    {\n        $this->auditEntries->add(new AuditEntry($event->subscriptionId, 'cancelled'));\n    }\n}"
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SubscriptionCancelledAuditListener\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    // event.bus has no doctrine_transaction, so a command on command.bus persists and flushes\n    public function __invoke(SubscriptionCancelled $event): void\n    {\n        $this->commandBus->dispatch(new RecordAuditEntryCommand(Uuid::v7(), $event->subscriptionId, 'cancelled'));\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-027 (audit through a listener).",
           "status": "candidate"
@@ -942,7 +942,7 @@
           ],
           "examples": {
             "bad": "final readonly class ReorderController\n{\n    public function __construct(private CreateOrderController $create) {}\n\n    public function __invoke(Request $request): Response\n    {\n        return ($this->create)($request);\n    }\n}",
-            "good": "final readonly class ReorderController\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(#[MapRequestPayload] ReorderRequest $request): Response\n    {\n        $this->commands->dispatch(new CreateOrderCommand($request->orderId, $request->customerId));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
+            "good": "final readonly class ReorderController\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(#[MapRequestPayload] ReorderRequest $request): Response\n    {\n        $this->commands->dispatch(new CreateOrderCommand(Uuid::v7()->toRfc4122(), $request->customerId, $request->quantity));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-022 (controller does not call controller).",
           "status": "candidate"
@@ -1127,7 +1127,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(Request $request): JsonResponse\n{\n    $violations = $this->validator->validate($request->toArray(), new Assert\\Collection([\n        'customerId' => new Assert\\NotBlank(),\n        'quantity' => new Assert\\Positive(),\n    ]));\n}",
-            "good": "final readonly class CreateOrderRequest\n{\n    public function __construct(\n        #[Assert\\Uuid] public string $customerId,\n        #[Assert\\Positive] public int $quantity,\n    ) {}\n}\n\npublic function __invoke(#[MapRequestPayload] CreateOrderRequest $request): JsonResponse {}"
+            "good": "final readonly class CreateOrderRequest\n{\n    public function __construct(\n        #[Assert\\Uuid] public string $customerId,\n        #[Assert\\Positive] public int $quantity,\n    ) {}\n}\n\npublic function __invoke(#[MapRequestPayload] CreateOrderRequest $request): JsonResponse {}\n// a GET controller reading the query string:\npublic function __invoke(#[MapQueryString(validationFailedStatusCode: 422)] ListOrdersRequest $request): JsonResponse {}"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/input-validation-vs-domain-validation"
@@ -1208,7 +1208,7 @@
           },
           "examples": {
             "bad": "final readonly class ListOrdersRequest\n{\n    public function __construct(public \\DateTimeImmutable $from) {}\n}\n\npublic function __invoke(#[MapQueryString] ListOrdersRequest $request): Response {}",
-            "good": "final readonly class ListOrdersRequest\n{\n    public function __construct(public \\DateTimeImmutable $from) {}\n}\n\npublic function __invoke(\n    #[MapQueryString(serializationContext: [DateTimeNormalizer::FORMAT_KEY => 'Y-m-d'])]\n    ListOrdersRequest $request,\n): Response {}"
+            "good": "final readonly class ListOrdersRequest\n{\n    public function __construct(public \\DateTimeImmutable $from) {}\n}\n\npublic function __invoke(\n    #[MapQueryString(\n        serializationContext: [DateTimeNormalizer::FORMAT_KEY => '!Y-m-d'],\n        validationFailedStatusCode: 422,\n    )]\n    ListOrdersRequest $request,\n): Response {}"
           },
           "lane_note": "Laravel counterpart: HTTP-012 (explicit date format).",
           "status": "candidate"
@@ -1264,8 +1264,8 @@
             ]
           },
           "examples": {
-            "bad": "$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId));\n\nreturn new JsonResponse(new OrderCreatedResource($id));",
-            "good": "$id = Uuid::v7()->toRfc4122();\n$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId));\n\nreturn new JsonResponse(new OrderCreatedResource($id), Response::HTTP_CREATED);"
+            "bad": "$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId, $request->quantity));\n\nreturn new JsonResponse(new OrderCreatedResource($id));",
+            "good": "$id = Uuid::v7()->toRfc4122();\n$this->commands->dispatch(new CreateOrderCommand($id, $request->customerId, $request->quantity));\n\nreturn new JsonResponse(new OrderCreatedResource($id), Response::HTTP_CREATED);"
           },
           "lane_note": "Laravel counterpart: HTTP-016 (create returns 201).",
           "status": "candidate"
@@ -1581,7 +1581,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(CancelOrderCommand $command): void\n{\n    $order = $this->orders->get($command->orderId);\n    if ($order->ownerId !== $command->actorId) {\n        throw new OrderAccessDeniedException();\n    }\n    $order->cancel();\n}",
-            "good": "public function __invoke(CancelOrderCommand $command): void\n{\n    $order = $this->orders->get($command->orderId);\n    if (!$this->authorization->isGranted(OrderVoter::CANCEL, $order)) {\n        throw new AccessDeniedException();\n    }\n    $order->cancel();\n}"
+            "good": "#[Route('/orders/{id}/cancel', methods: ['POST'])]\n#[IsGranted(OrderVoter::CANCEL, subject: 'order')]\nfinal readonly class CancelOrderController\n{\n    public function __construct(private CommandBus $commands) {}\n\n    public function __invoke(Order $order, #[CurrentUser] User $user): Response\n    {\n        $this->commands->dispatch(new CancelOrderCommand($order->id, $user->id));\n\n        return new Response(null, Response::HTTP_NO_CONTENT);\n    }\n}"
           },
           "lane_note": "Laravel counterpart: AUTH-002, AUTH-003 (actor-scoped lookup, ownership gate).",
           "status": "candidate"
@@ -1728,7 +1728,7 @@
           ],
           "examples": {
             "bad": "#[ORM\\Entity]\nclass Subscription\n{\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n\n    public function setStatus(SubscriptionStatus $status): void\n    {\n        $this->status = $status;\n    }\n}",
-            "good": "#[ORM\\Entity]\nclass Subscription\n{\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n\n    public function cancel(): void\n    {\n        if (SubscriptionStatus::Cancelled === $this->status) {\n            throw new SubscriptionAlreadyCancelled($this->id);\n        }\n\n        $this->status = SubscriptionStatus::Cancelled;\n    }\n}"
+            "good": "#[ORM\\Entity]\nclass Subscription\n{\n    #[ORM\\Column(enumType: SubscriptionStatus::class)]\n    private SubscriptionStatus $status;\n\n    public function cancel(): void\n    {\n        if (SubscriptionStatus::Cancelled === $this->status) {\n            throw new SubscriptionAlreadyCancelled(sprintf('Subscription %s is already cancelled.', $this->id->toRfc4122()));\n        }\n\n        $this->status = SubscriptionStatus::Cancelled;\n    }\n}"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/anemic-models-vs-rich-models"
@@ -1811,7 +1811,7 @@
           ],
           "examples": {
             "bad": "#[ORM\\Entity]\nclass Customer\n{\n    public function orderCount(EntityManagerInterface $entityManager): int\n    {\n        return $entityManager->getRepository(Order::class)->count(['customerId' => $this->id]);\n    }\n}",
-            "good": "#[ORM\\Entity]\nclass Customer\n{\n    /** @var Collection<int, Order> */\n    #[ORM\\OneToMany(targetEntity: Order::class, mappedBy: 'customer')]\n    private Collection $orders;\n\n    public function orderCount(): int\n    {\n        return $this->orders->count();\n    }\n}"
+            "good": "#[ORM\\Entity]\nclass Customer\n{\n    /** @var Collection<int, Order> */\n    #[ORM\\OneToMany(targetEntity: Order::class, mappedBy: 'customer')]\n    private Collection $orders;\n\n    public function orderCount(): int\n    {\n        return $this->orders->count(); // the repository fetch-joined orders, so no query runs here\n    }\n}"
           },
           "lane_note": "Laravel counterpart: MD-009 (accessors and casts run no queries).",
           "status": "candidate"
@@ -1872,7 +1872,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(CancelSubscriptionCommand $command): void\n{\n    $subscription = $this->subscriptions->get($command->subscriptionId);\n\n    if ($subscription->isCancelled()) {\n        throw new \\RuntimeException('Already cancelled.');\n    }\n}",
-            "good": "#[WithHttpStatus(409)]\nfinal class SubscriptionAlreadyCancelled extends \\DomainException\n{\n}\n\n// In the entity:\npublic function cancel(): void\n{\n    if (SubscriptionStatus::Cancelled === $this->status) {\n        throw new SubscriptionAlreadyCancelled('Subscription is already cancelled.');\n    }\n}"
+            "good": "// BillingException is the module base: abstract class BillingException extends \\DomainException\n#[WithHttpStatus(409)]\nfinal class SubscriptionAlreadyCancelled extends BillingException\n{\n}\n\n// In the entity:\npublic function cancel(): void\n{\n    if (SubscriptionStatus::Cancelled === $this->status) {\n        throw new SubscriptionAlreadyCancelled('Subscription is already cancelled.');\n    }\n}"
           },
           "sources": [
             "https://codyssey.dev/quick-tips/throw-a-domain-exception-not-a-framework-one",
@@ -1969,7 +1969,7 @@
           ],
           "examples": {
             "bad": "$subscription = $this->entityManager->find(Subscription::class, $command->subscriptionId);\n\nif (null === $subscription) {\n    throw new NotFoundHttpException();\n}",
-            "good": "$subscription = $this->subscriptions->get($command->subscriptionId);\n\n// In DoctrineSubscriptionRepository:\npublic function get(Uuid $id): Subscription\n{\n    return $this->entityManager->find(Subscription::class, $id)\n        ?? throw new SubscriptionNotFound(sprintf('Subscription %s not found.', $id->toRfc4122()));\n}\n\n#[WithHttpStatus(404)]\nfinal class SubscriptionNotFound extends \\DomainException\n{\n}"
+            "good": "$subscription = $this->subscriptions->get($command->subscriptionId);\n\n// In DoctrineSubscriptionRepository:\npublic function get(Uuid $id): Subscription\n{\n    return $this->entityManager->find(Subscription::class, $id)\n        ?? throw new SubscriptionNotFound(sprintf('Subscription %s not found.', $id->toRfc4122()));\n}\n\n#[WithHttpStatus(404)]\nfinal class SubscriptionNotFound extends BillingException {}"
           },
           "lane_note": "Laravel counterpart: ORCH-006 (lookups throw on missing) and MD-030 (no custom not-found for a plain lookup).",
           "status": "candidate"
@@ -2146,7 +2146,7 @@
           },
           "examples": {
             "bad": "#[ORM\\Id]\n#[ORM\\GeneratedValue]\n#[ORM\\Column]\nprivate ?int $id = null;",
-            "good": "#[ORM\\Id]\n#[ORM\\Column(type: UuidType::NAME)]\nprivate Uuid $id;\n\npublic function __construct(Uuid $id)\n{\n    $this->id = $id;\n}\n\n// In the controller: new CreateOrderCommand(Uuid::v7(), ...)"
+            "good": "#[ORM\\Id]\n#[ORM\\Column(type: UuidType::NAME)]\nprivate Uuid $id;\n\npublic function __construct(Uuid $id)\n{\n    $this->id = $id;\n}\n\n// In the controller: new CreateOrderCommand(Uuid::v7()->toRfc4122(), ...)"
           },
           "lane_note": "Laravel counterpart: MD-014 (non-enumerable public ids) and PERS-005 (non-enumerable primary keys).",
           "status": "candidate"
@@ -2201,8 +2201,8 @@
             ]
           },
           "examples": {
-            "bad": "#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap([Card::class => Card::class, BankTransfer::class => BankTransfer::class])]\nabstract class Payment\n{\n}",
-            "good": "#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap(['card' => Card::class, 'bank_transfer' => BankTransfer::class])]\nabstract class Payment\n{\n}"
+            "bad": "#[ORM\\Entity]\n#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap([Card::class => Card::class, BankTransfer::class => BankTransfer::class])]\nabstract class Payment\n{\n}",
+            "good": "#[ORM\\Entity]\n#[ORM\\InheritanceType('SINGLE_TABLE')]\n#[ORM\\DiscriminatorColumn(name: 'type', type: 'string')]\n#[ORM\\DiscriminatorMap(['card' => Card::class, 'bank_transfer' => BankTransfer::class])]\nabstract class Payment\n{\n}"
           },
           "lane_note": "Laravel counterpart: PERS-002 (no FQCN in columns).",
           "status": "candidate"
@@ -2253,7 +2253,7 @@
           ],
           "examples": {
             "bad": "final class SubscriptionRepository extends ServiceEntityRepository\n{\n    public function __construct(ManagerRegistry $registry)\n    {\n        parent::__construct($registry, Subscription::class);\n    }\n\n    public function save(Subscription $subscription): void\n    {\n        $this->getEntityManager()->persist($subscription);\n        $this->getEntityManager()->flush();\n    }\n}",
-            "good": "interface SubscriptionRepository\n{\n    public function get(Uuid $id): Subscription;\n\n    public function add(Subscription $subscription): void;\n}\n\nfinal readonly class DoctrineSubscriptionRepository implements SubscriptionRepository\n{\n    public function __construct(private EntityManagerInterface $entityManager)\n    {\n    }\n\n    public function add(Subscription $subscription): void\n    {\n        $this->entityManager->persist($subscription);\n    }\n}"
+            "good": "final readonly class DoctrineSubscriptionRepository implements SubscriptionRepository\n{\n    public function __construct(private EntityManagerInterface $entityManager) {}\n\n    public function get(Uuid $id): Subscription\n    {\n        return $this->entityManager->find(Subscription::class, $id)\n            ?? throw new SubscriptionNotFound(sprintf('Subscription %s not found.', $id->toRfc4122()));\n    }\n\n    public function add(Subscription $subscription): void\n    {\n        $this->entityManager->persist($subscription); // the doctrine_transaction middleware flushes\n    }\n}"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/the-repository-pattern"
@@ -2347,7 +2347,7 @@
           ],
           "examples": {
             "bad": "public function __invoke(Request $request): Response\n{\n    $payload = json_decode($request->getContent(), true);\n    $eventId = $payload['data']['id'];\n}",
-            "good": "final readonly class AcmePayWebhookPayload\n{\n    public function __construct(\n        #[Assert\\NotBlank]\n        public string $eventId,\n        #[Assert\\NotBlank]\n        public string $type,\n    ) {\n    }\n}\n\npublic function __invoke(#[MapRequestPayload] AcmePayWebhookPayload $payload): Response\n{\n    return new Response(null, Response::HTTP_ACCEPTED);\n}"
+            "good": "final readonly class AcmePayWebhookPayload\n{\n    public function __construct(#[Assert\\NotBlank] public string $eventId, #[Assert\\NotBlank] public string $type) {}\n}\n\n// a kernel.request listener rejects a bad X-Signature with 401 before the payload is mapped\npublic function __invoke(#[MapRequestPayload] AcmePayWebhookPayload $payload): Response\n{\n    return new Response(null, Response::HTTP_ACCEPTED);\n}"
           },
           "lane_note": "Laravel counterpart: INT-004 (typed DTO at the edge).",
           "status": "candidate"
@@ -2466,7 +2466,7 @@
           },
           "examples": {
             "bad": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RegisterMemberCommandHandler\n{\n    public function __invoke(RegisterMemberCommand $command): void\n    {\n        $this->members->add(new Member($command->memberId));\n        $this->crmClient->push($command->memberId); // HTTP call inside the request\n    }\n}",
-            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RegisterMemberCommandHandler\n{\n    public function __invoke(RegisterMemberCommand $command): void\n    {\n        $this->members->add(new Member($command->memberId));\n        $this->commandBus->dispatch(new PushMemberToCrmCommand($command->memberId));\n    }\n}\n\n#[AsMessage('async')]\nfinal readonly class PushMemberToCrmCommand\n{\n    public function __construct(public string $memberId) {}\n}"
+            "good": "#[AsMessageHandler(bus: 'command.bus')]\nfinal readonly class RegisterMemberCommandHandler\n{\n    public function __invoke(RegisterMemberCommand $command): void\n    {\n        $this->members->add(new Member($command->memberId));\n        // held until the transaction commits, then sent to the async transport\n        $this->commandBus->dispatch(new PushMemberToCrmCommand($command->memberId), [new DispatchAfterCurrentBusStamp()]);\n    }\n}\n#[AsMessage('async')]\nfinal readonly class PushMemberToCrmCommand\n{\n    public function __construct(public string $memberId) {}\n}"
           },
           "lane_note": "Laravel counterpart: ORCH-029 (slow or external work in the queue), INT-014 (external calls in queued jobs).",
           "status": "candidate"
@@ -2607,7 +2607,7 @@
           },
           "examples": {
             "bad": "$shipped = $order->lines()->filter(\n    static fn (OrderLine $line): bool => $line->isShipped(),\n)->count(); // loads every line first",
-            "good": "return (int) $this->entityManager->createQuery(\n    'SELECT COUNT(l.id) FROM OrderLine l WHERE l.orderId = :id AND l.status = :status',\n)->setParameters(['id' => $orderId, 'status' => LineStatus::Shipped])->getSingleScalarResult();"
+            "good": "return (int) $this->entityManager->createQuery(\n    'SELECT COUNT(l.id) FROM Billing\\Order\\OrderLine l WHERE l.orderId = :id AND l.status = :status',\n)->setParameters(['id' => $orderId, 'status' => LineStatus::Shipped])->getSingleScalarResult();"
           },
           "lane_note": "Laravel counterpart: PERF-002 (filter on a relation in the database).",
           "status": "candidate"
@@ -2617,7 +2617,7 @@
           "family": "symfony",
           "scope": "symfony",
           "keyword": "MUST NOT",
-          "rule": "A mapping **MUST NOT** declare `fetch: 'EAGER'` on an association; associations **MUST** be loaded per query with a fetch join (`SELECT o, l FROM Order o JOIN o.lines l`).",
+          "rule": "A mapping **MUST NOT** declare `fetch: 'EAGER'` on an association; associations **MUST** be loaded per query with a fetch join (`SELECT o, l FROM Billing\\Order\\Order o JOIN o.lines l`).",
           "detect": {
             "signals": [
               "fetch: 'EAGER'",
@@ -2633,7 +2633,7 @@
           ],
           "examples": {
             "bad": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order', fetch: 'EAGER')]\nprivate Collection $lines; // loaded on every query, read or not",
-            "good": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\nprivate Collection $lines;\n\n// the repository joins them for the one query that reads them\n$this->entityManager->createQuery(\n    'SELECT o, l FROM Order o JOIN o.lines l WHERE o.id = :id',\n);"
+            "good": "#[ORM\\OneToMany(targetEntity: OrderLine::class, mappedBy: 'order')]\nprivate Collection $lines;\n\n// the repository joins them for the one query that reads them\n$this->entityManager->createQuery(\n    'SELECT o, l FROM Billing\\Order\\Order o JOIN o.lines l WHERE o.id = :id',\n);"
           },
           "lane_note": "Laravel counterpart: PERF-003 (no `$with` default).",
           "status": "candidate"
@@ -2740,7 +2740,7 @@
           },
           "examples": {
             "bad": "namespace Billing\\IssueInvoice;\n\nuse Orders\\Order\\OrderRepository; // direct import across modules",
-            "good": "namespace Billing\\IssueInvoice;\n\ninterface OrderTotals // defined by the consumer\n{\n    public function totalFor(string $orderId): Money;\n}\n\nnamespace Orders\\Integration;\n\nfinal readonly class BillingOrderTotals implements OrderTotals // implemented by the provider\n{\n}"
+            "good": "namespace Billing\\IssueInvoice;\n\ninterface OrderTotals // defined by the consumer\n{\n    public function totalInCentsFor(string $orderId): int;\n}\n\nnamespace Orders\\Integration;\n\nfinal readonly class BillingOrderTotals implements OrderTotals // implemented by the provider\n{\n}"
           },
           "lane_note": "Laravel counterpart: ISO-002, ISO-003, ISO-004, ARCH-011 (contract or event, consumer defines it, no shared kernel, slice in the owning context).",
           "status": "candidate"
@@ -2787,7 +2787,7 @@
           },
           "examples": {
             "bad": "namespace Billing\\Invoice;\n\nfinal readonly class InvoiceRenderer\n{\n    public function render(Invoice $invoice): string\n    {\n        $name = $this->members->nameOf($invoice->memberId); // cross-module call on every render\n    }\n}",
-            "good": "namespace Billing\\Contact;\n\n#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SyncBillingContactOnContactRenamed\n{\n    public function __invoke(ContactRenamed $event): void // Billing-owned message\n    {\n        $this->contacts->rename($event->memberId, $event->name); // Billing's own table\n    }\n}"
+            "good": "#[AsMessageHandler(bus: 'event.bus')]\nfinal readonly class SyncBillingContactOnContactRenamed\n{\n    public function __construct(private CommandBus $commandBus) {}\n\n    public function __invoke(ContactRenamed $event): void // Billing-owned message\n    {\n        // event.bus has no doctrine_transaction: the command updates Billing's own table\n        $this->commandBus->dispatch(new RenameBillingContactCommand($event->memberId, $event->name));\n    }\n}"
           },
           "lane_note": "Laravel counterpart: ISO-008 (materialize data you need from another module).",
           "status": "candidate"
@@ -2901,7 +2901,7 @@
           ],
           "examples": {
             "bad": "it('places an order', function () {\n    $kernel = new Kernel('test', true);\n    $kernel->boot();\n    expect($kernel->getContainer())->not->toBeNull();\n});",
-            "good": "use PHPUnit\\Framework\\Attributes\\Test;\n\nfinal class PlaceOrderTest extends KernelTestCase\n{\n    #[Test]\n    public function it_places_an_order(): void\n    {\n        self::bootKernel();\n    }\n}"
+            "good": "use PHPUnit\\Framework\\Attributes\\Test;\n\nfinal class PlaceOrderTest extends KernelTestCase\n{\n    #[Test]\n    public function it_places_an_order(): void\n    {\n        self::bootKernel();\n        self::assertNotNull(self::getContainer());\n    }\n}"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/testing-pyramid",
@@ -2977,7 +2977,7 @@
             }
           ],
           "examples": {
-            "bad": "$order = new Order($id, OrderStatus::Shipped);\n$this->entityManager->persist($order);\n$this->entityManager->flush();",
+            "bad": "$order = new Order($id, 'ORD-1', OrderStatus::Shipped);\n$this->entityManager->persist($order);\n$this->entityManager->flush();",
             "good": "$order = OrderFactory::new()->shipped()->create();"
           },
           "lane_note": "Laravel counterpart: TEST-005 (test data from factories).",
@@ -3006,7 +3006,7 @@
           ],
           "examples": {
             "bad": "// no factory: every test builds the entity by hand\n$order = new Order($id, 'ORD-1', OrderStatus::Placed);",
-            "good": "final class OrderFactory extends PersistentObjectFactory\n{\n    public static function class(): string\n    {\n        return Order::class;\n    }\n\n    protected function defaults(): array|callable\n    {\n        return ['reference' => self::faker()->uuid(), 'status' => OrderStatus::Placed];\n    }\n\n    public function shipped(): static\n    {\n        return $this->with(['status' => OrderStatus::Shipped]);\n    }\n}"
+            "good": "final class OrderFactory extends PersistentObjectFactory\n{\n    public static function class(): string { return Order::class; }\n\n    protected function defaults(): array|callable\n    {\n        return ['id' => Uuid::v7(), 'reference' => self::faker()->uuid(), 'status' => OrderStatus::Placed];\n    }\n\n    public function shipped(): static { return $this->with(['status' => OrderStatus::Shipped]); }\n}"
           },
           "lane_note": "Laravel counterpart: PERS-006 (every model ships a factory).",
           "status": "candidate"
@@ -3048,8 +3048,8 @@
             ]
           },
           "examples": {
-            "bad": "$client->request('GET', '/api/members/'.$id);\n$data = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame('Ada', $data['name']); // other keys unchecked",
-            "good": "$client->request('GET', '/api/members/'.$id);\n$data = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame(['id', 'name', 'email', 'joined_at'], array_keys($data));\nself::assertSame('Ada', $data['name']);"
+            "bad": "$client->request('GET', '/api/members/'.$id);\n$body = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame('Ada', $body['data']['name']); // other keys unchecked",
+            "good": "$client->request('GET', '/api/members/'.$id);\n$body = json_decode($client->getResponse()->getContent(), true, flags: JSON_THROW_ON_ERROR);\nself::assertSame(['data'], array_keys($body));\nself::assertSame(['id', 'name', 'email', 'joined_at'], array_keys($body['data']));\nself::assertSame('Ada', $body['data']['name']);"
           },
           "lane_note": "Laravel counterpart: TEST-008 (assert the full response structure).",
           "status": "candidate"
@@ -3070,7 +3070,7 @@
             ]
           },
           "examples": {
-            "bad": "final readonly class SignUpRequest\n{\n    #[Assert\\NotBlank]\n    #[Assert\\Email]\n    public string $email;\n}\n// the only test sends a valid email: neither constraint is triggered",
+            "bad": "final readonly class SignUpRequest\n{\n    public function __construct(\n        #[Assert\\NotBlank]\n        #[Assert\\Email]\n        public string $email,\n    ) {}\n}\n// the only test sends a valid email: neither constraint is triggered",
             "good": "#[Test]\npublic function it_rejects_an_invalid_email(): void\n{\n    $client = self::createClient();\n    $client->jsonRequest('POST', '/api/sign-up', ['email' => 'not-an-email']);\n    self::assertResponseStatusCodeSame(422);\n}"
           },
           "lane_note": "Laravel counterpart: TEST-009 (every validation rule has a test).",
@@ -3137,7 +3137,7 @@
           },
           "examples": {
             "bad": "$client->jsonRequest('POST', '/api/sign-up', ['email' => 'ada@example.com']);\nself::assertResponseStatusCodeSame(201); // the welcome email is never checked",
-            "good": "$client->jsonRequest('POST', '/api/sign-up', ['email' => 'ada@example.com']);\nself::assertResponseStatusCodeSame(201);\nself::assertEmailCount(1);"
+            "good": "$client->jsonRequest('POST', '/api/sign-up', ['email' => 'ada@example.com']);\nself::assertResponseStatusCodeSame(201);\nself::assertQueuedEmailCount(1); // SendEmailMessage is routed to the async transport"
           },
           "lane_note": "Laravel counterpart: TEST-012 (side effects asserted).",
           "status": "candidate"
@@ -3194,8 +3194,8 @@
             ]
           },
           "examples": {
-            "bad": "$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertResponseStatusCodeSame(202); // the real handler ran, with its database writes",
-            "good": "$client = self::createClient(); // createClient() before getContainer()->set()\n$bus = new InMemoryCommandBus(); // test double implementing Framework\\Bus\\CommandBus\nself::getContainer()->set(CommandBus::class, $bus);\n$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertInstanceOf(PlaceOrderCommand::class, $bus->dispatched()[0]);"
+            "bad": "$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertResponseStatusCodeSame(201); // the real handler ran, with its database writes",
+            "good": "$client = self::createClient(); // createClient() before getContainer()->set()\n$bus = new InMemoryCommandBus(); // test double implementing Framework\\Bus\\CommandBus\nself::getContainer()->set(CommandBus::class, $bus);\n$client->jsonRequest('POST', '/api/orders', ['sku' => 'A1']);\nself::assertResponseStatusCodeSame(201);\nself::assertInstanceOf(PlaceOrderCommand::class, $bus->dispatched()[0]);"
           },
           "sources": [
             "https://codyssey.dev/courses/building-maintainable-php-applications-patterns-and-principles/command-bus"
