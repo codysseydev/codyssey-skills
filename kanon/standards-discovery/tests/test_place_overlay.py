@@ -83,6 +83,32 @@ class ForbiddingRecordWritesNothing(Placement):
         self.assertEqual((code, out["result"]), (0, "kept-in-brain"))
         self.assertEqual(snapshot(self.repo), before)
 
+    def test_a_blobless_clone_keeps_its_bytes_and_mtimes_and_fetches_nothing(self):
+        for name in ("A", "B"):
+            put(self.repo, f"app/Orders/{name}Handler.php", "<?php\n")
+            git(self.repo, "add", "-A")
+            git(self.repo, "commit", "-q", "-m", f"feat: add {name}")
+        # A rename in history gives git log rename detection work, which needs old blobs.
+        git(self.repo, "mv", "app/Orders/CancelOrderHandler.php", "app/Orders/CancelOrderHandler2.php")
+        put(self.repo, "app/Orders/CancelOrderHandler2.php", read(self.repo, "app/Orders/CancelOrderHandler2.php") + "// moved\n")
+        git(self.repo, "commit", "-qam", "refactor: rename the cancel handler")
+        git(self.repo, "config", "uploadpack.allowFilter", "true")
+        clone = os.path.join(self.tmp(), "clone")
+        subprocess.run(["git", "clone", "-q", "--filter=blob:none", "file://" + self.repo, clone], check=True, env=fs.GIT_ENV)
+        git(clone, "branch", "feature/ORD-12-cancel-refund", "origin/feature/ORD-12-cancel-refund")
+        git(self.repo, "config", "uploadpack.allowFilter", "false")
+        info = {**self.info, "read_at": git(clone, "rev-parse", "HEAD")}
+        before = snapshot(clone)
+        work = fs.make_work(info, os.path.join(self.tmp(), "work"), ALLOWING, clone)
+        self.assertEqual(json.loads(read(work, "inventory.json"))["siblings"]["Handler"],
+                         ["app/Orders/BHandler.php", "app/Orders/AHandler.php", "app/Orders/CreateOrderHandler.php"])
+        code, out = run_json("check-overlay.py", "--work", work, "--repo", clone, "--kanon-root", REPO_ROOT)
+        self.assertEqual((code, out["result"]), (0, "ok"), out)
+        self.work = work
+        code, out = self.place(repo=clone)
+        self.assertEqual((code, out["result"]), (0, "kept-in-brain"))
+        self.assertEqual(snapshot(clone), before)
+
     def test_a_broken_index_is_never_read(self):
         put(self.repo, ".git/index", b"not an index")
         self.assertEqual(self.place()[1]["result"], "kept-in-brain")

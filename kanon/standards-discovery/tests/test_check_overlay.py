@@ -494,6 +494,11 @@ class ReadAtAndIgnoredPaths(Golden):
         self.assertIn("app/Orders/CHandler.php", listed)
         self.assertNotIn("app/Orders/CreateOrderHandler.php", listed)
 
+    def test_a_missing_blob_of_a_cited_file_is_named(self):
+        oid = git(self.repo, "rev-parse", "HEAD:composer.json")
+        os.remove(os.path.join(self.repo, ".git", "objects", oid[:2], oid[2:]))
+        self.assertProblem("composer.json:7", "object store")
+
     def test_a_folder_inside_the_repo_is_a_problem(self):
         code, result = run_json("check-overlay.py", "--work", self.work, "--repo", os.path.join(self.repo, "app"), "--kanon-root", REPO_ROOT)
         self.assertEqual(code, 1)

@@ -286,6 +286,15 @@ class GitConfigOfTheClient(Inventory):
         self.assertIn(".aiignore", out["reason"])
         self.assertFalse(os.path.exists(marker))
 
+    def test_a_missing_blob_of_a_listed_file_stops_with_its_path(self):
+        repo, _ = self.client()
+        oid = git(repo, "rev-parse", "HEAD:CLAUDE.md")
+        os.remove(os.path.join(repo, ".git", "objects", oid[:2], oid[2:]))
+        code, out = self.run_inventory(repo, self.fake_policy())
+        self.assertEqual((code, out["result"]), (1, "stop"), out)
+        self.assertIn("CLAUDE.md", out["reason"])
+        self.assertIn("object store", out["reason"])
+
     def test_git_location_variables_in_the_callers_environment_are_dropped(self):
         repo, _ = self.client()
         expected = self.run_inventory(repo, self.fake_policy())

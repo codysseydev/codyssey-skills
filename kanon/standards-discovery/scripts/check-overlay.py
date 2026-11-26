@@ -434,7 +434,7 @@ def resolve_commit(repo, name):
 
 
 def blob_lines(repo, sha, path):
-    """The lines of a regular file at sha, or None."""
+    """The lines of a regular file at sha, or None. Raises inventory.Stop when its blob is not in the object store."""
     listed = _git(repo, "ls-tree", "-z", sha, "--", path)
     if listed.returncode != 0:
         return None
@@ -444,7 +444,7 @@ def blob_lines(repo, sha, path):
         if name == path and len(parts) == 3 and parts[1] == "blob" and parts[0] in ("100644", "100755"):
             shown = _git(repo, "cat-file", "blob", parts[2])
             if shown.returncode != 0:
-                return None
+                raise inventory.Stop(f"its blob {inventory.MISSING}")
             lines = _out(shown).replace("\r\n", "\n").split("\n")
             return lines[:-1] if lines and lines[-1] == "" else lines
     return None
@@ -477,7 +477,10 @@ def check_citation(repo, sha, item, ignored, listed):
             return f"commit:{item['sha']}: {weak}"
         if _git(repo, "merge-base", "--is-ancestor", found, sha).returncode != 0:
             return f"commit:{item['sha']}: not reachable from Read at"
-        subject = _out(_git(repo, "log", "-1", "--format=%s", found)).strip()
+        try:
+            subject = _out(inventory.log(repo, "-1", "--format=%s", found)).strip()
+        except inventory.Stop as stop:
+            return f"commit:{item['sha']}: {stop}"
         if item.get("quote") and collapse(item["quote"]) not in collapse(subject):
             return f"commit:{item['sha']}: the quote is not in the subject \"{subject}\""
         return None
@@ -496,7 +499,10 @@ def check_citation(repo, sha, item, ignored, listed):
         return f"{name}: a range spans at most {MAX_SPAN} lines"
     if weak:
         return f"{name}: {weak}"
-    lines = blob_lines(repo, sha, path)
+    try:
+        lines = blob_lines(repo, sha, path)
+    except inventory.Stop as stop:
+        return f"{name}: {stop}"
     if lines is None:
         return f"{name}: not in the repo as a regular file at {sha[:7]}"
     if end > len(lines):

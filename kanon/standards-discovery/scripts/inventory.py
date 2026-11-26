@@ -94,6 +94,17 @@ def _text(proc):
     return proc.stdout.decode("utf-8", "replace")
 
 
+MISSING = "is not in the local object store (a partial clone?), and the scripts never fetch. Fetch it, then rerun"
+
+
+def log(repo, *args):
+    """git log without rename detection, which would need old blobs. Raises Stop when it fails."""
+    proc = git(repo, "log", "--no-renames", *args)
+    if proc.returncode != 0:
+        raise Stop(f"git log failed: {proc.stderr.decode('utf-8', 'replace').strip()}")
+    return proc
+
+
 def _names(proc):
     return [name for name in _text(proc).split("\0") if name]
 
@@ -117,7 +128,7 @@ def ignore_files_at(repo, sha):
             raise Stop(f"{name} at {sha[:7]} is a {kind}, not a regular file, so the ignore patterns are unknown")
         shown = git(repo, "cat-file", "blob", oid)
         if shown.returncode != 0:
-            raise Stop(f"cannot read {name} at {sha[:7]}, so the ignore patterns are unknown")
+            raise Stop(f"{name} at {sha[:7]} {MISSING}")
         found[name] = shown.stdout
     return found
 
@@ -200,7 +211,7 @@ def sibling_kind(path):
 
 def siblings(repo, php_files, sha):
     """Up to 3 PHP files per class kind, the most recently committed before sha first."""
-    order = _names(git(repo, "log", "--format=", "--name-only", "-z", sha, "--"))
+    order = _names(log(repo, "--format=", "--name-only", "-z", sha, "--"))
     rank = {}
     for index, name in enumerate(order):
         rank.setdefault(name, index)
@@ -248,11 +259,13 @@ def differs_from(repo, sha, path):
         if os.path.islink(here):
             return True
     shown = git(repo, "cat-file", "blob", f"{sha}:{path}")
+    if shown.returncode != 0:
+        raise Stop(f"{path} at {sha[:7]} {MISSING}")
     try:
         if not stat.S_ISREG(os.lstat(here).st_mode):
             return True
         with open(here, "rb") as handle:
-            return shown.returncode != 0 or handle.read() != shown.stdout
+            return handle.read() != shown.stdout
     except OSError:
         return True
 
@@ -288,7 +301,7 @@ def build(repo):
         "sources": sources,
         "code_files": len(found["code"]),
         "siblings": found["siblings"],
-        "commit_subjects": _text(git(repo, "log", "-50", "--format=%s", read_at, "--")).splitlines() if read_at else [],
+        "commit_subjects": _text(log(repo, "-50", "--format=%s", read_at, "--")).splitlines() if read_at else [],
         "branches": branches(repo),
     }
 
