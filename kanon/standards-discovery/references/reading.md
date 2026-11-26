@@ -2,6 +2,10 @@
 
 Read only the paths in `inventory.json`: the `sources` lists, the `siblings` lists, `commit_subjects` and `branches`. Never read a path in `ignored`, and never a path the inventory does not list. For each convention, note `file:line` and a short quote while you read, so the report needs no second pass.
 
+## Reading with reader agents
+
+When the listed files do not fit in one agent's context, split them by the kinds below into groups, and give each group to a read-only reader agent. Give a reader its paths, the repo path, the `read_at` commit and this file. A reader never reads a path outside its group. It returns one line per convention: `file:line`, a short quote, and the source (`written down`, `configured` or `pattern in code`). It returns no report rows and no Kanon IDs, since mapping happens in step 4 over all the notes.
+
 ## Instructions
 
 `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/**`, `.cursorrules`, `.github/copilot-instructions.md`, `.ai/rules/**/*.md`. These are rules the team wrote for tools. Each rule sentence is a convention with source `written down`. Note rules that contradict the Kanon first, since those are `change` or `off`.

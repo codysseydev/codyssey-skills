@@ -64,6 +64,8 @@ The script reads the tracked files through git and prints the paths that may be 
 
 Read every path in `sources` and `siblings`, and the commit and branch lists. Never read a path in `ignored`, and never a path outside the inventory. Note each convention with `file:line` and a short quote. `references/reading.md` says what to look for in each kind of source.
 
+When the listed files are more than one agent can hold in context, split them into groups and give each group to its own read-only reader agent. Groups follow the kinds in `sources` and `siblings`, for example docs, instructions, linters with CI and scripts, and sibling kinds, and a large group is split again. Each reader reads only the paths of its group and returns its conventions as `file:line` with a short quote, in the form `references/reading.md` asks for, and nothing else. Write the report and the overlay from those notes, and check a citation against the file before you rely on it.
+
 ## Step 4: map to the Kanon
 
 Read the Kanon from `<skill dir>/kanon/`: `catalog/families.json` lists the families and their reference files, and `catalog/` holds the rule IDs. Name each Kanon rule by its ID. For each convention pick one effect: `adopt`, `change`, `off`, or `project-only` when the Kanon has no rule for it. Write three outputs into the work folder:
