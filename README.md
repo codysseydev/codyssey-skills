@@ -8,7 +8,7 @@ Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), the skeleton of a Next.js Kanon (`nextjs-kanon`), and `standards-discovery`, which reads a client's codebase and writes a standards report and a project overlay | Any Laravel, Symfony or Next.js project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), a Next.js Kanon (`nextjs-kanon`) and its audit (`nextjs-kanon-audit`), and `standards-discovery`, which reads a client's codebase and writes a standards report and a project overlay | Any Laravel, Symfony or Next.js project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -29,8 +29,11 @@ Five folders, five different jobs:
 - `nextjs-kanon`: the Kanon for the Next.js frontend of a product with its own API. Its
   `SKILL.md` holds the fixed core stack, how each add-on and the Cloudflare overlay is
   detected, and the known clashes with upstream skills. `references/index.md` holds the id
-  of every rule. The rule files are stubs for now: #89 to #96 fill them, and the audit,
-  `nextjs-kanon-audit`, comes in #97.
+  of every rule.
+- `nextjs-kanon-audit`: the audit for `nextjs-kanon`. It checks a branch or diff against
+  the same rule files, routes each changed file by the files' `paths:` globs, runs one
+  subagent per rule file, takes each finding's severity from the rule's keyword, and cites
+  the rule's id on every finding. It is read-only.
 - `standards-discovery`: reads a client's codebase and writes its conventions as a standards
   report and a project overlay (project-first mode). Six steps: check the client's AI policy
   record (`check-policy.py`, stops when the record is missing, incomplete or forbids the step),
@@ -45,6 +48,7 @@ Five folders, five different jobs:
 
 Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
 rulebook's `references/` folder, so the two folders must sit next to each other.
+Install `nextjs-kanon` and `nextjs-kanon-audit` together for the same reason.
 
 ### Changing a rule
 
@@ -159,12 +163,14 @@ its lane watches. The install script writes them into the Desktop task folders.
 
 Copy a skill folder into `.claude/skills/` in your project, or into `~/.claude/skills/`
 to use it in every project. Install `laravel-kanon` and `laravel-kanon-audit`
-side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it reads
-files from `laravel-kanon`'s `references/` folder.
+side by side, and `nextjs-kanon` and `nextjs-kanon-audit` side by side. Install
+`symfony-kanon` next to `laravel-kanon` too, because it reads files from
+`laravel-kanon`'s `references/` folder.
 
 For the playbook, the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
-`event-model`, `factory-onboard`), `standards-discovery` (with a snapshot of the Kanon catalog and reference files) and the
-scheduled task prompts, run the install script from a checkout of this repo:
+`event-model`, `factory-onboard`), `standards-discovery` (with a snapshot of the Kanon catalog and reference files),
+`nextjs-kanon` with `nextjs-kanon-audit`, and the scheduled task prompts, run the install
+script from a checkout of this repo:
 
 ```
 node playbooks/scripts/install.mjs --source .
