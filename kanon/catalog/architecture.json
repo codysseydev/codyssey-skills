@@ -1,0 +1,279 @@
+{
+  "family": "architecture",
+  "title": "Architecture: Modules & Vertical Slices",
+  "intro": [
+    "Applies to: overall code organization, new features, module layout, slice shape, folder structure, placement of capabilities.",
+    "Lane boundaries: this family audits the slice as a unit (completeness, co-location, placement, naming). Route naming/middleware/status rules are owned by `http-api.md`; class-shape and single-action rules by `orchestration-di.md`; isolation import/FK rules by `isolation.md`. Note a missing piece once here; do not re-derive those families' per-line findings."
+  ],
+  "sections": [
+    {
+      "heading": "Modules are bounded contexts",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ARCH-001",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Domain code **MUST** be organized into modules, one namespace per business capability (`App\\Subscriptions`, `App\\Orders`, `App\\Billing`), not into framework-type folders (`app/Services`, `app/Repositories`, `app/Actions` as a global dumping ground).",
+          "detect": {
+            "paths": [
+              "app/Services/**",
+              "app/Repositories/**",
+              "app/Actions/**"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on any class in the `App\\Services`, `App\\Repositories` or `App\\Actions` namespace. Does not judge whether a module namespace names a business capability.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ARCH-002",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A module **MUST** be named after the business capability in the domain's own language, not after a technical role.",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-003",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Read-only contexts (reporting projections, CMS query layers, analytics) **MUST NOT** contain write commands or emit domain events. State changes belong to the owning context; a reporting context reacts to its events and answers queries.",
+          "applies_to": [
+            "reporting projections",
+            "CMS query layers",
+            "analytics"
+          ],
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on a `*Command` or `*CommandHandler` class in a namespace the project lists as read-only. Needs that list, and does not catch event dispatch.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ARCH-004",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "A project **SHOULD** keep a domain glossary (ubiquitous language table) in its docs; a slice that introduces a new context **SHOULD** add its key terms there.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Vertical slices",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ARCH-005",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every capability **MUST** ship as a vertical slice: one action folder holding all of its pieces.",
+          "items": [
+            "Write slice: `{Action}Command`, `{Action}CommandHandler`, `{Action}Controller`, `{Action}Request`, `{Action}Resource` (when a body is returned), a named route, tests, and a past-tense domain event when state changes.",
+            "Read slice: `{Action}Query` (when parameterized), `{Action}QueryHandler`, `{Action}Controller`, `{Action}Resource`, a named route, tests. A fixed-criteria listing **MAY** omit the query object."
+          ],
+          "detect": {
+            "paths": [
+              "**/*Command.php",
+              "**/*CommandHandler.php",
+              "**/*Controller.php",
+              "**/*Request.php",
+              "**/*Resource.php",
+              "**/*Query.php",
+              "**/*QueryHandler.php"
+            ]
+          },
+          "lane_note": "Route naming/middleware/status rules are owned by `http-api.md`; class-shape and single-action rules by `orchestration-di.md`.",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-006",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Slice pieces **MUST** be co-located in that one folder. Code **MUST NOT** be scattered across type-named folders (`Controllers/`, `Requests/`, `Resources/`, `Enums/`, `Events/`, `Listeners/` inside a module).",
+          "detect": {
+            "paths": [
+              "**/Controllers/**",
+              "**/Requests/**",
+              "**/Resources/**",
+              "**/Enums/**",
+              "**/Events/**",
+              "**/Listeners/**"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on a class in a `Controllers`, `Requests`, `Resources`, `Enums`, `Events` or `Listeners` namespace segment inside a module.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "ARCH-007",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Entity concept folders: a model **MUST** live in a folder with its factory, its enums, and its exceptions (`Subscription/` holds `Subscription.php`, `SubscriptionFactory.php`, `SubscriptionStatus.php`, `SubscriptionAlreadyCancelledException.php`).",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-008",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "The namespace **MUST** mirror the directory path exactly.",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-009",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every command/query **MUST** be wired to its handler explicitly (`Bus::map([...])` in the module's service provider), never by convention-based discovery.",
+          "detect": {
+            "signals": [
+              "Bus::map("
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "ARCH-010",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "SHOULD NOT",
+          "rule": "A module **SHOULD NOT** introduce domain-concern grouping (`Lifecycle/`, `Queries/`) until it exceeds roughly ten action folders; premature grouping is a deviation. A grouped action folder **MUST** still contain its full slice.",
+          "detect": {
+            "paths": [
+              "**/Lifecycle/**",
+              "**/Queries/**"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Placement",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ARCH-011",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A slice **MUST** live in the context that owns the capability. If a slice needs to import or instantiate another module's classes to do its job, it is in the wrong place or the collaboration **MUST** become a contract or event (see `isolation.md`).",
+          "lane_note": "Isolation import/FK rules are owned by `isolation.md`.",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-012",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "A write command **MUST NOT** be added to a read-only or reporting context.",
+          "applies_to": [
+            "read-only contexts",
+            "reporting contexts"
+          ],
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on a `*Command` or `*CommandHandler` class in a namespace the project lists as read-only or reporting. Needs that list.",
+              "status": "draft"
+            }
+          ],
+          "duplicate_of": "ARCH-003",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Naming",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "ARCH-013",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Classes, methods, commands, events, routes, and abilities **MUST** be named after the business language of their context.",
+          "applies_to": [
+            "classes",
+            "methods",
+            "commands",
+            "events",
+            "routes",
+            "abilities"
+          ],
+          "lane_note": "Route naming/middleware/status rules are owned by `http-api.md`.",
+          "status": "active"
+        },
+        {
+          "id": "ARCH-014",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Technical/ETL/CRUD jargon **MUST NOT** be used where a domain term exists: `Manager`, `Processor`, `Helper`, `Util`, `Registry`, `Resolver`, `Transformer`, `Ingest`, `Upsert`, `Outcome`, generic `Service`.",
+          "detect": {
+            "signals": [
+              "Manager",
+              "Processor",
+              "Helper",
+              "Util",
+              "Registry",
+              "Resolver",
+              "Transformer",
+              "Ingest",
+              "Upsert",
+              "Outcome",
+              "Service"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Fails on a class name ending in one of the listed terms. Does not cover method or route names, or whether a domain term exists.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "note": "Suffixes are added only where the role would otherwise be ambiguous. With suffix: `{Action}Command`, `{Action}CommandHandler`, `{Action}Query`, `{Action}QueryHandler`, `{Action}Controller`, `{Action}Request`, `{Action}Resource`, `*Exception`, `*Listener`, `*Job`, `*Mail`. Without suffix: events (past-tense facts), models (nouns), enums (descriptive)."
+        },
+        {
+          "id": "ARCH-015",
+          "family": "architecture",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Methods and parameters **MUST** be named after the value actually passed, not aspirational domain language the value is not (`forUser(int $userId)`, not `forMember(int $userId)` when the argument is a plain user id).",
+          "applies_to": [
+            "methods",
+            "parameters"
+          ],
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

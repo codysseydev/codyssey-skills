@@ -1,0 +1,216 @@
+{
+  "family": "authorization",
+  "title": "Authorization & Resource Ownership",
+  "intro": [
+    "Applies to: owned-resource handlers, capability-gated routes, guards, Form Request `authorize()`. Authorization failures are critical; every MUST here is a security rule."
+  ],
+  "sections": [
+    {
+      "heading": "Authorization comes from the principal",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "AUTH-001",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Authorization **MUST** derive from the authenticated principal, never from request input. A handler that trusts a `user_id`, `team_id`, or `role` from the request body is broken.",
+          "detect": {
+            "signals": [
+              "a handler that trusts a `user_id`, `team_id`, or `role` from the request body"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a handler or controller that reads `user_id`, `team_id` or `role` from request input. Misses an actor id under another key name.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "AUTH-002",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every endpoint touching owned data **MUST** scope its lookup by the actor (IDOR protection: stopping one user from reading another's record by changing an id). \"Fetch by id, then check\" is not scoping; the gate lives in the lookup itself.",
+          "why": "IDOR protection: stopping one user from reading another's record by changing an id",
+          "applies_to": [
+            "endpoints touching owned data"
+          ],
+          "allowed_in": [
+            "query handlers for genuinely public, ownerless data"
+          ],
+          "detect": {
+            "signals": [
+              "fetch by id, then check"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Ownership gates live in model lookups",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "AUTH-003",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "An owned-resource handler **MUST** resolve actor plus resource through a model method that asserts membership/ownership and throws: `Team::findByIdForMemberOrFail($teamId, $userId)` for reads, `findByIdForAdminOrFail(...)` or an `*AsAdmin(...)` write method for privileged writes. Never `find()` plus a manual check in the handler.",
+          "applies_to": [
+            "owned-resource handlers"
+          ],
+          "allowed_in": [
+            "query handlers for genuinely public, ownerless data"
+          ],
+          "detect": {
+            "signals": [
+              "`find()` plus a manual check in the handler"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a `find()` call on a model inside a handler class. Cannot tell whether the model is owned or whether the check after it is an ownership check, so each finding needs review.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "AUTH-004",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "The gate **MUST** throw a domain exception that renders itself as 403. Controllers **MUST NOT** build 403 responses inline.",
+          "applies_to": [
+            "ownership gates",
+            "controllers"
+          ],
+          "detect": {
+            "signals": [
+              "a controller that builds a 403 response inline"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a 403 status code passed to a response or abort call inside a controller class. Misses a 403 built in a helper the controller calls.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Authentication vs authorization split",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "note": "Authentication is route middleware (`auth:sanctum`, `verified`). Authorization is the domain gate above. A Form Request `authorize()` returning `true` is correct under this split; **do not** move ownership checks into Form Requests."
+        },
+        {
+          "id": "AUTH-005",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every Form Request still **MUST** define `authorize()` explicitly (even when it returns `true`) alongside `rules()`.",
+          "applies_to": [
+            "Form Requests"
+          ],
+          "detect": {
+            "signals": [
+              "a Form Request with no `authorize()` of its own"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a Form Request class that does not declare `authorize()` itself. Counts an inherited `authorize()` as missing.",
+              "status": "draft"
+            }
+          ],
+          "duplicate_of": "ORCH-025",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Capabilities and guards",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "AUTH-006",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Capability-gated endpoints **MUST** use ability middleware with a typed constant (`'abilities:'.PublishingAbility::NAME`), never a string literal.",
+          "applies_to": [
+            "capability-gated endpoints"
+          ],
+          "detect": {
+            "signals": [
+              "ability middleware given as a string literal instead of a typed constant like `'abilities:'.PublishingAbility::NAME`"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags an `abilities:` middleware argument that is one whole string literal. Misses a string built from a variable that is not a constant.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "AUTH-007",
+          "family": "authorization",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Separate application surfaces **MUST** use separate guards; an admin panel authenticates through its own guard plus an access check (`canAccessPanel()`-style), never the customer app's guard or role enums (see `isolation.md`).",
+          "applies_to": [
+            "separate application surfaces",
+            "admin panels"
+          ],
+          "detect": {
+            "signals": [
+              "an admin panel on the customer app's guard",
+              "an admin panel that reads the customer app's role enums",
+              "an admin panel with no `canAccessPanel()`-style access check"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "Deptrac",
+              "coverage": "Forbids the admin panel layer from depending on the customer app's role enums. Does not see which guard a panel is configured with.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "What is NOT a violation",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "note": "`authorize(): true` on a Form Request (the split above)."
+        },
+        {
+          "note": "A query handler for genuinely public, ownerless data."
+        }
+      ]
+    }
+  ]
+}

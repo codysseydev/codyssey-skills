@@ -1,3 +1,5 @@
+<!-- Generated from kanon/catalog/shapes.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->
+
 # Shapes
 
 First intro paragraph, with a `code span`.

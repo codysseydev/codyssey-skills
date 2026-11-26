@@ -1,0 +1,512 @@
+{
+  "family": "http-api",
+  "title": "Routes, HTTP & API Serialization",
+  "intro": [
+    "Applies to: route files, middleware wiring, Form Request field rules, HTTP statuses, API resources, response shape, inbound webhooks.",
+    "Lane boundaries: Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler."
+  ],
+  "sections": [
+    {
+      "heading": "Routes",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-001",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Each module **MUST** own its route file (`{module}-routes.php`), loaded by the module's service provider. A module route file loaded with `loadRoutesFrom()` **MUST** declare its `api` prefix and `api` middleware explicitly, because `loadRoutesFrom()` adds neither (`Route::prefix('api')->middleware('api')->group(...)`).",
+          "why": "`loadRoutesFrom()` adds neither",
+          "detect": {
+            "paths": [
+              "{module}-routes.php"
+            ],
+            "signals": [
+              "loadRoutesFrom()",
+              "Route::prefix('api')->middleware('api')->group(...)"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-002",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Each user intent **MUST** have its own route; one endpoint **MUST NOT** pick its action from the request body. One endpoint serving several intents forces a single authorization rule to cover all of them.",
+          "why": "One endpoint serving several intents forces a single authorization rule to cover all of them.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-003",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every route **MUST** be named, following `{module}.{resource}.{action}` (`commerce.orders.create`). Thin public one-off routes **MAY** use a simple single-segment name.",
+          "allowed_in": [
+            "Thin public one-off routes"
+          ],
+          "detect": {
+            "signals": [
+              "{module}.{resource}.{action}"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-004",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Route parameters **MUST** be plain ids resolved inside the query/command handler. Route-model binding **MUST NOT** be used; implicit binding hides the lookup, skips the ownership gate, and couples routes to Eloquent.",
+          "why": "implicit binding hides the lookup, skips the ownership gate, and couples routes to Eloquent",
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a controller action parameter typed as an Eloquent model, which is route-model binding.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "HTTP-005",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Middleware aliases and groups **MUST** be registered in `bootstrap/app.php`; route files only apply them by name, they do not define them.",
+          "detect": {
+            "paths": [
+              "bootstrap/app.php"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Public vs authenticated",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-006",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "State-changing routes and owned-data routes **MUST** sit inside an auth middleware group (`auth:sanctum`, plus `verified` for sensitive operations). Only genuinely public reads **MAY** live outside it.",
+          "allowed_in": [
+            "genuinely public reads"
+          ],
+          "detect": {
+            "signals": [
+              "auth:sanctum",
+              "verified"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-007",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Abuse-prone endpoints (login, signup, email resend, password reset) **MUST** carry a `throttle:` limiter.",
+          "applies_to": [
+            "login",
+            "signup",
+            "email resend",
+            "password reset"
+          ],
+          "detect": {
+            "signals": [
+              "throttle:"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-008",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Privileged writes **MUST** carry capability middleware (`abilities:` / `can:`) referencing a typed constant, never a magic string (see `authorization.md`).",
+          "detect": {
+            "signals": [
+              "abilities:",
+              "can:"
+            ]
+          },
+          "duplicate_of": "AUTH-006",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Form Request input",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-009",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Each write action **MUST** have its own Form Request; a request **MUST NOT** branch on `isMethod()` to serve several actions.",
+          "detect": {
+            "signals": [
+              "isMethod()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a call to isMethod() inside a Form Request class.",
+              "status": "draft"
+            }
+          ],
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-010",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every field the handler reads **MUST** be `required`, or `required` plus `nullable`, or given an explicit default in the Form Request; `sometimes` **MUST NOT** be used for a field the handler reads.",
+          "detect": {
+            "signals": [
+              "required",
+              "nullable",
+              "sometimes"
+            ]
+          },
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-011",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "SHOULD",
+          "rule": "Fields an endpoint ignores **SHOULD** be marked `prohibited` so clients get a 422 instead of a silent 204.",
+          "why": "clients get a 422 instead of a silent 204",
+          "detect": {
+            "signals": [
+              "prohibited"
+            ]
+          },
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-012",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Date inputs **MUST** be validated with `date_format:Y-m-d` (or an explicit format) and read with `$request->date()`, never the loose `date` rule.",
+          "detect": {
+            "signals": [
+              "date_format:Y-m-d",
+              "$request->date()",
+              "date"
+            ]
+          },
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-013",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Client-chosen sort and filter columns **MUST** be validated with `Rule::enum()` and mapped to columns you chose to expose; raw input never reaches `orderBy()` or `where()` as a column name.",
+          "detect": {
+            "signals": [
+              "Rule::enum()",
+              "orderBy()",
+              "where()"
+            ]
+          },
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-014",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A field rule **MUST** stay in the Form Request even when a value object also enforces it, so form users get a field-level 422 instead of a 500 (the value object's invariants are in `models-domain.md`).",
+          "why": "form users get a field-level 422 instead of a 500",
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-015",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "`validated()` **MUST NOT** be spread into `create()`/`update()`; the handler **MUST** list the columns it writes. Models are unguarded (see `models-domain.md`), so every validated key would become a column write.",
+          "why": "Models are unguarded (see `models-domain.md`), so every validated key would become a column write.",
+          "detect": {
+            "signals": [
+              "validated()",
+              "create()",
+              "update()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags validated() passed straight into create() or update().",
+              "status": "draft"
+            }
+          ],
+          "lane_note": "Form Request shape (array-syntax rules, `authorize()` plus `rules()`, no inline `$request->validate()`) is owned by `orchestration-di.md`. This file owns what the rules accept and how input reaches the handler.",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "HTTP status discipline",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-016",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Create **MUST** return 201 (via the resource's `withResponse()` or `->response()->setStatusCode(201)`).",
+          "detect": {
+            "signals": [
+              "withResponse()",
+              "->response()->setStatusCode(201)"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-017",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "State changes and deletes **MUST** return 204 with no body.",
+          "status": "active"
+        },
+        {
+          "note": "Reads return 200."
+        },
+        {
+          "note": "A create returning 200, or a delete returning a body, is a violation."
+        }
+      ]
+    },
+    {
+      "heading": "Response shape",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-018",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Responses **MUST** be built by dedicated `JsonResource` classes; controllers never hand-assemble arrays.",
+          "detect": {
+            "signals": [
+              "JsonResource"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a controller action whose return type is array.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "HTTP-019",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "A resource **MUST NOT** manually map a collection (`$this->items->map(...)`); nested relations get their own resource class and `::collection()`.",
+          "detect": {
+            "signals": [
+              "$this->items->map(...)",
+              "::collection()"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-020",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A resource **MUST** read typed DTO/model properties, never associative-array keys; the feeding handler returns a Result DTO.",
+          "status": "active"
+        },
+        {
+          "id": "HTTP-021",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Keys **MUST** be snake_case; a single object is wrapped in `data`; collections add `meta` and `links`; errors are a bare `message` (plus `errors` for validation) with no `data` wrapper.",
+          "detect": {
+            "signals": [
+              "data",
+              "meta",
+              "links",
+              "message",
+              "errors"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-022",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Dates **MUST** serialize via `->toIso8601String()`.",
+          "detect": {
+            "signals": [
+              "->toIso8601String()"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-023",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Optional/relation fields **MUST** be conditional (`when(...)`, `whenLoaded(...)`).",
+          "detect": {
+            "signals": [
+              "when(...)",
+              "whenLoaded(...)"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "API documentation",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-024",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every API controller **MUST** carry attribute-driven documentation (Scribe's `#[Endpoint]`, `#[Group]`, `#[Response]`, plus `#[Authenticated]` and `#[UrlParam]` where relevant, from the `knuckleswtf/scribe` package, or an equivalent generator's attributes). An undocumented endpoint is incomplete work.",
+          "why": "An undocumented endpoint is incomplete work.",
+          "detect": {
+            "signals": [
+              "#[Endpoint]",
+              "#[Group]",
+              "#[Response]",
+              "#[Authenticated]",
+              "#[UrlParam]",
+              "knuckleswtf/scribe"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-025",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "The `#[Response]` example **MUST** match the resource's actual output shape, with realistic example data; a documented shape that lies is worse than none.",
+          "why": "a documented shape that lies is worse than none",
+          "detect": {
+            "signals": [
+              "#[Response]"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-026",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every route parameter **MUST** have a matching `#[UrlParam]`.",
+          "detect": {
+            "signals": [
+              "#[UrlParam]"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Inbound webhooks",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "HTTP-027",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Webhook routes **MUST** live in their own route file loaded via `loadRoutesFrom()`, behind a signature-verification middleware, CSRF-excepted in `bootstrap/app.php`, and **MUST NOT** sit behind user auth middleware.",
+          "detect": {
+            "paths": [
+              "bootstrap/app.php"
+            ],
+            "signals": [
+              "loadRoutesFrom()"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-028",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Webhook processing **MUST** be queued and **MUST** be idempotent with tracking: check an idempotency key against a tracking record and no-op on repeats BEFORE any domain work; then record the outcome (`markProcessed()` / `markFailed($error)`), with the domain work wrapped so the tracking record always settles.",
+          "why": "the tracking record always settles",
+          "detect": {
+            "signals": [
+              "markProcessed()",
+              "markFailed($error)"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "HTTP-029",
+          "family": "http-api",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Webhook jobs **MUST** declare explicit `$tries` and `$backoff`.",
+          "detect": {
+            "signals": [
+              "$tries",
+              "$backoff"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a webhook job class that declares no $tries or $backoff property.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

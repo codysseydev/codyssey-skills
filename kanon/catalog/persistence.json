@@ -1,0 +1,228 @@
+{
+  "family": "persistence",
+  "title": "Migrations, Factories, Config & Providers",
+  "intro": [
+    "Applies to: migrations, model factories, config files, service providers, scheduled tasks."
+  ],
+  "sections": [
+    {
+      "heading": "Migrations",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERS-001",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "A migration **MUST** have a `down()` that actually reverses it, or a clearly intentional irreversible note.",
+          "detect": {
+            "signals": [
+              "down()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a migration whose down() method has an empty body and no irreversible note.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "PERS-002",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "PHP FQCNs **MUST NOT** be stored in database columns (defaults, seeds, morph types); use plain string identifiers and a morph map.",
+          "status": "active"
+        },
+        {
+          "id": "PERS-003",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Lifecycle state **MUST** be a `status` string column cast to a backed enum, with an index, never a `boolean('is_active')`-style flag (see `models-domain.md`).",
+          "detect": {
+            "signals": [
+              "status",
+              "boolean('is_active')"
+            ]
+          },
+          "status": "active"
+        },
+        {
+          "id": "PERS-004",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Cross-module references **MUST** be plain id columns with no `->foreign()`; a same-module foreign key **MAY** exist. A migration **MUST NOT** touch a table owned by another module (see `isolation.md`).",
+          "allowed_in": [
+            "a same-module foreign key"
+          ],
+          "detect": {
+            "signals": [
+              "->foreign()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a ->foreign() call in a migration that references a table owned by another module.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "PERS-005",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "New domain tables **MUST** use primary keys consistent with the project's non-enumerable public-id strategy (ULID/UUIDv7/snowflake).",
+          "status": "active"
+        },
+        {
+          "note": "Facades, helpers, and `Schema`/`DB` are fine inside migrations."
+        }
+      ]
+    },
+    {
+      "heading": "Factories",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERS-006",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "Every model **MUST** ship a factory: `final class`, typed `definition(): array`, named states via `->state(...)` for every meaningful lifecycle position. Exception: read-model factories may be non-`final` (see `filament.md`).",
+          "allowed_in": [
+            "read-model factories"
+          ],
+          "detect": {
+            "signals": [
+              "final class",
+              "definition(): array",
+              "->state(...)"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPArkitect",
+              "coverage": "Flags a model factory class that is not declared final, outside read-model factories.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "note": "Factories use only framework/package traits, like all other classes."
+        }
+      ]
+    },
+    {
+      "heading": "Config",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "id": "PERS-007",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "`env()` **MUST** appear only in config files; nowhere else in the codebase.",
+          "detect": {
+            "signals": [
+              "env()"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags an env() call outside the config directory.",
+              "status": "draft"
+            }
+          ],
+          "duplicate_of": "INT-011",
+          "status": "active"
+        },
+        {
+          "id": "PERS-008",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MAY",
+          "rule": "Descriptive header comment blocks in config files **MAY** exist (they are not what-narration).",
+          "why": "they are not what-narration",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Providers",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "note": "The module service provider owns all wiring: `Bus::map([...])` for command/query handlers, explicit `Event::listen($event, $listener)` per listener, singleton bindings for connectors/gateways, `Schedule::job(...)`/`Schedule::command(...)` for scheduled tasks."
+        },
+        {
+          "id": "PERS-009",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST NOT",
+          "rule": "Event auto-discovery and `$listen` arrays **MUST NOT** be used; every listener registration is explicit and greppable.",
+          "why": "every listener registration is explicit and greppable",
+          "detect": {
+            "signals": [
+              "$listen"
+            ]
+          },
+          "checks": [
+            {
+              "tool": "PHPStan",
+              "coverage": "Flags a $listen property or event auto-discovery enabled on an event service provider.",
+              "status": "draft"
+            }
+          ],
+          "status": "active"
+        },
+        {
+          "id": "PERS-010",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MAY",
+          "rule": "Facades and helpers **MAY** be used in providers.",
+          "duplicate_of": "ORCH-010",
+          "status": "active"
+        },
+        {
+          "id": "PERS-011",
+          "family": "persistence",
+          "scope": "laravel",
+          "keyword": "MUST",
+          "rule": "The app service provider **MUST** enable strict Eloquent mode and unguard models (`Model::shouldBeStrict()`, `Model::unguard()`), and register the morph map.",
+          "detect": {
+            "signals": [
+              "Model::shouldBeStrict()",
+              "Model::unguard()"
+            ]
+          },
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "heading": "Shape",
+      "intro": [],
+      "list": "bullet",
+      "entries": [
+        {
+          "note": "File-shape rules (`strict_types`, `final readonly`, promotion) are owned by `orchestration-di.md` and apply to migrations, factories, and config too; cross-reference it, do not re-audit them here."
+        }
+      ]
+    }
+  ]
+}

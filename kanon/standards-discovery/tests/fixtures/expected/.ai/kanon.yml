@@ -1,0 +1,21 @@
+# Written by standards-discovery. The standards report names the commit it read.
+mode: project-first
+overlay:
+  - id: ORCH-011
+    effect: adopt
+    evidence:
+      - .php-cs-fixer.dist.php:9
+  - id: ORCH-008
+    effect: 'off'
+    evidence:
+      - CLAUDE.md:12
+  - id: TEST-003
+    effect: change
+    rule: .ai/rules/project/testing.md
+    evidence:
+      - CLAUDE.md:7
+  - id: TEST-001
+    effect: change
+    rule: .ai/rules/project/testing.md
+    evidence:
+      - tests/Orders/CreateOrderHandlerTest.php:9

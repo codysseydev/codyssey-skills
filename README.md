@@ -8,7 +8,7 @@ Five folders, five different jobs:
 
 | Folder | What it is | Use it on |
 |---|---|---|
-| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), and `standards-discovery`, the AI policy check that comes before reading a client's code | Any Laravel or Symfony project of your own |
+| `kanon/` | A fixed Laravel doctrine (`laravel-kanon`), the audit that checks code against it (`laravel-kanon-audit`), a Symfony overlay of the Kanon (`symfony-kanon`), the skeleton of a Next.js Kanon (`nextjs-kanon`), and `standards-discovery`, which reads a client's codebase and writes a standards report and a project overlay | Any Laravel, Symfony or Next.js project of your own |
 | `general/` | Procedures that work in any Laravel project: a standards review against the project's own conventions, manual API testing with curl, and a pre-release staging smoke test | Any Laravel project, including ones with established team standards |
 | `factory/` | Stack-agnostic skills for the start of a software factory: a product brief from one sentence, a GitHub backlog from the approved brief, Event Model whiteboards from journey files, and repository bootstrap with a proven setup recipe | Any product, any stack |
 | `planning/` | Checks for plans and proposals: verify a plan's claims against the repositories it names, and pick ideas to adopt from another repository | Any project, Laravel or not |
@@ -22,21 +22,56 @@ Five folders, five different jobs:
   established team standards.
 - `laravel-kanon-audit`: the audit, run after writing. It checks a branch or diff
   against the same reference files, one subagent per rule family, and takes each
-  finding's severity from the rule's keyword.
+  finding's severity from the rule's keyword. Every finding cites the rule's ID.
 - `symfony-kanon`: a minimal Symfony overlay of the Kanon with two rules (no
   `$container->get()`, writes go through a Messenger command to one handler). It reads
   `php-core.md` and `reliability.md` from `laravel-kanon`'s `references/` folder, so
   install it next to `laravel-kanon`. It has no audit yet.
-- `standards-discovery`: reads a client's codebase and writes its conventions as a project
-  overlay (project-first mode). Today it does one thing: before any client code is read, it
-  checks the client's AI policy record and stops when the record is missing, incomplete or
-  forbids the step, naming the field that blocks. When the record allows it, it scans the
-  repo's policy files (`.aiignore`, `.cursorignore`, `README`, `CONTRIBUTING`) for warnings.
+- `nextjs-kanon`: the Kanon for the Next.js frontend of a product with its own API. Its
+  `SKILL.md` holds the fixed core stack, how each add-on and the Cloudflare overlay is
+  detected, and the known clashes with upstream skills. `references/index.md` holds the id
+  of every rule. The rule files are stubs for now: #89 to #96 fill them, and the audit,
+  `nextjs-kanon-audit`, comes in #97.
+- `standards-discovery`: reads a client's codebase and writes its conventions as a standards
+  report and a project overlay (project-first mode). Six steps: check the client's AI policy
+  record (`check-policy.py`, stops when the record is missing, incomplete or forbids the step),
+  list what may be read (`inventory.py`, tracked files only, the committed AI ignore files applied), read, map
+  each convention to a Kanon rule, check the drafts (`check-overlay.py`: schema, real rule names,
+  every `file:line` citation resolved at the commit read) and place them (`place-overlay.py`).
+  The overlay is `.ai/kanon.yml` plus prose rules in `.ai/rules/project/`. Where the files go
+  follows the policy record: a branch with one commit in the client repo when AI files are
+  allowed there, otherwise the client's brain, with nothing written to the repo. `place-overlay.py
+  load` then copies the overlay into the working tree and hides it through `.git/info/exclude`.
   The record template is `kanon/standards-discovery/references/policy-record.md`.
-  Discovery, the standards report and the overlay writer come later.
 
 Install `laravel-kanon` and `laravel-kanon-audit` together. The audit reads the
 rulebook's `references/` folder, so the two folders must sit next to each other.
+
+### Changing a rule
+
+The rules live in `kanon/catalog/<family>.json`, one file per rule family, checked
+against `kanon/catalog/schema.json`. The `references/*.md` files the skills read are
+generated from them and say so on line 1. Do not edit them by hand.
+
+- Add a rule: add an entry to the family's file with the next unused number after the
+  family's prefix. Prefixes are in `kanon/catalog/families.json`, for example `ORCH-038`.
+  IDs are never reused.
+- Change a rule: edit its entry. Its ID stays.
+- Deprecate a rule: set `"status": "deprecated"`. Never delete an entry. The generator
+  leaves deprecated entries out of the reference, and the check fails when an ID that
+  exists on `origin/main` is gone.
+- `duplicate_of` on an entry names the rule it repeats. The check fails when that ID
+  does not exist.
+
+Then regenerate and check:
+
+```bash
+node kanon/scripts/catalog.mjs generate
+node kanon/scripts/catalog.mjs check --base origin/main
+```
+
+Commit the catalog and the regenerated references together. The check fails when a
+generated reference was edited by hand, so edit the catalog and regenerate instead.
 
 ## general/
 
@@ -72,7 +107,7 @@ rulebook's `references/` folder, so the two folders must sit next to each other.
   the event model journey folder in the brain, writes the repo's `.factory/playbook.md`
   through `factory-onboard`'s `write-playbook.py`, and proves the repo's recipe from a clean
   clone. Local only: it never creates GitHub repositories or pushes. Needs a
-  brain template and a stack pack (Laravel today).
+  brain template and a stack pack (Laravel or Symfony).
 - `factory-onboard`: writes or updates a repository's `.factory/recipe.yml` (setup, checks,
   teardown) from its documented gates (workflow files, scripts, docs), proves it from a
   clean clone with `prove-recipe.py`, and opens a PR with the evidence. It also writes a
@@ -129,8 +164,8 @@ side by side. Install `symfony-kanon` next to `laravel-kanon` too, because it re
 files from `laravel-kanon`'s `references/` folder.
 
 For the playbook, the factory skills (`bootstrap`, `brief-to-backlog`, `brief-writer`,
-`event-model`, `factory-onboard`), `standards-discovery` and the scheduled task prompts, run the
-install script from a checkout of this repo:
+`event-model`, `factory-onboard`), `standards-discovery` (with a snapshot of the Kanon catalog and reference files) and the
+scheduled task prompts, run the install script from a checkout of this repo:
 
 ```
 node playbooks/scripts/install.mjs --source .

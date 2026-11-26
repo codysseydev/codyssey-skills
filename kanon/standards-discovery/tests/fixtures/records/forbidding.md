@@ -1,7 +1,7 @@
 ---
 ai_allowed: no
 tools: [claude-code]
-models: [claude]
+models: [claude-*]
 code_leaves_machine: no
 cloud_sessions: no
 commit_ai_files: yes

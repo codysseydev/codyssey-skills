@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -28,6 +29,10 @@ const writeJson = (root, rel, data) =>
   writeFileSync(path.join(root, rel), JSON.stringify(data, null, 2) + '\n');
 const collapse = (text) => text.replace(/\s+/g, ' ').trim();
 const stripIds = (text) => text.replace(/`[A-Z]+-\d{3}` /g, '');
+// The generated header comment and the blank line after it; the *.base.md fixtures predate the header.
+const stripHeader = (text) => text.replace(/^<!-- Generated from [^\n]*-->\n\n/, '');
+const headerFor = (family) =>
+  `<!-- Generated from kanon/catalog/${family}.json in codysseydev/codyssey-skills by "node kanon/scripts/catalog.mjs generate". Do not edit by hand. -->`;
 
 // A copy of the repo's catalog and the reference of every family that has a catalog file, in a temp root.
 // `check` compares each family's reference, so a root that lacks one fails with a problem the test did not cause.
@@ -567,18 +572,120 @@ test('the validator enforces type, required, enum, pattern, items, minItems and 
   assert.match(messages(['x']).join('\n'), /expected object/);
 });
 
-test('words and code spans match the original reference (criterion 2)', (t) => {
+// Inner whitespace is collapsed: prose files may wrap a span across a line break that `generate` never writes.
+const spans = (text) => (text.match(/`[^`]+`/g) ?? []).map((s) => s.replace(/\s+/g, ' '));
+
+// The families of `root` that have a catalog file, with their prefix-table row.
+const convertedRows = (root) =>
+  readJson(root, 'kanon/catalog/families.json').filter((row) =>
+    existsSync(path.join(root, 'kanon', 'catalog', `${row.family}.json`))
+  );
+
+// Checks every converted family of `root` against `<fixturesDir>/<family>.base.md` and against the
+// reference on disk in `diskRoot`. Returns one message per problem; a missing fixture is reported
+// before anything is generated.
+function baseFixtureProblems(root, fixturesDir, diskRoot) {
+  const rows = convertedRows(root);
+  const problems = [];
+  const bases = new Map();
+  for (const row of rows) {
+    const file = path.join(fixturesDir, `${row.family}.base.md`);
+    if (existsSync(file)) bases.set(row.family, readFileSync(file, 'utf8'));
+    else problems.push(`${row.family}: missing base fixture ${file}`);
+  }
+  if (problems.length > 0) return problems;
+  for (const row of rows) rmSync(path.join(root, row.reference), { force: true });
+  const gen = run(root, 'generate');
+  if (gen.status !== 0) return [`generate failed: ${gen.out}`];
+  for (const row of rows) {
+    const text = read(root, row.reference);
+    const base = bases.get(row.family);
+    const body = stripIds(stripHeader(text));
+    if (collapse(body) !== collapse(base)) {
+      problems.push(`${row.family}: words differ from the base fixture`);
+    }
+    if (JSON.stringify(spans(body)) !== JSON.stringify(spans(base))) {
+      problems.push(`${row.family}: code spans differ from the base fixture`);
+    }
+    if (text !== read(diskRoot, row.reference)) {
+      problems.push(`${row.family}: generated text differs from ${row.reference} on disk`);
+    }
+  }
+  return problems;
+}
+
+test('words and code spans of every converted family match its base fixture (criterion 2)', (t) => {
   const root = makeRoot(t);
-  rmSync(path.join(root, ORCH_REF));
+  assert.ok(convertedRows(root).some((row) => row.family === 'orchestration-di'));
+  assert.deepEqual(baseFixtureProblems(root, fixtures, repoRoot), []);
+  const base = readFileSync(path.join(fixtures, 'orchestration-di.base.md'), 'utf8');
+  assert.equal(spans(base).length, 70);
+});
+
+test('a converted family with no base fixture is reported by name', (t) => {
+  const root = makeRoot(t);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  for (const sec of zz.sections) for (const entry of sec.entries) entry.family = 'zz-test';
+  writeJson(root, 'kanon/catalog/zz-test.json', zz);
+  const rows = readJson(root, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz/references/zz-test.md' });
+  writeJson(root, 'kanon/catalog/families.json', rows);
+  assert.deepEqual(baseFixtureProblems(root, fixtures, repoRoot), [
+    `zz-test: missing base fixture ${path.join(fixtures, 'zz-test.base.md')}`,
+  ]);
+});
+
+test('code spans that differ only in inner whitespace match the base fixture', (t) => {
+  const root = makeRoot(t);
+  const zz = httpApiCatalog('ZZ-001');
+  zz.family = 'zz-test';
+  for (const sec of zz.sections) {
+    for (const entry of sec.entries) {
+      entry.family = 'zz-test';
+      entry.rule = 'Classes **MUST** be `final readonly`.';
+    }
+  }
+  writeJson(root, 'kanon/catalog/zz-test.json', zz);
+  const rows = readJson(root, 'kanon/catalog/families.json');
+  rows.push({ family: 'zz-test', prefix: 'ZZ', reference: 'kanon/zz/references/zz-test.md' });
+  writeJson(root, 'kanon/catalog/families.json', rows);
+
+  const fixturesDir = mkdtempSync(path.join(tmpdir(), 'kanon-fixtures-'));
+  t.after(() => rmSync(fixturesDir, { recursive: true, force: true }));
+  for (const name of readdirSync(fixtures)) {
+    if (name.endsWith('.base.md')) cpSync(path.join(fixtures, name), path.join(fixturesDir, name));
+  }
+
   const gen = run(root, 'generate');
   assert.equal(gen.status, 0, gen.out);
-  const generated = stripIds(read(root, ORCH_REF));
-  const base = readFileSync(path.join(fixtures, 'orchestration-di.base.md'), 'utf8');
-  assert.equal(collapse(generated), collapse(base));
-  const spans = (text) => text.match(/`[^`]+`/g) ?? [];
-  assert.equal(spans(base).length, 70);
-  assert.deepEqual(spans(generated), spans(base));
-  assert.equal(read(root, ORCH_REF), readFileSync(path.join(repoRoot, ORCH_REF), 'utf8'));
+  const generated = stripIds(stripHeader(read(root, 'kanon/zz/references/zz-test.md')));
+  assert.ok(generated.includes('`final readonly`'));
+  const fixtureFile = path.join(fixturesDir, 'zz-test.base.md');
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  readonly`'));
+  assert.deepEqual(baseFixtureProblems(root, fixturesDir, root), []);
+
+  writeFileSync(fixtureFile, generated.replace('`final readonly`', '`final\n  mutable`'));
+  assert.ok(
+    baseFixtureProblems(root, fixturesDir, root).includes(
+      'zz-test: code spans differ from the base fixture'
+    )
+  );
+});
+
+test('every converted family keeps why inside its rule or items', () => {
+  for (const row of convertedRows(repoRoot)) {
+    const cat = readJson(repoRoot, `kanon/catalog/${row.family}.json`);
+    for (const e of cat.sections.flatMap((s) => s.entries)) {
+      if (!('why' in e)) continue;
+      const texts = [e.rule, ...(e.items ?? [])].filter((x) => typeof x === 'string');
+      assert.ok(
+        texts.some((x) => x.includes(e.why)),
+        `${row.family} ${e.id}: why is not a substring of rule or of an item`
+      );
+    }
+  }
 });
 
 test('why is a substring of rule and no entry has sources (criterion 3)', () => {
@@ -641,4 +748,90 @@ test('notes, section intros and numbered lists render as expected (other shapes)
     readFileSync(path.join(fixtures, 'shapes.expected.md'), 'utf8')
   );
   assert.equal(run(root, 'check').status, 0);
+});
+
+test('every generated reference starts with the header naming its catalog file and the generate command', () => {
+  const rows = readJson(repoRoot, 'kanon/catalog/families.json');
+  for (const row of rows) {
+    if (!existsSync(path.join(repoRoot, 'kanon', 'catalog', `${row.family}.json`))) continue;
+    const lines = read(repoRoot, row.reference).split('\n');
+    assert.equal(lines[0], headerFor(row.family), row.reference);
+    assert.equal(lines[1], '', row.reference);
+    assert.match(lines[2], /^# /, row.reference);
+  }
+});
+
+test('a reference with its header line removed fails check and names the reference', (t) => {
+  const root = makeRoot(t);
+  const lines = read(root, ORCH_REF).split('\n');
+  writeFileSync(path.join(root, ORCH_REF), lines.slice(1).join('\n'));
+  const r = run(root, 'check');
+  assert.equal(r.status, 1, r.out);
+  assert.ok(r.lines.some((l) => l.startsWith(`${ORCH_REF}: line 1`)), r.out);
+});
+
+test('duplicate_of naming an ID that is not in the catalog fails and names the file, the entry and the target', (t) => {
+  const root = makeRoot(t);
+  const cat = readJson(root, ORCH_JSON);
+  const { s, e, entry } = find(cat, 'ORCH-005');
+  entry.duplicate_of = 'ORCH-999';
+  writeJson(root, ORCH_JSON, cat);
+  const r = run(root, 'check');
+  assert.equal(r.status, 1, r.out);
+  assert.equal(r.lines.length, 1, r.out);
+  assert.ok(r.lines[0].startsWith(`${ORCH_JSON}: sections[${s}].entries[${e}] (ORCH-005)`), r.out);
+  assert.ok(r.lines[0].includes('ORCH-999'), r.out);
+});
+
+test('duplicate_of naming the entry itself fails', (t) => {
+  const root = makeRoot(t);
+  const cat = readJson(root, ORCH_JSON);
+  const { s, e, entry } = find(cat, 'ORCH-005');
+  entry.duplicate_of = 'ORCH-005';
+  writeJson(root, ORCH_JSON, cat);
+  const r = run(root, 'check');
+  assert.equal(r.status, 1, r.out);
+  assert.equal(r.lines.length, 1, r.out);
+  assert.ok(r.lines[0].startsWith(`${ORCH_JSON}: sections[${s}].entries[${e}] (ORCH-005)`), r.out);
+  assert.ok(r.lines[0].includes('own ID'), r.out);
+});
+
+test('duplicate_of naming an entry in another family file passes', (t) => {
+  const root = makeRoot(t);
+  const cat = readJson(root, ORCH_JSON);
+  find(cat, 'ORCH-005').entry.duplicate_of = 'AUTH-006';
+  writeJson(root, ORCH_JSON, cat);
+  const r = run(root, 'check');
+  assert.equal(r.status, 0, r.out);
+});
+
+test('audit fixture: the expected IDs are active rules and the diff holds the violation', () => {
+  const dir = path.join(fixtures, 'audit');
+  const expected = JSON.parse(readFileSync(path.join(dir, 'expected.json'), 'utf8'));
+  assert.ok(expected.must_report.length > 0);
+  const active = new Map();
+  for (const name of readdirSync(path.join(repoRoot, 'kanon', 'catalog'))) {
+    if (!name.endsWith('.json') || name === 'schema.json' || name === 'families.json') continue;
+    const cat = readJson(repoRoot, `kanon/catalog/${name}`);
+    for (const sec of cat.sections) for (const entry of sec.entries) if (entry.id) active.set(entry.id, entry.status);
+  }
+  for (const id of expected.must_report) assert.equal(active.get(id), 'active', `${id} is not an active rule`);
+  const diff = readFileSync(path.join(dir, expected.diff), 'utf8');
+  assert.ok(diff.includes('Log::'));
+});
+
+test('audit fixture: the diff applies with git apply in an empty repo and adds every line', (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'kanon-audit-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const diffFile = path.join(fixtures, 'audit', 'violation.diff');
+  git(dir, 'init', '-q');
+  git(dir, 'apply', diffFile);
+  const file = path.join(dir, 'app/Modules/Billing/Features/RenewSubscription/RenewSubscriptionHandler.php');
+  assert.ok(existsSync(file));
+  // A hunk header with the wrong count makes git apply drop lines without failing.
+  const added = readFileSync(diffFile, 'utf8')
+    .split('\n')
+    .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
+    .map((l) => l.slice(1));
+  assert.equal(readFileSync(file, 'utf8'), added.join('\n') + '\n');
 });

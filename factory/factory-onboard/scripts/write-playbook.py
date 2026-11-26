@@ -29,7 +29,7 @@ POST_MERGE_BODY = (
     "- Deploy check: none\n"
     "- Sentry: none"
 )
-GATE_WORDS = {"lint", "check", "analyse", "analyze", "typecheck", "test", "phpstan", "pint", "arkitect", "rector", "build"}
+GATE_WORDS = {"lint", "check", "analyse", "analyze", "typecheck", "test", "phpstan", "pint", "arkitect", "rector", "build", "cs"}
 NOT_GATE_WORDS = {"fix", "watch"}
 # Subcommands that are not project scripts, so they never count as an unresolved script.
 BUILTINS = {
