@@ -93,3 +93,7 @@ Posted decisions: https://github.com/codysseydev/codyssey-skills/pull/131#issuec
 - The six defaults are kept, with authorization as Voters checked in the handler.
 - Event listeners that change state dispatch a command onto `command.bus`.
 - php-core rows: 39 add to php-core later, 2 keep in Laravel only (P-20, P-49), 8 drop.
+- SYM-104 keeps its MUST and names two exceptions to materializing: a call through a consumer-owned contract (SYM-102) and a read-only query under SYM-074. Confirmed in the session after the second review.
+- SYM-070 lists `Doctrine\DBAL\Connection` in read-model query classes (SYM-074, SYM-076) as an allowed import. Confirmed in the session after the second review.
+- SYM-059 requires the controller to build the command's actor from the same authenticated token the Voter reads, which is why the handler runs on the synchronous bus. Confirmed in the session after the second review.
+- SYM-005 states that `->get()` on a closed locator is not the container fetch SYM-001 bans; SYM-001 does not change. Confirmed in the session after the second review.
