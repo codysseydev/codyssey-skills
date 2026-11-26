@@ -21,7 +21,7 @@ Add 39 `scope: php-core` entries to `kanon/catalog/php-core.json`, one per row t
 3. The php-core intro line on lane boundaries and PHP-001's `lane_note` are rewritten: php-core owns the plain-PHP file shape (`strict_types`, `final readonly`, constructor promotion) for every framework, and `orchestration-di.md` keeps the Laravel calls and the Laravel-only file kinds. No Laravel entry changes.
 4. New entries cite published codyssey.dev URLs only. P-43 cites quick tip 09. The DomSvc reading is flagged in the table.
 5. P-32 follows PHP-008. Its `lane_note` says SYM-017 narrows command handlers to void in Symfony. No Symfony entry changes.
-6. Merge order: #49 first. This branch rebases onto origin/main after #49 merges and reruns `generate`. This change does not touch `kanon/laravel-kanon-audit/SKILL.md`; the #44 session gets the new topic list.
+6. Merge order: #49 first. After #49 merges, origin/main is merged into this branch (never rebased or force-pushed, since the branch is pushed), then `generate` and every gate are rerun. This change does not touch `kanon/laravel-kanon-audit/SKILL.md`; the #44 session gets the new topic list.
 
 ## Changes
 
@@ -53,7 +53,7 @@ No diagrams: no trigger fired.
 1. Draft the eight sections in parallel into scratch fragments, merge them into `php-core.json` in one pass and run `generate`.
 2. Check each draft against its Laravel counterpart and `symfony.json` for the clashes above.
 3. Run every recipe gate at the head commit from a clean tree and open a ready PR with the draft table (P row, ID, section, rule, keyword, Laravel counterpart, Symfony counterpart, source, clash note) and the gate evidence.
-4. Apply the owner's PR-comment decisions, regenerate, rerun the gates, update the evidence, and wait for the merge word.
+4. Apply the owner's PR-comment decisions, regenerate, rerun the gates, update the evidence, merge origin/main into the branch after #49 lands and rerun `generate` and the gates, and wait for the merge word.
 
 ## Verification
 
