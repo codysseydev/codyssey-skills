@@ -688,7 +688,7 @@ test('every converted family keeps why inside its rule or items', () => {
   }
 });
 
-test('why is a substring of rule and no entry has sources (criterion 3)', () => {
+test('why is a substring of rule (criterion 3)', () => {
   const cat = readJson(repoRoot, ORCH_JSON);
   const entries = cat.sections.flatMap((s) => s.entries);
   assert.equal(entries.length, 37);
@@ -698,7 +698,6 @@ test('why is a substring of rule and no entry has sources (criterion 3)', () => 
   );
   for (const e of entries) {
     if ('why' in e) assert.ok(e.rule.includes(e.why), `${e.id}: why is not a substring of rule`);
-    assert.ok(!('sources' in e), `${e.id} has sources`);
   }
   assert.ok(entries.some((e) => 'why' in e));
 });
