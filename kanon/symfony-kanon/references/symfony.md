@@ -161,3 +161,4 @@ Applies to: Symfony controllers, services, Messenger message handlers, console c
 - `SYM-119` Every product `*Exception` **MUST** have a test that triggers it and asserts the HTTP status and message.
 - `SYM-120` Every authenticated endpoint **MUST** have a test asserting the unauthenticated response, and every owned-resource endpoint a test asserting failure for a non-owner.
 - `SYM-121` Controller tests **SHOULD** assert the dispatched command against an in-memory bus instead of running the handler.
+- `SYM-122` An outbound-HTTP adapter's own tests **MUST** fake the HTTP client with `MockHttpClient` and `MockResponse` or `JsonMockResponse`, never the real network; tests of code above the adapter fake the port (SYM-070), not the HTTP client.
