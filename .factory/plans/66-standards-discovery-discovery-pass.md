@@ -560,3 +560,8 @@ s. The check after `write-tree` in `place`. It required `diff-tree` to list exac
    Decided 2026-11-26 by the owner: A.
    - **A. A subset check: every listed path must be a placed path, and an unchanged placed file is fine (recommended).** An extra changed path still stops. Cost: a rerun on a `Read at` that already holds identical files makes a commit that changes less.
    - B. Keep the exact match.
+
+t. The `GIT_*` scrub in the shared git runner, and `place`'s author.
+   Decided 2026-11-26 by the owner: A.
+   - **A. Keep the scrub of every `GIT_*` variable. `place`'s commit takes its author and committer from git config only, so a caller's `GIT_CONFIG_GLOBAL`, `GIT_AUTHOR_NAME` and the like are ignored (recommended).** `SKILL.md` says so. No code change.
+   - B. Pass `GIT_AUTHOR_*`, `GIT_COMMITTER_*` and `GIT_CONFIG_GLOBAL` through.
