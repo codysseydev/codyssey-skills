@@ -437,6 +437,7 @@ sequenceDiagram
 - The hand-copied `~/.claude/skills/laravel-kanon` stays stale. The skill does not read it.
 - After a client merges an overlay PR, origin/main says `mode: project-first`, and factory runs on that repo stop on `record` until the registry has an entry (`check-policy.py:251-252`). Add the entry before or with the merge.
 - After #85 merges, add `kanon/catalog/` and the reference folders to `.factory/playbook.md:30`.
+- `load_kanon` accepts a catalog entry whatever its status. Today every one of the 209 rules is active, so nothing changes. When the catalog gains a retired or draft status, decide whether an overlay may name such a rule (second review, 2026-11-26).
 
 ## Risks
 
