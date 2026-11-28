@@ -7,14 +7,14 @@ Factory pick-up, frontend lane. You are an unattended software factory run. Foll
 
 This lane watches only codysseydev/codyssey-frontend. Two other lanes watch codysseydev/codyssey and the tools repos (codyssey-skills, codyssey-cli, symfony-template). At most one run per lane at a time, so two frontend runs never share the :3000 dev server used by UI capture.
 
-0. Busy check. Through ONE subagent, list `~/.factory/locks/`. A live lock for this lane is a folder whose name matches `^codysseydev-codyssey-frontend-[0-9]+$` and whose `claim.json` has a `claimed_at` less than 4 hours ago. If there is one, end the run. Your final message is one line: "busy: <folder name> claimed at <claimed_at>". Do nothing else. Locks older than 4 hours, or unreadable ones, do not count as busy: the claim below sweeps them.
+0. Busy check. Through ONE `factory-shell` subagent (use `general-purpose` when that type is not available), list `~/.factory/locks/`. A live lock for this lane is a folder whose name matches `^codysseydev-codyssey-frontend-[0-9]+$` and whose `claim.json` has a `claimed_at` less than 4 hours ago. If there is one, end the run. Your final message is one line: "busy: <folder name> claimed at <claimed_at>". Do nothing else. Locks older than 4 hours, or unreadable ones, do not count as busy: the claim below sweeps them.
 
-1. Install. Through ONE subagent, run this and return its JSON output, its stderr and its exit code:
+1. Install. Through ONE `factory-shell` subagent (use `general-purpose` when that type is not available), run this and return its JSON output, its stderr and its exit code:
    if [ -e ~/.factory/armed ]; then node ~/.agents/playbooks/scripts/install.mjs --source ~/Code/GitHub/Codyssey/codyssey-skills; else echo not_armed; fi
    Never end the run on this step. Exit 0: go on. Exit 3: a live claim lock (any lane) made the install refuse and it wrote nothing; go on with the installed copy. Any other exit: go on with the installed copy, which may be partly updated. In both non-zero cases put the exit code and the first stderr line in the final message.
    The install result, which every final message below carries, is the number of `changed` files and any `skipped` folder from the install JSON, `not_armed`, `refused` (exit 3) or `failed` (any other non-zero exit).
 
-2. Claim. Through ONE subagent, run these two commands and return RUN_ID, the script's JSON output verbatim, and its exit code:
+2. Claim. Through ONE `factory-shell` subagent (use `general-purpose` when that type is not available), run these two commands and return RUN_ID, the script's JSON output verbatim, and its exit code:
    RUN_ID=$(uuidgen)
    node ~/.agents/playbooks/scripts/pick-up.mjs claim --repo codysseydev/codyssey-frontend --run-id "$RUN_ID"
 
@@ -30,7 +30,7 @@ This lane watches only codysseydev/codyssey-frontend. Two other lanes watch cody
    - Report each stage with `mcp__report-stage__report_stage` as the playbook says.
    - Stop at the next stop the playbook names, or when the run gives up (factory-failed and a `failed` event).
 
-7. Release. Always do this when the claim status was `claimed`, also after a failure, a give-up, or an error: through a subagent run
+7. Release. Always do this when the claim status was `claimed`, also after a failure, a give-up, or an error: through ONE `factory-shell` subagent (use `general-purpose` when that type is not available), run
    node ~/.agents/playbooks/scripts/pick-up.mjs release --repo <repo> --issue <issue> --run-id <RUN_ID>
    with the same RUN_ID, and return its JSON.
 
