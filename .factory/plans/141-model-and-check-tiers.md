@@ -139,3 +139,8 @@ The independent review of ae33a6e found these gaps in the approved wording. The 
 3. "The default (omit `model`)" could read as poteto-mode's per-role default. It now says the session's model, and that it overrides poteto-mode's per-role models for those steps.
 4. "Stricter" repo `## Review` rules had no tie-break. The repo's rule wins, as project rules do.
 5. Stage 8 made the archive PR with no tier, so criterion 6's tier 1 run had no place to show. The archive PR now carries the `Tier:` line and runs the gates and its tier's review.
+6. The tier was computed once before stage 5. It is now recomputed at every new head.
+7. "The issue's acceptance commands" had no defined source. The acceptance run is now the acceptance checks written from the issue text.
+8. A Markdown-only bootstrap change was tier 2 and skipped the dry run. The dry run now applies to any change under `factory/bootstrap/` in tier 2 or 3, and the file says what a dry run is.
+9. A tier reviewer with no fan-out had no defined `fan_out_complete`. It is now `true`, with a note in the merge assessment.
+10. The archive PR's `Tier:` line clashed with the `## Why` first heading, and its evidence would overwrite the implement run's. The line goes under `## Why`, and its evidence goes in `archive/evidence.json`.
