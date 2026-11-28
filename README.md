@@ -196,8 +196,11 @@ For unattended runs:
   Then run the install: it writes each prompt from `scheduled-tasks/` over the task's file, and
   each armed tick with no live claim lock reinstalls it (the install refuses while any lane holds
   one). Schedule, folder and permission mode stay in Desktop.
-- After the first install, set each lane task's folder to `~/.factory/session` in the Desktop UI.
-  That folder holds the lean session profile (`factory/session/` in this repo): its
+- Once `~/.factory/session/.claude/settings.json` exists, set each lane task's folder to
+  `~/.factory/session` in the Desktop UI. The folder appears only after an install by the new
+  `install.mjs`: the second armed tick with no live claim lock after the merge (the first tick still
+  runs the old installer), or `node playbooks/scripts/install.mjs --source <checkout>` from a pulled
+  checkout. Check that the file exists before you point the tasks at it. The folder holds the lean session profile (`factory/session/` in this repo): its
   `.claude/settings.json` turns off the plugins no run uses, allows only the MCP servers factory
   runs call and turns auto memory off, and its `factory-shell` agent runs shell-only steps with
   Bash and nothing else. A plugin you enable later loads in factory sessions until it is added to
