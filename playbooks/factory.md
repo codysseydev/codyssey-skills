@@ -48,7 +48,7 @@ Only delegated steps can run on a cheaper model. The session runs on the model i
 | Gate runs and the evidence table, `evidence.json`, the test-first, UI capture and failure-sim command runs, `post-merge.mjs facts` and the deploy-check poll, the plan archive PR, the build log row, cleanup at archive, the tier 1 review | `sonnet` |
 | Planning, diagrams, implementation, tier 2 and tier 3 reviews, the acceptance run, dry runs, the merge assessment, the trial input, every stop comment and question, the Sentry read, the revert decision | the session's model (omit `model`) |
 
-A cheaper subagent only runs and reports. The session reads its report and decides. When the report is incomplete or contradicts its own output, rerun that step on the default model and say so in the run's notes. The session's model also overrides poteto-mode's per-role models, such as its `sonnet` feature default, for the steps in the third row.
+A cheaper subagent only runs and reports. The session reads its report and decides. When the report is incomplete or contradicts its own output, rerun that step on the session's model and say so in the run's notes. The session's model also overrides poteto-mode's per-role models, such as its `sonnet` feature default, for the steps in the third row.
 
 Before stage 5, list the changed paths with `git -c core.quotepath=false diff --name-only origin/main...HEAD`. The change's tier is the highest tier any path reaches:
 
