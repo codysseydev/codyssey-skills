@@ -16,6 +16,8 @@ process.env.FACTORY_TASKS_DIR = mkdtempSync(join(tmpdir(), 'install-tasks-'));
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'install.mjs');
 const REPO = join(dirname(SCRIPT), '..', '..');
 const H = 3600 * 1000;
+const PROFILE_FILES = ['factory/session/settings.json', 'factory/session/agents/factory-shell.md'];
+const repoProfile = (path) => readFileSync(join(REPO, path));
 
 const GIT_ENV = {
   ...process.env,
@@ -58,6 +60,7 @@ const baseFiles = (v) => [
   ['factory/not-listed/SKILL.md', 'not listed\n'],
   ...FACTORY_TASKS.map((name) => [`scheduled-tasks/${name}/SKILL.md`, `${name} prompt ${v}\n`]),
   ['scheduled-tasks/not-listed/SKILL.md', 'not listed\n'],
+  ...PROFILE_FILES.map((path) => [path, repoProfile(path)]),
   ['README.md', `readme ${v}\n`],
 ];
 
@@ -94,7 +97,8 @@ function fixture() {
     return { code: r.status, out, stderr: r.stderr };
   };
   const run = (...args) => runScript(SCRIPT, ...args);
-  return { root, bare, seed, source, agentsDir, skillsDir, tasksDir, home, sha1, run, runScript };
+  const sessionDir = join(home, 'session', '.claude');
+  return { root, bare, seed, source, agentsDir, skillsDir, tasksDir, home, sessionDir, sha1, run, runScript };
 }
 
 const read = (...p) => readFileSync(join(...p), 'utf8');
@@ -127,6 +131,7 @@ const nothingWritten = (f) => {
   assert.deepEqual(listFiles(f.skillsDir), []);
   assert.deepEqual(listFiles(f.tasksDir), []);
   assert.deepEqual(readdirSync(f.tasksDir).sort(), [...FACTORY_TASKS].sort());
+  assert.ok(!existsSync(join(f.home, 'session')));
 };
 
 test('installs playbooks, the five factory skills and standards-discovery from the ref and records the sha', () => {
@@ -148,7 +153,10 @@ test('installs playbooks, the five factory skills and standards-discovery from t
   assert.equal(statSync(join(f.agentsDir, 'playbooks/factory.md')).mode & 0o111, 0);
   assert.ok(out.changed.includes(join(f.agentsDir, 'playbooks/factory.md')));
   assert.ok(out.changed.includes(join(f.agentsDir, 'playbooks/.installed-sha')));
-  assert.equal(out.changed.length, listFiles(f.agentsDir).length + listFiles(f.skillsDir).length + listFiles(f.tasksDir).length);
+  assert.equal(
+    out.changed.length,
+    listFiles(f.agentsDir).length + listFiles(f.skillsDir).length + listFiles(f.tasksDir).length + listFiles(f.sessionDir).length,
+  );
 });
 
 test('a dirty working tree in the source is not installed', () => {
@@ -196,6 +204,7 @@ test('a second run with nothing new changes no file and no mtime', () => {
     ...listFiles(f.agentsDir).map((p) => join(f.agentsDir, p)),
     ...listFiles(f.skillsDir).map((p) => join(f.skillsDir, p)),
     ...listFiles(f.tasksDir).map((p) => join(f.tasksDir, p)),
+    ...listFiles(f.sessionDir).map((p) => join(f.sessionDir, p)),
   ];
   for (const file of files) utimesSync(file, old, old);
   const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
@@ -492,4 +501,53 @@ test('each repo prompt runs the policy check before it reads the project file', 
 test('scheduled-tasks/ in the repo holds exactly the listed task folders', () => {
   const folders = readdirSync(join(REPO, 'scheduled-tasks'), { withFileTypes: true }).filter((e) => e.isDirectory());
   assert.deepEqual(folders.map((e) => e.name).sort(), [...FACTORY_TASKS].sort());
+});
+
+test('installs the session profile into FACTORY_HOME/session/.claude, creating the folder', () => {
+  const f = fixture();
+  assert.ok(!existsSync(join(f.home, 'session')));
+  const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 0);
+  assert.deepEqual(listFiles(f.sessionDir), ['agents/factory-shell.md', 'settings.json']);
+  for (const path of PROFILE_FILES) {
+    const dest = join(f.sessionDir, path.slice('factory/session/'.length));
+    assert.ok(readFileSync(dest).equals(repoProfile(path)), path);
+    assert.ok(out.changed.includes(dest), path);
+  }
+  assert.deepEqual(out.skipped, []);
+});
+
+test('a rerun leaves the installed profile and its mtime alone', () => {
+  const f = fixture();
+  assert.equal(f.run('--source', f.source, '--ref', 'HEAD').code, 0);
+  const old = new Date('2020-01-01T00:00:00Z');
+  const files = listFiles(f.sessionDir).map((p) => join(f.sessionDir, p));
+  for (const file of files) utimesSync(file, old, old);
+  const { code, out } = f.run('--source', f.source, '--ref', 'HEAD');
+  assert.equal(code, 0);
+  assert.deepEqual(out.changed, []);
+  for (const file of files) assert.equal(statSync(file).mtimeMs, old.getTime(), file);
+});
+
+test('the repo profile keeps pstack, allows report-stage and sentry, and sets only enabledPlugins, allowedMcpServers and autoMemoryEnabled', () => {
+  const settings = JSON.parse(repoProfile('factory/session/settings.json'));
+  const off = Object.entries(settings.enabledPlugins).filter(([, on]) => on !== false);
+  assert.deepEqual(off, [], 'enabledPlugins only turns plugins off');
+  assert.ok(!Object.keys(settings.enabledPlugins).some((name) => name.startsWith('pstack@')), 'pstack stays enabled');
+  const servers = settings.allowedMcpServers.map((s) => s.serverName);
+  assert.ok(servers.includes('report-stage'));
+  assert.ok(servers.includes('sentry'));
+  const allowed = new Set(['enabledPlugins', 'allowedMcpServers', 'autoMemoryEnabled']);
+  for (const key of Object.keys(settings)) assert.ok(allowed.has(key), `unexpected key: ${key}`);
+  assert.notEqual(settings.enabledPlugins['security-guidance@claude-plugins-official'], false, 'security-guidance stays enabled');
+});
+
+test('the repo factory-shell agent loads only Bash and omits CLAUDE.md', () => {
+  const text = repoProfile('factory/session/agents/factory-shell.md').toString('utf8');
+  const front = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  assert.ok(front, 'no frontmatter');
+  assert.match(front[1], /^name: factory-shell$/m);
+  assert.match(front[1], /^tools: Bash$/m);
+  assert.match(front[1], /^omitClaudeMd: true$/m);
+  assert.doesNotMatch(front[1], /^(hooks|permissionMode|mcpServers):/m);
 });

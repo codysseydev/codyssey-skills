@@ -4,7 +4,7 @@ Holds codyssey-skills' specifics for the factory playbook in codysseydev/codysse
 
 ## Checks
 
-The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `post-merge-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests`, `standards-discovery-tests`, `install-tests`, `kanon-catalog-check` and `kanon-catalog-tests`. All but `kanon-catalog-check` are the test files the repo ships; `kanon-catalog-check` is a data check that runs `kanon/scripts/catalog.mjs check` on the Kanon catalog. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there are no workflow files to take commands from. These local runs are the gates. The factory does not use GitHub Actions. Gates the recipe lacks:
+The gates are the checks in `.factory/recipe.yml`: `pick-up-tests`, `capture-ui-tests`, `trial-decision-tests`, `test-first-tests`, `post-merge-tests`, `bootstrap-tests`, `event-model-tests`, `factory-onboard-tests`, `standards-discovery-tests`, `install-tests`, `startup-load-tests`, `kanon-catalog-check` and `kanon-catalog-tests`. All but `kanon-catalog-check` are the test files the repo ships; `kanon-catalog-check` is a data check that runs `kanon/scripts/catalog.mjs check` on the Kanon catalog. The repo has no `.github/workflows/`, no `package.json` and no `pyproject.toml`, and configures no linter, so there are no workflow files to take commands from. These local runs are the gates. The factory does not use GitHub Actions. Gates the recipe lacks:
 
 None yet.
 
@@ -27,7 +27,7 @@ Setup starts no containers or servers. Nothing to remove.
 ## Notes
 
 - `factory/event-model/scripts/lint.py` lints event models, not this repo's code, so it is not a gate.
-- The factory runs the installed copies, not this repo: `~/.agents/playbooks/`, the five factory skills and `standards-discovery` in `~/.claude/skills/`, and the lane prompts in `~/.claude/scheduled-tasks/`. `node playbooks/scripts/install.mjs --source <checkout>` syncs them from `origin/main` (README "Install"), and the scheduled pick-up runs it before `claim` when the factory is armed. A merged change to `playbooks/`, `factory/`, `kanon/standards-discovery/` or `scheduled-tasks/` takes effect on the next install, not at merge. The install never deletes, so a file removed from the repo stays installed. A run on this repo edits its worktree, never the installed copies.
+- The factory runs the installed copies, not this repo: `~/.agents/playbooks/`, the five factory skills and `standards-discovery` in `~/.claude/skills/`, the lane prompts in `~/.claude/scheduled-tasks/`, and the session profile in `~/.factory/session/`. `node playbooks/scripts/install.mjs --source <checkout>` syncs them from `origin/main` (README "Install"), and the scheduled pick-up runs it before `claim` when the factory is armed. A merged change to `playbooks/`, `factory/`, `kanon/standards-discovery/` or `scheduled-tasks/` takes effect on the next install, not at merge. The install never deletes, so a file removed from the repo stays installed. A run on this repo edits its worktree, never the installed copies.
 
 ## Post-merge
 

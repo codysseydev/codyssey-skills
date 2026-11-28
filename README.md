@@ -175,10 +175,11 @@ The first install runs the script from the checkout. Later runs use the installe
 `origin` and installs `origin/main`, or installs `--ref <ref>` without fetching. It reads files
 from the commit, not the working tree, so a dirty checkout does not matter. It copies
 `playbooks/` into `~/.agents/playbooks/`, each of those skills into `~/.claude/skills/<name>/` and
-each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md`, writes the commit sha to
+each task prompt into `~/.claude/scheduled-tasks/<name>/SKILL.md` and `factory/session/` into
+`~/.factory/session/.claude/`, writes the commit sha to
 `~/.agents/playbooks/.installed-sha`, rewrites only files that changed, and never deletes a file.
 It writes a task prompt only when the task folder exists, which Claude Desktop creates with the
-task, and lists a missing one under `skipped`. It refuses with exit 3 while a claim lock in
+task, and lists a missing one under `skipped`. It creates the session profile folder itself. It refuses with exit 3 while a claim lock in
 `~/.factory/locks/` is live. Set `FACTORY_AGENTS_DIR`, `FACTORY_SKILLS_DIR`, `FACTORY_TASKS_DIR`
 or `FACTORY_HOME` to install somewhere else. For a single repository, copy `playbooks/` into its
 `.agents/playbooks/` by hand instead.
@@ -195,6 +196,16 @@ For unattended runs:
   Then run the install: it writes each prompt from `scheduled-tasks/` over the task's file, and
   each armed tick with no live claim lock reinstalls it (the install refuses while any lane holds
   one). Schedule, folder and permission mode stay in Desktop.
+- Once `~/.factory/session/.claude/settings.json` exists, set each lane task's folder to
+  `~/.factory/session` in the Desktop UI. The folder appears only after an install by the new
+  `install.mjs`: the second armed tick with no live claim lock after the merge (the first tick still
+  runs the old installer), or `node playbooks/scripts/install.mjs --source <checkout>` from a pulled
+  checkout. Check that the file exists before you point the tasks at it. The folder holds the lean session profile (`factory/session/` in this repo): its
+  `.claude/settings.json` turns off the plugins no run uses, allows only the MCP servers factory
+  runs call and turns auto memory off, and its `factory-shell` agent runs shell-only steps with
+  Bash and nothing else. A plugin you enable later loads in factory sessions until it is added to
+  `enabledPlugins` as `false` in `factory/session/settings.json`. Measure the effect with
+  `node ~/.agents/playbooks/scripts/startup-load.mjs --cwd ~/.factory/session`.
 - One-time bootstrap after the PR that added `scheduled-tasks/` merges. The live prompts have no
   install step, and the installed `install.mjs` does not know task prompts, so no tick installs
   them. Pull `main` in the codyssey-skills checkout and run

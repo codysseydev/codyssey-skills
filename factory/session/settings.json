@@ -1,0 +1,23 @@
+{
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "mcp-server-dev@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false,
+    "mattpocock-skills@claude-plugins-official": false,
+    "miro@claude-plugins-official": false,
+    "figma@claude-plugins-official": false,
+    "asb-skills@asb-skills": false,
+    "cc-plugin-you-should-know@builtin": false,
+    "warp@claude-code-warp": false
+  },
+  "allowedMcpServers": [
+    { "serverName": "report-stage" },
+    { "serverName": "sentry" },
+    { "serverName": "cloudflare-api" },
+    { "serverName": "cloudflare-docs" },
+    { "serverName": "plausible" }
+  ],
+  "autoMemoryEnabled": false
+}
