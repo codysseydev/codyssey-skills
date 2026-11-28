@@ -529,7 +529,7 @@ test('a rerun leaves the installed profile and its mtime alone', () => {
   for (const file of files) assert.equal(statSync(file).mtimeMs, old.getTime(), file);
 });
 
-test('the repo profile keeps pstack, allows report-stage and sentry, and sets no hooks, permissions, env or disableAllHooks', () => {
+test('the repo profile keeps pstack, allows report-stage and sentry, and sets only enabledPlugins, allowedMcpServers and autoMemoryEnabled', () => {
   const settings = JSON.parse(repoProfile('factory/session/settings.json'));
   const off = Object.entries(settings.enabledPlugins).filter(([, on]) => on !== false);
   assert.deepEqual(off, [], 'enabledPlugins only turns plugins off');
@@ -537,7 +537,9 @@ test('the repo profile keeps pstack, allows report-stage and sentry, and sets no
   const servers = settings.allowedMcpServers.map((s) => s.serverName);
   assert.ok(servers.includes('report-stage'));
   assert.ok(servers.includes('sentry'));
-  for (const key of ['hooks', 'permissions', 'env', 'disableAllHooks']) assert.ok(!(key in settings), key);
+  const allowed = new Set(['enabledPlugins', 'allowedMcpServers', 'autoMemoryEnabled']);
+  for (const key of Object.keys(settings)) assert.ok(allowed.has(key), `unexpected key: ${key}`);
+  assert.notEqual(settings.enabledPlugins['security-guidance@claude-plugins-official'], false, 'security-guidance stays enabled');
 });
 
 test('the repo factory-shell agent loads only Bash and omits CLAUDE.md', () => {
@@ -547,4 +549,5 @@ test('the repo factory-shell agent loads only Bash and omits CLAUDE.md', () => {
   assert.match(front[1], /^name: factory-shell$/m);
   assert.match(front[1], /^tools: Bash$/m);
   assert.match(front[1], /^omitClaudeMd: true$/m);
+  assert.doesNotMatch(front[1], /^(hooks|permissionMode|mcpServers):/m);
 });

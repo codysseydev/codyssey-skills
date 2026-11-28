@@ -53,7 +53,6 @@ export function installMap({ agentsDir, skillsDir, tasksDir, stateDir }) {
     // A snapshot of the Kanon the standards-discovery skill reads, so the paths in families.json resolve from its folder.
     ...KANON_SNAPSHOT.map((path) => ({ prefix: `kanon/${path}/`, dir: join(skillsDir, 'standards-discovery', 'kanon', path) })),
     ...FACTORY_TASKS.map((name) => ({ prefix: `scheduled-tasks/${name}/`, dir: join(tasksDir, name), existingOnly: true })),
-    // The lean session profile the pick-up tasks run in. Created by the install, not existingOnly.
     { prefix: 'factory/session/', dir: join(stateDir, 'session', '.claude') },
   ];
 }

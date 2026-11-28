@@ -20,6 +20,7 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 
 export class UsageError extends Error {}
@@ -28,34 +29,34 @@ export const encodeCwd = (cwd) => cwd.replace(/[^a-zA-Z0-9]/g, '-');
 
 const expandHome = (p) => (p === '~' || p.startsWith('~/') ? join(homedir(), p.slice(1)) : p);
 
-// Parsed JSON records of a JSONL file, one at a time, reading the file in chunks so the caller can stop early.
-function* records(file) {
+const parseLine = (line) => {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+};
+
+function* readJsonlRecords(file) {
   const fd = openSync(file, 'r');
   try {
     const buf = Buffer.alloc(1 << 16);
+    const decoder = new StringDecoder('utf8');
     let rest = '';
     for (;;) {
       const n = readSync(fd, buf, 0, buf.length, null);
       if (n === 0) break;
-      rest += buf.toString('utf8', 0, n);
+      rest += decoder.write(buf.subarray(0, n));
       const lines = rest.split('\n');
       rest = lines.pop();
       for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          yield JSON.parse(line);
-        } catch {
-          // A torn or foreign line carries no start-up data.
-        }
+        const rec = line.trim() ? parseLine(line) : undefined;
+        if (rec !== undefined) yield rec;
       }
     }
-    if (rest.trim()) {
-      try {
-        yield JSON.parse(rest);
-      } catch {
-        // see above
-      }
-    }
+    rest += decoder.end();
+    const rec = rest.trim() ? parseLine(rest) : undefined;
+    if (rec !== undefined) yield rec;
   } finally {
     closeSync(fd);
   }
@@ -73,18 +74,18 @@ const sumUsage = (u) => {
     .reduce((t, k) => t + (Number.isFinite(u[k]) ? u[k] : 0), 0);
 };
 
-// {firstTimestamp, firstUser, load}: load is the first assistant message's token sum, 0 when it has no usage.
 export function readTranscript(file) {
-  const out = { firstTimestamp: null, firstUser: '', load: 0 };
+  const out = { firstTimestamp: null, firstUser: '', load: null };
   let sawUser = false;
-  for (const rec of records(file)) {
+  for (const rec of readJsonlRecords(file)) {
     if (out.firstTimestamp === null && typeof rec.timestamp === 'string') out.firstTimestamp = rec.timestamp;
     if (!sawUser && rec.type === 'user' && !rec.isMeta) {
       sawUser = true;
       out.firstUser = textOf(rec.message?.content);
     }
     if (rec.type === 'assistant') {
-      out.load = sumUsage(rec.message?.usage);
+      const load = sumUsage(rec.message?.usage);
+      out.load = load > 0 ? load : null;
       break;
     }
   }
@@ -112,13 +113,13 @@ export function measure({ cwd, since, until, task, projectsDir }) {
     if (since !== undefined && !(at >= since)) continue;
     if (until !== undefined && !(at < until)) continue;
     if (tag !== undefined && !t.firstUser.includes(tag)) continue;
-    if (t.load > 0) main.push(t.load);
+    if (t.load !== null) main.push(t.load);
     else skipped++;
     const subDir = join(dir, name.slice(0, -'.jsonl'.length), 'subagents');
     if (!existsSync(subDir)) continue;
     for (const sub of readdirSync(subDir).filter((n) => /^agent-.*\.jsonl$/.test(n)).sort()) {
       const load = readTranscript(join(subDir, sub)).load;
-      if (load > 0) subagents.push(load);
+      if (load !== null) subagents.push(load);
       else skipped++;
     }
   }

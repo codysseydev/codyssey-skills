@@ -16,8 +16,6 @@ const asstRec = (ts, u) => ({ type: 'assistant', timestamp: ts, message: { role:
 const jsonl = (recs) => `${recs.map((r) => JSON.stringify(r)).join('\n')}\n`;
 const tick = (name) => `<scheduled-task name="${name}" file="x">\nrun\n</scheduled-task>`;
 
-// A projects dir with one folder for CWD. Sessions: s1 and s5 are tools ticks, s2 has no usage,
-// s3 is another task, s4 is before the window.
 function fixture() {
   const projects = mkdtempSync(join(tmpdir(), 'startup-load-'));
   const dir = join(projects, encodeCwd(CWD));
@@ -34,11 +32,11 @@ function fixture() {
       asstRec(ts, u2),
     ])));
   };
-  session('s1', '2026-11-29T01:00:00Z', 'factory-pickup-tools', usage(2, 10000, 20000), [usage(1, 3000, 2000), usage(1, 5000, 1000)]);
-  session('s5', '2026-11-29T03:00:00Z', 'factory-pickup-tools', usage(2, 20000, 30000), [usage(1, 100, 100)]);
-  session('s2', '2026-11-29T02:00:00Z', 'factory-pickup-tools', undefined, [undefined]);
-  session('s3', '2026-11-29T02:00:00Z', 'factory-pickup', usage(2, 99000, 1000), [usage(1, 99000, 1000)]);
-  session('s4', '2026-11-28T10:00:00Z', 'factory-pickup-tools', usage(2, 70000, 30000), [usage(1, 70000, 30000)]);
+  session('inWindowA', '2026-11-29T01:00:00Z', 'factory-pickup-tools', usage(2, 10000, 20000), [usage(1, 3000, 2000), usage(1, 5000, 1000)]);
+  session('inWindowB', '2026-11-29T03:00:00Z', 'factory-pickup-tools', usage(2, 20000, 30000), [usage(1, 100, 100)]);
+  session('noUsage', '2026-11-29T02:00:00Z', 'factory-pickup-tools', undefined, [undefined]);
+  session('otherTask', '2026-11-29T02:00:00Z', 'factory-pickup', usage(2, 99000, 1000), [usage(1, 99000, 1000)]);
+  session('beforeWindow', '2026-11-28T10:00:00Z', 'factory-pickup-tools', usage(2, 70000, 30000), [usage(1, 70000, 30000)]);
   return projects;
 }
 
@@ -92,7 +90,7 @@ test('--since leaves out a session before it, and --until leaves out a session a
   const all = run(fixture(), '--task', 'factory-pickup-tools').out;
   assert.equal(all.main.n, 3);
   const early = run(fixture(), '--task', 'factory-pickup-tools', '--until', '2026-11-29T03:00:00Z').out;
-  assert.deepEqual(early.main, { n: 2, median: 65002, min: 30002, max: 100002 }, 's1 and s4 stay, s5 is excluded by until');
+  assert.deepEqual(early.main, { n: 2, median: 65002, min: 30002, max: 100002 }, 'inWindowA and beforeWindow stay, inWindowB is excluded by until');
   assert.equal(run(fixture(), '--since', '2026-11-30T00:00:00Z').out.main.n, 0);
 });
 
