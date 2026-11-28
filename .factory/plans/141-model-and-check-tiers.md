@@ -144,3 +144,6 @@ The independent review of ae33a6e found these gaps in the approved wording. The 
 8. A Markdown-only bootstrap change was tier 2 and skipped the dry run. The dry run now applies to any change under `factory/bootstrap/` in tier 2 or 3, and the file says what a dry run is.
 9. A tier reviewer with no fan-out had no defined `fan_out_complete`. It is now `true`, with a note in the merge assessment.
 10. The archive PR's `Tier:` line clashed with the `## Why` first heading, and its evidence would overwrite the implement run's. The line goes under `## Why`, and its evidence goes in `archive/evidence.json`.
+11. `git diff --name-only` collapses a rename to its new path, so moving code into `docs/` read as tier 1. The tier command now passes `--no-renames`.
+12. "Recompute the tier" did not say what a higher tier triggers. The checks the new tier needs now run at that head, and a lower-tier review does not count.
+13. The archive PR's tier asked for an acceptance run and a dry run that make no sense for a plan archive, and its gates could run after cleanup removed the dependencies. Neither applies to an archive PR now, and its gates run before cleanup.
