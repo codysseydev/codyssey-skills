@@ -15,11 +15,16 @@
 // when the task is created, so the install updates a task and never creates one. A missing task
 // folder is listed under `skipped`.
 //
+// The session profile is the exception: `factory/session/` is written into
+// $FACTORY_HOME/session/.claude/ and the install creates that folder. The owner points the three
+// pick-up tasks at $FACTORY_HOME/session once, in the Desktop UI.
+//
 // The install refuses while a live claim lock exists in $FACTORY_HOME/locks (same stale rule as
 // pick-up.mjs): a run's claim and release must not see two versions of the scripts.
 //
 // Targets: FACTORY_AGENTS_DIR (default ~/.agents), FACTORY_SKILLS_DIR (default ~/.claude/skills),
-// FACTORY_TASKS_DIR (default ~/.claude/scheduled-tasks), FACTORY_HOME (default ~/.factory).
+// FACTORY_TASKS_DIR (default ~/.claude/scheduled-tasks), FACTORY_HOME (default ~/.factory; the
+// session profile goes to its session/.claude/).
 // One JSON object on stdout, errors on stderr.
 // Exit 0 installed (also when nothing changed), 1 unexpected error, 2 bad usage, 3 refused.
 import { execFileSync } from 'node:child_process';
@@ -40,7 +45,7 @@ export const DEFAULT_REF = 'origin/main';
 const INSTALLER_SRC = 'playbooks/scripts/install.mjs';
 
 // The only place the install list lives: a path prefix in the commit -> its folder on disk.
-export function installMap({ agentsDir, skillsDir, tasksDir }) {
+export function installMap({ agentsDir, skillsDir, tasksDir, stateDir }) {
   return [
     { prefix: 'playbooks/', dir: join(agentsDir, 'playbooks') },
     ...FACTORY_SKILLS.map((name) => ({ prefix: `factory/${name}/`, dir: join(skillsDir, name) })),
@@ -48,6 +53,8 @@ export function installMap({ agentsDir, skillsDir, tasksDir }) {
     // A snapshot of the Kanon the standards-discovery skill reads, so the paths in families.json resolve from its folder.
     ...KANON_SNAPSHOT.map((path) => ({ prefix: `kanon/${path}/`, dir: join(skillsDir, 'standards-discovery', 'kanon', path) })),
     ...FACTORY_TASKS.map((name) => ({ prefix: `scheduled-tasks/${name}/`, dir: join(tasksDir, name), existingOnly: true })),
+    // The lean session profile the pick-up tasks run in. Created by the install, not existingOnly.
+    { prefix: 'factory/session/', dir: join(stateDir, 'session', '.claude') },
   ];
 }
 
