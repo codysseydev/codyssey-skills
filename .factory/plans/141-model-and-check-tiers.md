@@ -129,3 +129,13 @@ One delegate, one worktree (`factory/141`), one file, three edits, no fan-out. B
 4. Dry run scope. Chosen: only `factory/bootstrap/` and stack pack changes, the one place a two-run dry run is on record. Alternative: every skill change runs the changed skill twice on a fixture and compares the runs.
 5. `playbooks/factory.md` and skill `SKILL.md` files are tier 2, though agents read them as instructions. Chosen: tier 2, which still gets a default-model review and the acceptance run. Alternative: put `playbooks/**` and `**/SKILL.md` in tier 3.
 6. The Done-when runs. Chosen: a follow-up issue tracks the tier 2 and tier 3 runs, and #141 closes on merge as usual. Alternative: keep #141 open until one run of each tier has its `Tier:` line.
+
+## Changes after review
+
+The independent review of ae33a6e found these gaps in the approved wording. The implement run fixed them in playbooks/factory.md:
+
+1. Stage 5 still said "Run the Kanon audit too." unconditionally, against the tier table. It now says to run it when the tier table says so.
+2. A non-Markdown file under a tier 1 folder (an OpenSpec archive's YAML, an image under `docs/`) made the change tier 3, so a plan archive could not be tier 1. Tier 1 paths are now tier 1 whatever their extension, unless they are trusted-commands paths.
+3. "The default (omit `model`)" could read as poteto-mode's per-role default. It now says the session's model, and that it overrides poteto-mode's per-role models for those steps.
+4. "Stricter" repo `## Review` rules had no tie-break. The repo's rule wins, as project rules do.
+5. Stage 8 made the archive PR with no tier, so criterion 6's tier 1 run had no place to show. The archive PR now carries the `Tier:` line and runs the gates and its tier's review.
